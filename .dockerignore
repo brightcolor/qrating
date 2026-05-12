@@ -1,0 +1,11 @@
+.git
+.github
+node_modules
+backend/node_modules
+frontend/node_modules
+frontend/dist
+coverage
+*.log
+.env
+storage/event-images/*
+!storage/event-images/.gitkeep

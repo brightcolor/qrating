@@ -1,0 +1,7 @@
+.env
+node_modules
+dist
+coverage
+storage/event-images/*
+!storage/event-images/.gitkeep
+*.log

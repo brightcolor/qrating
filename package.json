@@ -1,0 +1,16 @@
+{
+  "name": "qrating",
+  "version": "0.11.0",
+  "private": true,
+  "description": "Self-hosted QR feedback application for events.",
+  "scripts": {
+    "dev": "concurrently \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
+    "build": "npm --prefix frontend run build",
+    "test": "npm --prefix backend test",
+    "lint": "npm --prefix backend run lint",
+    "docker:up": "docker compose up --build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
