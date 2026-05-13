@@ -14,6 +14,7 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- README now highlights the legacy plaintext-data risk for upgrades from versions before `0.13.0`.
 - Admin authentication now uses an HTTP-only cookie session only; JWTs are no longer returned to or stored by the frontend.
 - Admin auth, invite acceptance, and password reset endpoints now have focused rate limits.
 - Public event status and no-event responses now return only visitor-safe event and organization fields.

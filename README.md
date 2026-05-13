@@ -245,6 +245,10 @@ Report delivery uses the background worker and SMTP settings.
 
 ## Privacy And PII Handling
 
+> **Production warning for upgrades from versions before `0.13.0`: legacy databases may still contain plaintext personal data.**
+>
+> New newsletter opt-ins, low-rating contact notes, and webhook secrets are written to encrypted columns. Existing rows from older installations are not magically re-encrypted during the migration. Before going live with sensitive real user data, check old `newsletter_optins.email` values and legacy `webhook_endpoints.secret` values, rotate webhook secrets in the admin UI, and clean or re-import legacy newsletter rows during a controlled maintenance window. The `0.13.0` migration clears legacy plaintext low-rating contact notes because those notes may contain personal data.
+
 Feedback can be anonymous. Newsletter opt-ins are stored separately with consent text and timestamp. New newsletter emails are encrypted at rest and additionally stored as a normalized keyed hash/domain pair for deduplication and reporting without exposing the raw address. Low-rating callback phone numbers and contact notes are encrypted at rest and can be anonymized through retention jobs.
 
 The public API returns only visitor-safe event and organization fields. Public status endpoints do not expose internal IDs, Pretix payloads, settings payloads, event tokens, synchronization metadata, or admin-only fields.
@@ -255,8 +259,6 @@ Outbound notifications are intentionally redacted:
 - low-rating messages only say that contact data is available in the protected Low-Rating dashboard
 - newsletter opt-in webhooks do not include raw email addresses; they include `emailProvided`, `emailHash`, and `emailDomain`
 - newsletter CSV export requires Event Manager permissions or higher and decrypts encrypted emails only for that export response
-
-Important migration note: databases created before `0.13.0` may contain legacy plaintext newsletter emails or legacy plaintext webhook secrets. New data is written to encrypted columns. Rotate old webhook secrets in the admin UI and clean or re-import legacy newsletter rows during a controlled maintenance window if you need to remove old plaintext data completely. Legacy plaintext low-rating contact notes are cleared by the migration because they may contain personal data.
 
 Before production use, configure:
 
