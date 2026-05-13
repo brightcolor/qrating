@@ -11,6 +11,7 @@ import { WebhookService } from '../services/webhookService.js';
 import { enqueueJob } from '../services/jobService.js';
 import { encryptSecret } from '../utils/crypto.js';
 import { getSiteContent } from '../services/siteContentService.js';
+import { emailDomain, emailHash, publicEventStatus, publicOrganization } from '../utils/security.js';
 
 export const publicRouter = express.Router();
 
@@ -139,7 +140,11 @@ publicRouter.get('/f/:organizationSlug/:sourceSlug?', async (req, res, next) => 
     const resolver = new EventResolver({ query });
     const resolved = await resolver.resolveCurrentEvent(req.params.organizationSlug, req.params.sourceSlug);
     if (resolved.status !== 'ok') {
-      return res.status(404).json({ status: resolved.status, texts: systemTexts(req.query.lang), organization: resolved.organization });
+      return res.status(404).json({
+        status: resolved.status,
+        texts: systemTexts(req.query.lang),
+        organization: publicOrganization(resolved.organization)
+      });
     }
     await trackQrScan(resolved.event, req.params.sourceSlug, resolved.qrSource, 'dynamic');
     res.json({ status: 'ok', ...(await publicPayload(resolved, await activeQuestions(resolved.event.id), req.query.lang)) });
@@ -153,7 +158,11 @@ publicRouter.get('/e/:eventToken', async (req, res, next) => {
     const resolver = new EventResolver({ query });
     const resolved = await resolver.resolveEventByToken(req.params.eventToken);
     if (resolved.status !== 'ok') {
-      return res.status(410).json({ status: resolved.status, texts: systemTexts(req.query.lang), event: resolved.event });
+      return res.status(410).json({
+        status: resolved.status,
+        texts: systemTexts(req.query.lang),
+        event: publicEventStatus(resolved.event)
+      });
     }
     await trackQrScan(resolved.event, req.query.source, null, 'event_specific');
     res.json({ status: 'ok', ...(await publicPayload({ event: resolved.event }, await activeQuestions(resolved.event.id), req.query.lang)) });
@@ -165,7 +174,8 @@ publicRouter.get('/e/:eventToken', async (req, res, next) => {
 publicRouter.get('/events/:eventToken/status', async (req, res, next) => {
   try {
     const resolver = new EventResolver({ query });
-    res.json(await resolver.resolveEventByToken(req.params.eventToken));
+    const resolved = await resolver.resolveEventByToken(req.params.eventToken);
+    res.json({ status: resolved.status, event: publicEventStatus(resolved.event) });
   } catch (error) {
     next(error);
   }
@@ -246,15 +256,29 @@ publicRouter.post('/events/:eventToken/feedback', feedbackLimiter, async (req, r
     }
     const webhook = new WebhookService({ query });
     if (value.newsletterOptin) {
+      const normalizedEmail = String(value.newsletterEmail || '').trim().toLowerCase();
       await query(
-        `INSERT INTO newsletter_optins (organization_id, event_id, feedback_response_id, email, consent_text, source)
-         VALUES ($1,$2,$3,$4,$5,'feedback')`,
-        [event.organization_id, event.id, feedback.id, value.newsletterEmail, defaultTexts.newsletter_label]
+        `INSERT INTO newsletter_optins (
+          organization_id, event_id, feedback_response_id, email, email_encrypted, email_hash, email_domain,
+          consent_text, source
+        )
+         VALUES ($1,$2,$3,null,$4,$5,$6,$7,'feedback')`,
+        [
+          event.organization_id,
+          event.id,
+          feedback.id,
+          encryptSecret(normalizedEmail),
+          emailHash(normalizedEmail),
+          emailDomain(normalizedEmail),
+          defaultTexts.newsletter_label
+        ]
       );
       await webhook.dispatch(event.organization_id, 'newsletter.optin', {
         eventId: event.id,
         feedbackId: feedback.id,
-        email: value.newsletterEmail,
+        emailProvided: true,
+        emailHash: emailHash(normalizedEmail),
+        emailDomain: emailDomain(normalizedEmail),
         consentText: defaultTexts.newsletter_label,
         source: value.sourceType,
         consentGivenAt: feedback.submitted_at
@@ -271,12 +295,13 @@ publicRouter.post('/events/:eventToken/feedback', feedbackLimiter, async (req, r
         await query(
           `INSERT INTO low_rating_cases (
             organization_id, event_id, feedback_response_id, rating, status,
-            contact_phone_encrypted, contact_note, visitor_message, consent_text, retention_until
+            contact_phone_encrypted, contact_note, contact_note_encrypted, visitor_message, consent_text, retention_until
           )
-          VALUES ($1,$2,$3,$4,'open',$5,$6,$7,$8, now() + interval '90 days')
+          VALUES ($1,$2,$3,$4,'open',$5,null,$6,$7,$8, now() + interval '90 days')
           ON CONFLICT (feedback_response_id) DO UPDATE SET
             contact_phone_encrypted = EXCLUDED.contact_phone_encrypted,
-            contact_note = EXCLUDED.contact_note,
+            contact_note = null,
+            contact_note_encrypted = EXCLUDED.contact_note_encrypted,
             visitor_message = EXCLUDED.visitor_message,
             updated_at = now()`,
           [
@@ -285,7 +310,7 @@ publicRouter.post('/events/:eventToken/feedback', feedbackLimiter, async (req, r
             feedback.id,
             feedback.rating,
             value.contactPhone ? encryptSecret(value.contactPhone) : null,
-            value.contactNote || null,
+            value.contactNote ? encryptSecret(value.contactNote) : null,
             defaultTexts.low_rating_contact_text,
             'Besucher hat freiwillig eine Rueckrufnummer zur Klaerung einer niedrigen Bewertung hinterlassen.'
           ]

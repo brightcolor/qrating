@@ -11,11 +11,18 @@ import { errorHandler, notFound } from './middleware/errors.js';
 import { runMigrations, seedDefaultData } from './db/bootstrap.js';
 import { JobWorker } from './services/jobService.js';
 import { query } from './db/pool.js';
+import { corsOrigin } from './utils/security.js';
 
 const app = express();
 
+app.set('trust proxy', 1);
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-app.use(cors({ origin: true, credentials: true }));
+app.use(cors({
+  origin: corsOrigin,
+  credentials: true,
+  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['content-type', 'authorization']
+}));
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
 app.use('/storage', express.static(path.join(process.cwd(), '..', 'storage')));
@@ -29,6 +36,10 @@ app.get('/health/ready', async (req, res) => {
   } catch (error) {
     res.status(503).json({ ok: false, database: 'error', error: error.message });
   }
+});
+app.use('/admin', (req, res, next) => {
+  res.setHeader('cache-control', 'no-store');
+  next();
 });
 app.use('/admin', authRouter);
 app.use('/admin', adminRouter);

@@ -501,20 +501,29 @@ adminRouter.get('/events/:id/export.xlsx', async (req, res, next) => {
   }
 });
 
-adminRouter.get('/events/:id/newsletter.csv', async (req, res, next) => {
+adminRouter.get('/events/:id/newsletter.csv', requireRole('event_manager'), async (req, res, next) => {
   try {
     await ensureEventAccess(req, req.params.id);
     const result = await query(
-      `SELECT no.email, no.consent_text, no.consent_given_at, e.name AS event_name
+      `SELECT no.email, no.email_encrypted, no.email_hash, no.email_domain,
+              no.consent_text, no.consent_given_at, e.name AS event_name
        FROM newsletter_optins no
        LEFT JOIN events e ON e.id = no.event_id
        WHERE no.event_id = $1
        ORDER BY no.consent_given_at`,
       [req.params.id]
     );
+    const rows = result.rows.map((row) => ({
+      email: row.email_encrypted ? decryptSecret(row.email_encrypted) : row.email,
+      email_hash: row.email_hash,
+      email_domain: row.email_domain,
+      consent_text: row.consent_text,
+      consent_given_at: row.consent_given_at,
+      event_name: row.event_name
+    }));
     res.setHeader('content-type', 'text/csv; charset=utf-8');
     res.setHeader('content-disposition', 'attachment; filename="qrating-newsletter.csv"');
-    res.send(toCsv(result.rows));
+    res.send(toCsv(rows));
   } catch (error) {
     next(error);
   }
@@ -1138,10 +1147,12 @@ adminRouter.delete('/qr-sources/:id', async (req, res, next) => {
   }
 });
 
-adminRouter.get('/webhooks', async (req, res, next) => {
+adminRouter.get('/webhooks', requireRole('admin'), async (req, res, next) => {
   try {
     const result = await query(
-      'SELECT id, url, events, active, last_status, last_error, last_called_at, created_at FROM webhook_endpoints WHERE organization_id = $1 ORDER BY created_at DESC',
+      `SELECT id, url, events, active, last_status, last_error, last_called_at, created_at,
+              (secret IS NOT NULL OR secret_encrypted IS NOT NULL) AS has_secret
+       FROM webhook_endpoints WHERE organization_id = $1 ORDER BY created_at DESC`,
       [req.admin.organizationId]
     );
     res.json(result.rows);
@@ -1473,7 +1484,10 @@ adminRouter.get('/low-rating-cases', async (req, res, next) => {
     res.json(result.rows.map((row) => ({
       ...row,
       contact_phone_encrypted: undefined,
-      contactPhone: row.contact_phone_encrypted ? decryptSecret(row.contact_phone_encrypted) : null
+      contact_note_encrypted: undefined,
+      contact_note: undefined,
+      contactPhone: row.contact_phone_encrypted ? decryptSecret(row.contact_phone_encrypted) : null,
+      contactNote: row.contact_note_encrypted ? decryptSecret(row.contact_note_encrypted) : row.contact_note
     })));
   } catch (error) {
     next(error);
@@ -1508,22 +1522,28 @@ adminRouter.patch('/low-rating-cases/:id', async (req, res, next) => {
     res.json({
       ...row,
       contact_phone_encrypted: undefined,
-      contactPhone: row.contact_phone_encrypted ? decryptSecret(row.contact_phone_encrypted) : null
+      contact_note_encrypted: undefined,
+      contact_note: undefined,
+      contactPhone: row.contact_phone_encrypted ? decryptSecret(row.contact_phone_encrypted) : null,
+      contactNote: row.contact_note_encrypted ? decryptSecret(row.contact_note_encrypted) : row.contact_note
     });
   } catch (error) {
     next(error);
   }
 });
 
-adminRouter.post('/webhooks', async (req, res, next) => {
+adminRouter.post('/webhooks', requireRole('admin'), async (req, res, next) => {
   try {
+    const secretEncrypted = req.body.secret ? encryptSecret(req.body.secret) : null;
     const result = await query(
-      `INSERT INTO webhook_endpoints (organization_id, url, secret, events, active)
-       VALUES ($1,$2,$3,$4,$5) RETURNING id, url, events, active, created_at`,
+      `INSERT INTO webhook_endpoints (organization_id, url, secret, secret_encrypted, events, active)
+       VALUES ($1,$2,null,$3,$4,$5)
+       RETURNING id, url, events, active, created_at,
+                 (secret IS NOT NULL OR secret_encrypted IS NOT NULL) AS has_secret`,
       [
         req.admin.organizationId,
         req.body.url,
-        req.body.secret || null,
+        secretEncrypted,
         JSON.stringify(req.body.events || ['feedback.created']),
         req.body.active !== false
       ]
@@ -1568,7 +1588,8 @@ adminRouter.get('/operations', requireRole('event_manager'), async (req, res, ne
         [req.admin.organizationId]
       ),
       query(
-        `SELECT id, url, events, active, last_status, last_error, last_called_at
+        `SELECT id, events, active, last_status, last_error, last_called_at,
+                (secret IS NOT NULL OR secret_encrypted IS NOT NULL) AS has_secret
          FROM webhook_endpoints
          WHERE organization_id = $1
          ORDER BY last_called_at DESC NULLS LAST LIMIT 10`,
@@ -1603,22 +1624,29 @@ adminRouter.post('/operations/run-retention', requireRole('owner'), async (req, 
   }
 });
 
-adminRouter.patch('/webhooks/:id', async (req, res, next) => {
+adminRouter.patch('/webhooks/:id', requireRole('admin'), async (req, res, next) => {
   try {
+    const secretProvided = typeof req.body.secret === 'string' && req.body.secret.length > 0;
+    const secretEncrypted = secretProvided ? encryptSecret(req.body.secret) : null;
     const result = await query(
       `UPDATE webhook_endpoints
        SET url = COALESCE($3, url),
            events = COALESCE($4::jsonb, events),
            active = COALESCE($5, active),
+           secret = CASE WHEN $6 THEN null ELSE secret END,
+           secret_encrypted = CASE WHEN $6 THEN $7 ELSE secret_encrypted END,
            updated_at = now()
        WHERE id = $1 AND organization_id = $2
-       RETURNING id, url, events, active, last_status, last_error, last_called_at`,
+       RETURNING id, url, events, active, last_status, last_error, last_called_at,
+                 (secret IS NOT NULL OR secret_encrypted IS NOT NULL) AS has_secret`,
       [
         req.params.id,
         req.admin.organizationId,
         req.body.url,
         req.body.events ? JSON.stringify(req.body.events) : null,
-        req.body.active
+        req.body.active,
+        secretProvided,
+        secretEncrypted
       ]
     );
     if (!result.rows[0]) throw httpError(404, 'Webhook nicht gefunden.');
@@ -1809,12 +1837,16 @@ adminRouter.post('/pretix-connections/:id/sync', async (req, res, next) => {
   }
 });
 
-adminRouter.get('/pretix-connections/:id/settings-debug/:eventSlug', async (req, res, next) => {
+adminRouter.get('/pretix-connections/:id/settings-debug/:eventSlug', requireRole('event_manager'), async (req, res, next) => {
   try {
     const event = (await query(
       `SELECT id, name, detected_image_settings_key, pretix_event_image_url, raw_settings_payload, image_sync_error
-       FROM events WHERE pretix_connection_id = $1 AND pretix_event_slug = $2 LIMIT 1`,
-      [req.params.id, req.params.eventSlug]
+       FROM events
+       WHERE pretix_connection_id = $1
+         AND pretix_event_slug = $2
+         AND organization_id = $3
+       LIMIT 1`,
+      [req.params.id, req.params.eventSlug, req.admin.organizationId]
     )).rows[0];
     res.json(event || {});
   } catch (error) {

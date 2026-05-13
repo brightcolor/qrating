@@ -95,7 +95,7 @@ export function eventToPublic(event, organization, questions = []) {
     dateFrom: event.date_from,
     dateTo: event.date_to,
     location: event.location,
-    imageUrl: event.image_url || organization?.logo_url || null,
+    imageUrl: event.image_url || event.cached_image_url || organization?.logo_url || null,
     imageAlt: event.image_alt || `Bild zu ${event.name}`,
     organization: {
       name: organization.name || event.organization_name,

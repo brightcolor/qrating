@@ -16,22 +16,24 @@ export const channelTypes = [
 
 export function publicChannel(row) {
   if (!row) return null;
-  const { secret_encrypted, ...safe } = row;
-  return { ...safe, has_secret: Boolean(secret_encrypted) };
+  const { secret, secret_encrypted, ...safe } = row;
+  return { ...safe, has_secret: Boolean(secret || secret_encrypted) };
 }
 
 function lowRatingMessage(event, feedback) {
-  const phone = feedback.low_rating_case?.contact_phone_encrypted
-    ? `\nTelefon fuer Rueckruf: ${decryptSecret(feedback.low_rating_case.contact_phone_encrypted)}`
-    : '';
-  const note = feedback.low_rating_case?.contact_note ? `\nKontakt-Hinweis: ${feedback.low_rating_case.contact_note}` : '';
+  const contactPhone = feedback.low_rating_case?.contact_phone_encrypted
+    ? 'Rueckrufnummer: im geschuetzten Low-Rating-Dashboard hinterlegt.'
+    : null;
+  const contactNote = feedback.low_rating_case?.contact_note_encrypted || feedback.low_rating_case?.contact_note
+    ? 'Kontakt-Hinweis: im geschuetzten Low-Rating-Dashboard hinterlegt.'
+    : null;
   return [
     `qrating: niedrige Bewertung (${feedback.rating} Sterne)`,
     '',
     `Event: ${event.name}`,
     `Zeitpunkt: ${feedback.submitted_at}`,
-    phone,
-    note,
+    contactPhone,
+    contactNote,
     '',
     'Bitte zeitnah pruefen und empathisch nachfassen, falls eine Telefonnummer hinterlegt wurde.'
   ].filter(Boolean).join('\n');
@@ -39,6 +41,27 @@ function lowRatingMessage(event, feedback) {
 
 function lowRatingTitle(event, feedback) {
   return `qrating: ${feedback.rating} Sterne fuer ${event.name}`;
+}
+
+function notificationEvent(event) {
+  return {
+    id: event.id,
+    name: event.name,
+    dateFrom: event.date_from,
+    dateTo: event.date_to,
+    location: event.location
+  };
+}
+
+function notificationFeedback(feedback) {
+  return {
+    id: feedback.id,
+    rating: feedback.rating,
+    submittedAt: feedback.submitted_at,
+    contactRequested: Boolean(feedback.contact_requested),
+    contactPhoneProvided: Boolean(feedback.low_rating_case?.contact_phone_encrypted),
+    contactNoteProvided: Boolean(feedback.low_rating_case?.contact_note_encrypted || feedback.low_rating_case?.contact_note)
+  };
 }
 
 export class NotificationService {
@@ -77,8 +100,8 @@ export class NotificationService {
     const payload = {
       title: lowRatingTitle(event, feedback),
       text: lowRatingMessage(event, feedback),
-      event,
-      feedback
+      event: notificationEvent(event),
+      feedback: notificationFeedback(feedback)
     };
     const deliveries = [];
     for (const channel of result.rows) {

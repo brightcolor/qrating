@@ -1,13 +1,31 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
+import rateLimit from 'express-rate-limit';
 import { query, withTransaction } from '../db/pool.js';
 import { signAdmin, requireAdmin } from '../middleware/auth.js';
 import { httpError } from '../middleware/errors.js';
 import { env } from '../config/env.js';
 import { hashValue, randomToken, slugify } from '../utils/crypto.js';
 import { SmtpService } from '../services/smtpService.js';
+import { clearAdminCookie, setAdminCookie } from '../utils/security.js';
 
 export const authRouter = express.Router();
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: env.nodeEnv === 'test' ? 1000 : 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Zu viele Anmeldeversuche. Bitte versuche es spaeter erneut.' }
+});
+
+const passwordResetLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: env.nodeEnv === 'test' ? 1000 : 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Zu viele Reset-Anfragen. Bitte versuche es spaeter erneut.' }
+});
 
 authRouter.get('/setup/status', async (req, res, next) => {
   try {
@@ -23,7 +41,7 @@ authRouter.get('/setup/status', async (req, res, next) => {
   }
 });
 
-authRouter.post('/setup/first-admin', async (req, res, next) => {
+authRouter.post('/setup/first-admin', authLimiter, async (req, res, next) => {
   try {
     const email = String(req.body.email || '').trim().toLowerCase();
     const name = String(req.body.name || '').trim();
@@ -78,14 +96,14 @@ authRouter.post('/setup/first-admin', async (req, res, next) => {
     });
 
     const token = signAdmin(created);
-    res.cookie('qrating_admin', token, { httpOnly: true, sameSite: 'lax', secure: false });
-    res.status(201).json({ token, user: { id: created.id, name: created.name, email: created.email, role: created.role } });
+    setAdminCookie(res, token);
+    res.status(201).json({ user: { id: created.id, name: created.name, email: created.email, role: created.role } });
   } catch (error) {
     next(error);
   }
 });
 
-authRouter.post('/login', async (req, res, next) => {
+authRouter.post('/login', authLimiter, async (req, res, next) => {
   try {
     const { email, password } = req.body;
     const result = await query('SELECT * FROM users WHERE email = $1', [String(email || '').toLowerCase()]);
@@ -97,14 +115,14 @@ authRouter.post('/login', async (req, res, next) => {
     if (user.status === 'invited') throw httpError(403, 'Bitte schliesse zuerst die Einladung ab.');
     await query('UPDATE users SET last_login_at = now() WHERE id = $1', [user.id]);
     const token = signAdmin(user);
-    res.cookie('qrating_admin', token, { httpOnly: true, sameSite: 'lax', secure: false });
-    res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
+    setAdminCookie(res, token);
+    res.json({ user: { id: user.id, name: user.name, email: user.email, role: user.role } });
   } catch (error) {
     next(error);
   }
 });
 
-authRouter.post('/accept-invite', async (req, res, next) => {
+authRouter.post('/accept-invite', authLimiter, async (req, res, next) => {
   try {
     const token = String(req.body.token || '');
     const password = String(req.body.password || '');
@@ -132,13 +150,14 @@ authRouter.post('/accept-invite', async (req, res, next) => {
        RETURNING *`,
       [user.id, passwordHash, name]
     )).rows[0];
-    res.json({ token: signAdmin(updated), user: { id: updated.id, name: updated.name, email: updated.email, role: updated.role } });
+    setAdminCookie(res, signAdmin(updated));
+    res.json({ user: { id: updated.id, name: updated.name, email: updated.email, role: updated.role } });
   } catch (error) {
     next(error);
   }
 });
 
-authRouter.post('/password-reset/request', async (req, res, next) => {
+authRouter.post('/password-reset/request', passwordResetLimiter, async (req, res, next) => {
   try {
     const email = String(req.body.email || '').toLowerCase();
     const user = (await query('SELECT * FROM users WHERE email = $1', [email])).rows[0];
@@ -168,7 +187,7 @@ authRouter.post('/password-reset/request', async (req, res, next) => {
   }
 });
 
-authRouter.post('/password-reset/confirm', async (req, res, next) => {
+authRouter.post('/password-reset/confirm', authLimiter, async (req, res, next) => {
   try {
     const password = String(req.body.password || '');
     if (password.length < 10) throw httpError(400, 'Das Passwort muss mindestens 10 Zeichen lang sein.');
@@ -192,14 +211,15 @@ authRouter.post('/password-reset/confirm', async (req, res, next) => {
        RETURNING *`,
       [user.id, passwordHash]
     )).rows[0];
-    res.json({ token: signAdmin(updated), user: { id: updated.id, name: updated.name, email: updated.email, role: updated.role } });
+    setAdminCookie(res, signAdmin(updated));
+    res.json({ user: { id: updated.id, name: updated.name, email: updated.email, role: updated.role } });
   } catch (error) {
     next(error);
   }
 });
 
 authRouter.post('/logout', (req, res) => {
-  res.clearCookie('qrating_admin');
+  clearAdminCookie(res);
   res.json({ ok: true });
 });
 

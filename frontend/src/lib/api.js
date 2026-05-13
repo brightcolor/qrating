@@ -8,7 +8,6 @@ export function assetUrl(url) {
 }
 
 export async function api(path, options = {}) {
-  const token = localStorage.getItem('qrating_token');
   let response;
   try {
     response = await fetch(`${API_BASE}${path}`, {
@@ -16,7 +15,6 @@ export async function api(path, options = {}) {
       credentials: 'include',
       headers: {
         'content-type': 'application/json',
-        ...(token ? { authorization: `Bearer ${token}` } : {}),
         ...(options.headers || {})
       }
     });

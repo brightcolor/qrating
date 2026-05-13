@@ -4,6 +4,29 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.13.0] - 2026-05-13
+
+### Added
+
+- Privacy hardening migration for encrypted newsletter email storage, encrypted low-rating contact notes, and encrypted webhook secrets for newly written data.
+- Security helper tests for public payload sanitization, normalized email hashes, and encrypted webhook signatures.
+- Configurable `CORS_ALLOWED_ORIGINS` for deployments with separated admin, feedback, and API domains.
+
+### Changed
+
+- Admin authentication now uses an HTTP-only cookie session only; JWTs are no longer returned to or stored by the frontend.
+- Admin auth, invite acceptance, and password reset endpoints now have focused rate limits.
+- Public event status and no-event responses now return only visitor-safe event and organization fields.
+- Newsletter opt-in webhooks no longer include raw email addresses; they include only `emailProvided`, normalized email hash, and domain.
+- Low-rating notifications and generic notification webhooks no longer include raw callback phone numbers or contact notes. They now point authorized users to the protected Low-Rating dashboard.
+- Newsletter CSV export is restricted to Event Manager level and above, and decrypts current encrypted opt-ins only at export time.
+- Webhook administration is restricted to Admin level and above, and new webhook secrets are stored encrypted.
+- Admin API responses are marked `no-store`, production cookies are `Secure`, and CORS no longer reflects arbitrary origins.
+
+### Security
+
+- Existing plaintext newsletter emails and legacy plaintext webhook secrets may still exist in old databases. New writes use encrypted columns; rotate webhook secrets and export/reimport or clean old newsletter rows during a controlled maintenance window if the old data must be removed completely. Legacy plaintext low-rating contact notes are cleared by the migration because they may contain personal data.
+
 ## [0.12.0] - 2026-05-13
 
 ### Added

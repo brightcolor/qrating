@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { decryptSecret } from '../utils/crypto.js';
 
 export class WebhookService {
   constructor(db, fetchImpl = fetch) {
@@ -27,9 +28,10 @@ export class WebhookService {
   async callEndpoint(endpoint, eventName, payload) {
     const body = JSON.stringify({ event: eventName, payload });
     const headers = { 'content-type': 'application/json', 'user-agent': 'qrating-Webhook/0.1' };
-    if (endpoint.secret) {
+    const secret = endpoint.secret_encrypted ? decryptSecret(endpoint.secret_encrypted) : endpoint.secret;
+    if (secret) {
       headers['x-qrating-signature'] = crypto
-        .createHmac('sha256', endpoint.secret)
+        .createHmac('sha256', secret)
         .update(body)
         .digest('hex');
     }

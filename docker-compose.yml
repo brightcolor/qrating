@@ -24,6 +24,7 @@ services:
       PUBLIC_APP_URL: ${PUBLIC_APP_URL:-}
       ADMIN_APP_URL: ${ADMIN_APP_URL:-}
       FEEDBACK_APP_URL: ${FEEDBACK_APP_URL:-}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
       SESSION_SECRET: ${SESSION_SECRET:-change-me-at-least-32-chars}
       PRETIX_TOKEN_SECRET: ${PRETIX_TOKEN_SECRET:-change-me-32-byte-secret-value!!}
       ORGANIZATION_NAME: ${ORGANIZATION_NAME:-Demo Events}

@@ -10,8 +10,7 @@ export function signAdmin(user) {
 }
 
 export function requireAdmin(req, res, next) {
-  const header = req.headers.authorization || '';
-  const token = header.startsWith('Bearer ') ? header.slice(7) : req.cookies?.qrating_admin;
+  const token = req.cookies?.qrating_admin;
   if (!token) return res.status(401).json({ error: 'Nicht angemeldet.' });
 
   try {

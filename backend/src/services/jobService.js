@@ -190,10 +190,15 @@ export class JobWorker {
       `UPDATE low_rating_cases
        SET contact_phone_encrypted = null,
            contact_note = null,
+           contact_note_encrypted = null,
            internal_note = COALESCE(internal_note, '') || CASE WHEN internal_note IS NULL OR internal_note = '' THEN '' ELSE E'\n' END || 'Telefon-/Kontaktangaben automatisch nach Aufbewahrungsfrist geloescht.',
            updated_at = now()
        WHERE organization_id = $1
-         AND contact_phone_encrypted IS NOT NULL
+         AND (
+           contact_phone_encrypted IS NOT NULL
+           OR contact_note_encrypted IS NOT NULL
+           OR contact_note IS NOT NULL
+         )
          AND (
            retention_until <= now()
            OR created_at < now() - ($2 * interval '1 day')

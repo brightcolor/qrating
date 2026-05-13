@@ -11,6 +11,10 @@ const adminAppUrl = normalizeUrl(process.env.ADMIN_APP_URL || process.env.PUBLIC
 const feedbackAppUrl = normalizeUrl(
   process.env.FEEDBACK_APP_URL || process.env.PUBLIC_FEEDBACK_URL || process.env.PUBLIC_APP_URL || defaultFeedbackAppUrl
 );
+const corsAllowedOrigins = String(process.env.CORS_ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((origin) => normalizeUrl(origin.trim()))
+  .filter(Boolean);
 
 export const env = {
   nodeEnv,
@@ -27,6 +31,7 @@ export const env = {
   imageCacheMaxBytes: Number(process.env.IMAGE_CACHE_MAX_BYTES || 5242880),
   workerIntervalMs: Number(process.env.WORKER_INTERVAL_MS || 5000),
   pretixSchedulerIntervalMs: Number(process.env.PRETIX_SCHEDULER_INTERVAL_MS || 60000),
+  corsAllowedOrigins,
   billingAdminEmails: String(process.env.BILLING_ADMIN_EMAILS || '')
     .split(',')
     .map((email) => email.trim().toLowerCase())

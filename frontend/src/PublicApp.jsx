@@ -108,7 +108,7 @@ function PublicFeedback({ mode, identifier, source }) {
           <div className="mt-3 grid grid-cols-5 gap-1" role="radiogroup" aria-label={texts.rating_label}>
             {[1, 2, 3, 4, 5].map((value) => (
               <button key={value} type="button" aria-label={`${value} Sterne`} onClick={() => setRating(value)}
-                className="focus-ring flex min-h-14 items-center justify-center rounded-md p-2 transition hover:bg-neutral-50"
+                className="focus-ring flex min-h-16 items-center justify-center rounded-md p-2 transition hover:bg-neutral-50 sm:min-h-14"
                 style={{ color: value <= rating ? color : '#d4d4d4' }}>
                 <Star size={38} fill={value <= rating ? color : 'transparent'} strokeWidth={2.4} />
               </button>
@@ -142,7 +142,7 @@ function PublicFeedback({ mode, identifier, source }) {
         <p className="text-sm text-neutral-500">{event.organization.privacyText || texts.privacy_short}</p>
         {event.organization.footerText && <p className="text-sm text-neutral-500">{event.organization.footerText}</p>}
         {submitError && <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{submitError}</p>}
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-neutral-200 bg-white/95 p-3 backdrop-blur sm:static sm:border-0 sm:bg-transparent sm:p-0">
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-neutral-200 bg-white/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur sm:static sm:border-0 sm:bg-transparent sm:p-0">
           <button className="focus-ring w-full rounded-md px-5 py-4 text-lg font-semibold text-white" style={{ backgroundColor: color }}>{texts.submit}</button>
         </div>
       </form>

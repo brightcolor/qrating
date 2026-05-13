@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.12.0
+**Version:** 0.13.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -16,6 +16,7 @@ This repository was built with AI-assisted, vibe-coded development. Treat it lik
 - Internal Free, Pro, and Business plans with admin-configurable limits and overrides
 - No self-service checkout flow: operators create users and assign access manually
 - First-user setup: no default admin account is shipped
+- HTTP-only admin cookie sessions; admin JWTs are not stored in browser storage
 - Dynamic organization QR code: `https://qrat.ing/f/{organizationSlug}`
 - Event-specific QR code: `https://qrat.ing/e/{event_feedback_token}`
 - Mobile-first guest feedback page with event image, large touch targets, and sticky submit
@@ -30,6 +31,7 @@ This repository was built with AI-assisted, vibe-coded development. Treat it lik
 - Roles: Owner, Admin, Event Manager, Analyst, and Support
 - Data retention tools with anonymization of low-rating contact data
 - Webhooks for new feedback, low ratings, and newsletter opt-ins
+- Privacy-hardened outbound payloads: raw email addresses, callback phone numbers, and contact notes are not sent to generic webhooks or chat/push channels
 - Local Pretix image cache with metadata and prepared variants
 - QR source analytics with scan and feedback metrics
 - Monitoring page for jobs, Pretix, SMTP, and webhook status
@@ -134,6 +136,7 @@ RATE_LIMIT_MAX=30
 IMAGE_CACHE_MAX_BYTES=5242880
 WORKER_INTERVAL_MS=5000
 PRETIX_SCHEDULER_INTERVAL_MS=60000
+CORS_ALLOWED_ORIGINS=https://qrating.app,https://qrat.ing
 
 BILLING_ADMIN_EMAILS=
 ```
@@ -240,9 +243,20 @@ Notification channels are configured per user:
 
 Report delivery uses the background worker and SMTP settings.
 
-## Privacy
+## Privacy And PII Handling
 
-Feedback can be anonymous. Newsletter opt-ins are stored separately with consent text and timestamp. Low-rating callback phone numbers are encrypted at rest and can be anonymized through retention jobs.
+Feedback can be anonymous. Newsletter opt-ins are stored separately with consent text and timestamp. New newsletter emails are encrypted at rest and additionally stored as a normalized keyed hash/domain pair for deduplication and reporting without exposing the raw address. Low-rating callback phone numbers and contact notes are encrypted at rest and can be anonymized through retention jobs.
+
+The public API returns only visitor-safe event and organization fields. Public status endpoints do not expose internal IDs, Pretix payloads, settings payloads, event tokens, synchronization metadata, or admin-only fields.
+
+Outbound notifications are intentionally redacted:
+
+- low-rating email, Discord, Slack, Teams, Telegram, Pushover, ntfy, Gotify, and generic webhook messages do not include raw callback phone numbers or contact notes
+- low-rating messages only say that contact data is available in the protected Low-Rating dashboard
+- newsletter opt-in webhooks do not include raw email addresses; they include `emailProvided`, `emailHash`, and `emailDomain`
+- newsletter CSV export requires Event Manager permissions or higher and decrypts encrypted emails only for that export response
+
+Important migration note: databases created before `0.13.0` may contain legacy plaintext newsletter emails or legacy plaintext webhook secrets. New data is written to encrypted columns. Rotate old webhook secrets in the admin UI and clean or re-import legacy newsletter rows during a controlled maintenance window if you need to remove old plaintext data completely. Legacy plaintext low-rating contact notes are cleared by the migration because they may contain personal data.
 
 Before production use, configure:
 
@@ -252,6 +266,7 @@ Before production use, configure:
 - SMTP sender details
 - webhook destinations
 - role and event assignment rules
+- reverse proxy TLS, `ADMIN_APP_URL`, `FEEDBACK_APP_URL`, and `CORS_ALLOWED_ORIGINS`
 
 ## API Overview
 
@@ -275,6 +290,8 @@ Admin authentication:
 - `POST /admin/password-reset/confirm`
 
 Admin areas include events, analytics, exports, forms, texts, QR sources, Pretix connections, SMTP, notifications, webhooks, users, retention, branding, website content, and internal plan administration.
+
+Admin authentication uses the `qrating_admin` HTTP-only cookie. The frontend does not store session tokens in `localStorage` or expose them to JavaScript.
 
 ## Tests And CI
 
@@ -331,7 +348,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.12.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.13.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

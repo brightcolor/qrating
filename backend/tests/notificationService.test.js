@@ -4,7 +4,8 @@ import { encryptSecret } from '../src/utils/crypto.js';
 
 describe('NotificationService', () => {
   it('does not expose encrypted channel secrets', () => {
-    const publicData = publicChannel({ id: 'c1', label: 'Discord', secret_encrypted: 'encrypted' });
+    const publicData = publicChannel({ id: 'c1', label: 'Discord', secret: 'legacy', secret_encrypted: 'encrypted' });
+    expect(publicData.secret).toBeUndefined();
     expect(publicData.secret_encrypted).toBeUndefined();
     expect(publicData.has_secret).toBe(true);
   });
@@ -50,13 +51,18 @@ describe('NotificationService', () => {
         id: 'feedback-1',
         rating: 1,
         submitted_at: '2026-01-01T12:00:00Z',
-        low_rating_case: { contact_phone_encrypted: encryptSecret('+491234') }
+        low_rating_case: {
+          contact_phone_encrypted: encryptSecret('+491234'),
+          contact_note_encrypted: encryptSecret('Bitte anrufen')
+        }
       }
     );
     expect(result[0].ok).toBe(true);
     expect(smtpService.sendMail).toHaveBeenCalledWith('org-1', expect.objectContaining({
       to: 'person@example.com',
-      text: expect.stringContaining('+491234')
+      text: expect.stringContaining('geschuetzten Low-Rating-Dashboard')
     }));
+    expect(smtpService.sendMail.mock.calls[0][1].text).not.toContain('+491234');
+    expect(smtpService.sendMail.mock.calls[0][1].text).not.toContain('Bitte anrufen');
   });
 });

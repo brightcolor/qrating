@@ -215,13 +215,13 @@ function Question({ question, value, onChange }) {
 }
 
 function AdminApp() {
-  const [token, setToken] = useState(localStorage.getItem('qrating_token'));
+  const [authenticated, setAuthenticated] = useState(false);
   const [page, setPage] = useState(() => new URLSearchParams(window.location.search).has('plan') || new URLSearchParams(window.location.search).has('billing') ? 'billing' : 'dashboard');
   const path = window.location.pathname;
   const query = new URLSearchParams(window.location.search);
-  if (!token && path.includes('/accept-invite')) return <AcceptInvite token={query.get('token')} onLogin={(next) => { localStorage.setItem('qrating_token', next); setToken(next); }} />;
-  if (!token && path.includes('/reset-password')) return <ResetPassword token={query.get('token')} onLogin={(next) => { localStorage.setItem('qrating_token', next); setToken(next); }} />;
-  if (!token) return <AuthGate onLogin={(next) => { localStorage.setItem('qrating_token', next); setToken(next); }} />;
+  if (!authenticated && path.includes('/accept-invite')) return <AcceptInvite token={query.get('token')} onLogin={() => setAuthenticated(true)} />;
+  if (!authenticated && path.includes('/reset-password')) return <ResetPassword token={query.get('token')} onLogin={() => setAuthenticated(true)} />;
+  if (!authenticated) return <AuthGate onLogin={() => setAuthenticated(true)} />;
   const nav = [
     ['dashboard', 'Dashboard', BarChart3],
     ['events', 'Events', CalendarDays],
@@ -245,7 +245,7 @@ function AdminApp() {
       <nav className="mt-8 space-y-1">
         {nav.map(([id, label, Icon]) => <NavButton key={id} icon={Icon} label={label} active={page === id} onClick={() => setPage(id)} />)}
       </nav>
-      <button className="absolute bottom-5 flex items-center gap-2 text-sm text-neutral-600" onClick={() => { localStorage.removeItem('qrating_token'); setToken(null); }}><LogOut size={16} /> Abmelden</button>
+      <button className="absolute bottom-5 flex items-center gap-2 text-sm text-neutral-600" onClick={async () => { await api('/admin/logout', { method: 'POST', body: JSON.stringify({}) }).catch(() => null); setAuthenticated(false); }}><LogOut size={16} /> Abmelden</button>
     </aside>
     <main className="lg:pl-64">
       <div className="mx-auto max-w-7xl p-4 sm:p-8">
@@ -277,13 +277,25 @@ function NavButton({ icon: Icon, label, active, onClick }) {
 }
 
 function AuthGate({ onLogin }) {
-  const { data, loading, error } = useAsync(() => api('/admin/setup/status'), []);
+  const { data, loading, error } = useAsync(async () => {
+    const setup = await api('/admin/setup/status');
+    if (setup?.setupRequired) return { setup };
+    try {
+      return { setup, me: await api('/admin/me') };
+    } catch {
+      return { setup };
+    }
+  }, []);
+  useEffect(() => {
+    if (data?.me) onLogin();
+  }, [data?.me, onLogin]);
   if (loading) return <AuthShell title="qrating Admin"><p className="text-sm text-neutral-600">Pruefe Installation ...</p></AuthShell>;
   if (error) return <AuthShell title="qrating Admin">
     <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error.message}</p>
     <p className="mt-4 text-sm leading-6 text-neutral-600">Das Backend ist nicht erreichbar. Pruefe, ob `docker compose up --build` laeuft und der Healthcheck unter `/api/health` antwortet.</p>
   </AuthShell>;
-  if (data?.setupRequired) return <FirstAdminSetup setup={data} onLogin={onLogin} />;
+  if (data?.me) return <AuthShell title="qrating Admin"><p className="text-sm text-neutral-600">Sitzung wird geoeffnet ...</p></AuthShell>;
+  if (data?.setup?.setupRequired) return <FirstAdminSetup setup={data.setup} onLogin={onLogin} />;
   return <Login onLogin={onLogin} />;
 }
 
@@ -302,7 +314,7 @@ function FirstAdminSetup({ setup, onLogin }) {
     setError('');
     try {
       const data = await api('/admin/setup/first-admin', { method: 'POST', body: JSON.stringify(form) });
-      onLogin(data.token);
+      onLogin(data.user);
     } catch (err) {
       setError(err.message);
     }
@@ -333,7 +345,7 @@ function Login({ onLogin }) {
     setError('');
     try {
       const data = await api('/admin/login', { method: 'POST', body: JSON.stringify({ email, password }) });
-      onLogin(data.token);
+      onLogin(data.user);
     } catch (err) {
       setError(err.message);
     }
@@ -370,7 +382,7 @@ function AcceptInvite({ token, onLogin }) {
     setError('');
     try {
       const data = await api('/admin/accept-invite', { method: 'POST', body: JSON.stringify({ token, name, password }) });
-      onLogin(data.token);
+      onLogin(data.user);
     } catch (err) {
       setError(err.message);
     }
@@ -393,7 +405,7 @@ function ResetPassword({ token, onLogin }) {
     setError('');
     try {
       const data = await api('/admin/password-reset/confirm', { method: 'POST', body: JSON.stringify({ token, password }) });
-      onLogin(data.token);
+      onLogin(data.user);
     } catch (err) {
       setError(err.message);
     }
@@ -597,7 +609,7 @@ function LowRatingWorkflow() {
             <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
               <Info label="Rueckrufnummer" value={item.contactPhone || 'Nicht hinterlegt'} />
               <Info label="Status" value={caseStatusLabel(item.status)} />
-              <Info label="Kontakt-Hinweis" value={item.contact_note || 'Kein Hinweis'} />
+              <Info label="Kontakt-Hinweis" value={item.contactNote || 'Kein Hinweis'} />
               <Info label="Zugewiesen" value={item.assigned_user_name || 'Noch niemand'} />
             </div>
             <div className="mt-4 rounded-md bg-neutral-50 p-3 text-sm">
@@ -1418,7 +1430,7 @@ function Operations() {
         </div>
       </Panel>
       <Panel title="Webhooks">
-        <div className="space-y-2">{data.webhooks.map((hook) => <div key={hook.id} className="rounded-md bg-neutral-50 p-3 text-sm"><strong>{hook.url}</strong><p>Status: {hook.last_status || '-'} Â· {hook.last_called_at ? formatDate(hook.last_called_at) : 'noch nicht aufgerufen'}</p>{hook.last_error && <p className="text-red-700">{hook.last_error}</p>}</div>)}</div>
+        <div className="space-y-2">{data.webhooks.map((hook) => <div key={hook.id} className="rounded-md bg-neutral-50 p-3 text-sm"><strong>Webhook endpoint</strong><p>Status: {hook.last_status || '-'} Â· {hook.last_called_at ? formatDate(hook.last_called_at) : 'noch nicht aufgerufen'}</p>{hook.last_error && <p className="text-red-700">{hook.last_error}</p>}</div>)}</div>
       </Panel>
     </div>}
   </div>;
