@@ -4,6 +4,20 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.12.0] - 2026-05-13
+
+### Added
+
+- Built-in question profiles for quick feedback, emotional event recaps, club/party events, concerts/festivals, conferences, and low-rating recovery.
+- Admin API for listing question profiles, creating a form from a built-in or saved profile, and saving an existing form as a new reusable profile.
+- Friendlier form builder UI with profile cards, prompt ideas, visual question type cards, guest preview, question duplication, and one-option-per-line editing.
+- Unit tests for question profile normalization.
+
+### Changed
+
+- New blank forms without an assigned event are now saved as reusable profiles by default.
+- Form creation and question mutation now verify organization/event access more consistently.
+
 ## [0.11.0] - 2026-05-12
 
 ### Changed

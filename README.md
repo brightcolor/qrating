@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.11.0
+**Version:** 0.12.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -21,7 +21,7 @@ This repository was built with AI-assisted, vibe-coded development. Treat it lik
 - Mobile-first guest feedback page with event image, large touch targets, and sticky submit
 - Rating, quick tags, free-text answers, newsletter opt-in, and friendly low-rating callback request
 - Pretix event sync with settings sync and robust event image detection
-- Form builder with reusable questions and visitor preview
+- Friendly form builder with built-in question profiles, saved custom profiles, reusable questions, and visitor preview
 - Dashboard, CSV/XLSX exports, newsletter export, and multi-page PDF reports
 - Configurable SMTP for password resets, invitations, low-rating alerts, and report delivery
 - Per-user notification channels scoped to assigned events
@@ -331,7 +331,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.11.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.12.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

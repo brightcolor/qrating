@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import {
   BarChart3,
   Bell,
@@ -26,10 +26,10 @@ import {
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import './styles/index.css';
 import { API_BASE, api, assetUrl } from './lib/api.js';
+import { FormBuilder } from './admin/FormBuilder.jsx';
 
 const positiveTags = ['Tolle Stimmung', 'Gute Musik', 'Schoene Location', 'Nettes Team', 'Guter Sound', 'Gerne wieder'];
 const improvementTags = ['Einlass', 'Wartezeiten', 'Sound', 'Getraenke', 'Preise', 'Toiletten', 'Zu voll'];
-const questionTypes = ['text_short', 'text_long', 'checkboxes', 'multiple_choice', 'yes_no', 'nps', 'rating'];
 
 function useAsync(fn, deps = []) {
   const [state, setState] = useState({ loading: true, data: null, error: null });
@@ -120,7 +120,7 @@ function PublicFeedback({ mode, identifier, source }) {
         {event.imageUrl && <img className="absolute inset-0 h-full w-full object-cover" src={assetUrl(event.imageUrl)} alt={event.imageAlt} />}
         <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/25 to-black/10" />
         <div className="relative flex min-h-[34dvh] flex-col justify-end p-4 text-white sm:min-h-56 sm:p-5">
-          <p className="text-sm opacity-90">{formatDate(event.dateFrom)}{event.location ? ` · ${event.location}` : ''}</p>
+          <p className="text-sm opacity-90">{formatDate(event.dateFrom)}{event.location ? ` Â· ${event.location}` : ''}</p>
           <h1 className="mt-2 text-2xl font-semibold leading-tight sm:text-3xl">{texts.headline}</h1>
           <p className="mt-2 max-w-lg text-sm text-white/90 sm:text-base">{texts.subtitle}</p>
         </div>
@@ -134,7 +134,7 @@ function PublicFeedback({ mode, identifier, source }) {
               <button key={value} type="button" aria-label={`${value} Sterne`} onClick={() => setRating(value)}
                 className="focus-ring flex min-h-14 items-center justify-center rounded-md p-2 text-4xl transition hover:scale-105"
                 style={{ color: value <= rating ? color : '#d4d4d4' }}>
-                ★
+                â˜…
               </button>
             ))}
           </div>
@@ -254,7 +254,7 @@ function AdminApp() {
         </div>
         {page === 'dashboard' && <Dashboard />}
         {page === 'events' && <Events />}
-        {page === 'forms' && <Forms />}
+        {page === 'forms' && <FormBuilder />}
         {page === 'analytics' && <Analytics />}
         {page === 'low-ratings' && <LowRatingWorkflow />}
         {page === 'texts' && <Texts />}
@@ -495,8 +495,8 @@ function EventCard({ event }) {
         </div>
         <div>
           <div className="flex items-center gap-2"><h2 className="font-semibold">{event.name}</h2><span className="rounded bg-neutral-100 px-2 py-1 text-xs">{event.source}</span></div>
-          <p className="mt-1 text-sm text-neutral-600">{formatDate(event.date_from)} · {event.location || 'Keine Location'}</p>
-          <p className="mt-1 text-sm text-neutral-500">Bildquelle: {event.image_source || 'Fallback'} {event.detected_image_settings_key ? `· Key: ${event.detected_image_settings_key}` : ''}</p>
+          <p className="mt-1 text-sm text-neutral-600">{formatDate(event.date_from)} Â· {event.location || 'Keine Location'}</p>
+          <p className="mt-1 text-sm text-neutral-500">Bildquelle: {event.image_source || 'Fallback'} {event.detected_image_settings_key ? `Â· Key: ${event.detected_image_settings_key}` : ''}</p>
         </div>
       </div>
       <div className="flex flex-wrap gap-2">
@@ -510,140 +510,6 @@ function EventCard({ event }) {
     </div>
     {message && <p className="mt-3 rounded-md bg-blue-50 p-3 text-sm text-blue-800">{message}</p>}
   </article>;
-}
-
-function Forms() {
-  const [reload, setReload] = useState(0);
-  const { data: events } = useAsync(() => api('/admin/events'), []);
-  const { data, loading, error } = useAsync(() => api('/admin/forms'), [reload]);
-  const [selected, setSelected] = useState(null);
-  const forms = data || [];
-  useEffect(() => {
-    if (!selected && forms[0]) setSelected(forms[0].id);
-  }, [forms, selected]);
-  return <div>
-    <Header title="Formular-Builder" action={<button onClick={() => setReload(reload + 1)} className="button-secondary"><RefreshCw size={16} /> Aktualisieren</button>} />
-    {error && <ErrorBox error={error} />}
-    <div className="mt-6 grid gap-6 lg:grid-cols-[320px_1fr]">
-      <Panel title="Formulare">
-        <CreateForm events={events || []} onCreated={(form) => { setSelected(form.id); setReload(reload + 1); }} />
-        <div className="mt-4 space-y-2">
-          {loading && <p>Lade Formulare ...</p>}
-          {forms.map((form) => <button key={form.id} onClick={() => setSelected(form.id)} className={`w-full rounded-md px-3 py-2 text-left text-sm ${selected === form.id ? 'bg-neutral-950 text-white' : 'bg-neutral-100'}`}>{form.name}</button>)}
-        </div>
-      </Panel>
-      {selected ? <FormEditor formId={selected} onChanged={() => setReload(reload + 1)} /> : <Panel><p className="text-neutral-600">Waehle ein Formular aus.</p></Panel>}
-    </div>
-  </div>;
-}
-
-function CreateForm({ events, onCreated }) {
-  const [name, setName] = useState('Neues Feedbackformular');
-  const [eventId, setEventId] = useState('');
-  async function submit(e) {
-    e.preventDefault();
-    const form = await api('/admin/forms', { method: 'POST', body: JSON.stringify({ name, eventId: eventId || null }) });
-    onCreated(form);
-  }
-  return <form onSubmit={submit} className="space-y-2">
-    <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
-    <select className="input" value={eventId} onChange={(e) => setEventId(e.target.value)}>
-      <option value="">Als Vorlage</option>
-      {events.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}
-    </select>
-    <button className="button-primary w-full"><Plus size={16} /> Formular anlegen</button>
-  </form>;
-}
-
-function FormEditor({ formId, onChanged }) {
-  const [reload, setReload] = useState(0);
-  const { data, loading, error } = useAsync(() => api(`/admin/forms/${formId}`), [formId, reload]);
-  if (loading) return <Panel><p>Lade Formular ...</p></Panel>;
-  if (error) return <ErrorBox error={error} />;
-  async function remove(questionId) {
-    await api(`/admin/forms/${formId}/questions/${questionId}`, { method: 'DELETE' });
-    setReload(reload + 1);
-    onChanged();
-  }
-  return <Panel title={data.form.name}>
-    <QuestionCreate formId={formId} onCreated={() => { setReload(reload + 1); onChanged(); }} />
-    <div className="mt-6 space-y-3">
-      {data.questions.map((question) => <QuestionRow key={question.id} formId={formId} question={question} onSaved={() => setReload(reload + 1)} onDelete={() => remove(question.id)} />)}
-      {!data.questions.length && <p className="text-sm text-neutral-500">Noch keine eigenen Fragen.</p>}
-    </div>
-    <PublicPreview questions={data.questions} />
-  </Panel>;
-}
-
-function QuestionCreate({ formId, onCreated }) {
-  const [form, setForm] = useState({ label: '', internalName: '', questionType: 'text_long', options: '' });
-  async function submit(e) {
-    e.preventDefault();
-    await api(`/admin/forms/${formId}/questions`, {
-      method: 'POST',
-      body: JSON.stringify({
-        ...form,
-        options: form.options ? form.options.split(',').map((item) => item.trim()).filter(Boolean) : null
-      })
-    });
-    setForm({ label: '', internalName: '', questionType: 'text_long', options: '' });
-    onCreated();
-  }
-  return <form onSubmit={submit} className="grid gap-3 md:grid-cols-4">
-    <input className="input md:col-span-2" placeholder="Fragetext" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} required />
-    <input className="input" placeholder="interner_name" value={form.internalName} onChange={(e) => setForm({ ...form, internalName: e.target.value })} required />
-    <select className="input" value={form.questionType} onChange={(e) => setForm({ ...form, questionType: e.target.value })}>{questionTypes.map((type) => <option key={type}>{type}</option>)}</select>
-    <input className="input md:col-span-3" placeholder="Optionen kommagetrennt" value={form.options} onChange={(e) => setForm({ ...form, options: e.target.value })} />
-    <button className="button-blue"><Plus size={16} /> Frage</button>
-  </form>;
-}
-
-function QuestionRow({ formId, question, onSaved, onDelete }) {
-  const [draft, setDraft] = useState({
-    label: question.label,
-    internalName: question.internal_name,
-    questionType: question.question_type,
-    required: question.required,
-    active: question.active,
-    sortOrder: question.sort_order,
-    options: Array.isArray(question.options) ? question.options.join(', ') : ''
-  });
-  async function save() {
-    await api(`/admin/forms/${formId}/questions/${question.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        ...draft,
-        options: draft.options ? draft.options.split(',').map((item) => item.trim()).filter(Boolean) : null
-      })
-    });
-    onSaved();
-  }
-  return <div className="rounded-md border border-neutral-200 p-3">
-    <div className="grid gap-2 md:grid-cols-[1fr_170px_120px_80px]">
-      <input className="input" value={draft.label} onChange={(e) => setDraft({ ...draft, label: e.target.value })} />
-      <select className="input" value={draft.questionType} onChange={(e) => setDraft({ ...draft, questionType: e.target.value })}>{questionTypes.map((type) => <option key={type}>{type}</option>)}</select>
-      <input className="input" type="number" value={draft.sortOrder} onChange={(e) => setDraft({ ...draft, sortOrder: Number(e.target.value) })} />
-      <button onClick={onDelete} className="button-secondary justify-center" title="Loeschen"><Trash2 size={16} /></button>
-    </div>
-    <div className="mt-2 grid gap-2 md:grid-cols-[1fr_1fr_auto_auto_auto]">
-      <input className="input" value={draft.internalName} onChange={(e) => setDraft({ ...draft, internalName: e.target.value })} />
-      <input className="input" placeholder="Optionen" value={draft.options} onChange={(e) => setDraft({ ...draft, options: e.target.value })} />
-      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={draft.required} onChange={(e) => setDraft({ ...draft, required: e.target.checked })} /> Pflicht</label>
-      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={draft.active} onChange={(e) => setDraft({ ...draft, active: e.target.checked })} /> Aktiv</label>
-      <button onClick={save} className="button-primary">Speichern</button>
-    </div>
-  </div>;
-}
-
-function PublicPreview({ questions }) {
-  return <div className="mt-6 rounded-lg bg-neutral-100 p-4">
-    <h3 className="font-semibold">Vorschau</h3>
-    <div className="mt-3 max-w-sm rounded-lg bg-white p-4 shadow-sm">
-      <div className="text-sm text-neutral-500">Wie war dein Abend?</div>
-      <div className="mt-2 text-2xl text-blue-600">★★★★★</div>
-      {questions.filter((question) => question.active).slice(0, 8).map((question) => <div key={question.id} className="mt-4"><div className="text-sm font-medium">{question.label}</div><div className="mt-1 h-10 rounded-md border bg-neutral-50" /></div>)}
-    </div>
-  </div>;
 }
 
 function Analytics() {
@@ -1197,7 +1063,7 @@ function QrAndWallboard() {
     <Panel title="QR-Quellen-Auswertung">
       <select className="input max-w-md" value={selectedEvent} onChange={(e) => setSelectedEvent(e.target.value)}>{events?.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}</select>
       <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-        {qrAnalytics?.bySource?.map((row) => <div key={row.source_slug} className="rounded-md border border-neutral-200 p-3 text-sm"><strong>{row.label}</strong><p>Scans: {row.scans_count || 0} · Feedbacks: {row.feedback_count || 0}</p><p>Ø {row.average_rating || '-'} · Newsletter {row.newsletter_optins || 0} · Low {row.low_ratings || 0}</p></div>)}
+        {qrAnalytics?.bySource?.map((row) => <div key={row.source_slug} className="rounded-md border border-neutral-200 p-3 text-sm"><strong>{row.label}</strong><p>Scans: {row.scans_count || 0} Â· Feedbacks: {row.feedback_count || 0}</p><p>Ã˜ {row.average_rating || '-'} Â· Newsletter {row.newsletter_optins || 0} Â· Low {row.low_ratings || 0}</p></div>)}
         {qrAnalytics?.bySource?.length === 0 && <p className="text-sm text-neutral-500">Noch keine QR-Quellen-Daten fuer dieses Event.</p>}
       </div>
     </Panel>
@@ -1279,8 +1145,8 @@ function Pretix() {
       {loading && <p>Lade Verbindungen ...</p>}
       {data?.map((connection) => <div key={connection.id} className="rounded-lg bg-white p-5 shadow-sm">
         <h2 className="font-semibold">{connection.base_url} / {connection.pretix_organizer_slug}</h2>
-        <p className="mt-1 text-sm text-neutral-600">Letzter Sync: {connection.last_sync_status || 'Noch nicht synchronisiert'} · Naechster Sync: {connection.next_sync_at ? formatDate(connection.next_sync_at) : '-'}</p>
-        <p className="mt-1 text-sm text-neutral-500">Intervall: {connection.sync_interval_minutes} Min. · Auto-Sync: {connection.sync_enabled ? 'aktiv' : 'inaktiv'} · Cache: {connection.cache_event_images ? 'aktiv' : 'inaktiv'}</p>
+        <p className="mt-1 text-sm text-neutral-600">Letzter Sync: {connection.last_sync_status || 'Noch nicht synchronisiert'} Â· Naechster Sync: {connection.next_sync_at ? formatDate(connection.next_sync_at) : '-'}</p>
+        <p className="mt-1 text-sm text-neutral-500">Intervall: {connection.sync_interval_minutes} Min. Â· Auto-Sync: {connection.sync_enabled ? 'aktiv' : 'inaktiv'} Â· Cache: {connection.cache_event_images ? 'aktiv' : 'inaktiv'}</p>
         <div className="mt-4 flex flex-wrap gap-2">
           <button onClick={() => action(connection.id, 'test')} className="button-secondary">Testen</button>
           <button onClick={() => action(connection.id, 'sync')} className="button-blue">Jetzt synchronisieren</button>
@@ -1455,7 +1321,7 @@ function Notifications() {
     <Panel title="Rollen & Rechte">
       <div className="grid gap-3">
         {users?.map((user) => <div key={user.id} className="grid gap-2 rounded-md border border-neutral-200 p-3 md:grid-cols-[1fr_180px_180px]">
-          <div><strong>{user.name}</strong><p className="text-sm text-neutral-500">{user.email} · {user.status || 'active'} · letzter Login: {user.last_login_at ? formatDate(user.last_login_at) : '-'}</p></div>
+          <div><strong>{user.name}</strong><p className="text-sm text-neutral-500">{user.email} Â· {user.status || 'active'} Â· letzter Login: {user.last_login_at ? formatDate(user.last_login_at) : '-'}</p></div>
           <select className="input" value={user.role} onChange={(e) => changeRole(user, e.target.value)}>
             <option value="support">Support</option>
             <option value="analyst">Analyst</option>
@@ -1475,7 +1341,7 @@ function Notifications() {
       {loading && <p>Lade Kanaele ...</p>}
       <div className="grid gap-3">
         {channels?.map((channel) => <div key={channel.id} className="grid gap-2 rounded-md border border-neutral-200 p-3 md:grid-cols-[1fr_auto_auto]">
-          <div><strong>{channel.label}</strong><p className="text-sm text-neutral-500">{channel.channel_type} · {channel.user_name} · Secret: {channel.has_secret ? 'ja' : 'nein'} · Status: {channel.last_status || '-'}</p>{channel.last_error && <p className="text-sm text-red-700">{channel.last_error}</p>}</div>
+          <div><strong>{channel.label}</strong><p className="text-sm text-neutral-500">{channel.channel_type} Â· {channel.user_name} Â· Secret: {channel.has_secret ? 'ja' : 'nein'} Â· Status: {channel.last_status || '-'}</p>{channel.last_error && <p className="text-sm text-red-700">{channel.last_error}</p>}</div>
           <button onClick={() => testChannel(channel.id)} className="button-secondary"><Send size={16} /> Test</button>
           <button onClick={async () => { await api(`/admin/notification-channels/${channel.id}`, { method: 'DELETE' }); setReload(reload + 1); }} className="button-secondary"><Trash2 size={16} /> Entfernen</button>
         </div>)}
@@ -1542,17 +1408,17 @@ function Operations() {
       </Panel>
       <Panel title="Letzte relevante Jobs">
         <div className="space-y-2">
-          {data.recentJobs.map((job) => <div key={job.id} className="rounded-md border border-neutral-200 p-3 text-sm"><strong>{job.job_type}</strong> · {job.status} · Versuch {job.attempts}/{job.max_attempts}<p className="text-neutral-500">{job.last_error || `geplant: ${formatDate(job.run_after)}`}</p></div>)}
+          {data.recentJobs.map((job) => <div key={job.id} className="rounded-md border border-neutral-200 p-3 text-sm"><strong>{job.job_type}</strong> Â· {job.status} Â· Versuch {job.attempts}/{job.max_attempts}<p className="text-neutral-500">{job.last_error || `geplant: ${formatDate(job.run_after)}`}</p></div>)}
           {!data.recentJobs.length && <p className="text-sm text-neutral-500">Keine offenen oder fehlgeschlagenen Jobs.</p>}
         </div>
       </Panel>
       <Panel title="Pretix Sync">
         <div className="space-y-2">
-          {data.pretix.map((connection) => <div key={connection.id} className="rounded-md bg-neutral-50 p-3 text-sm"><strong>{connection.pretix_organizer_slug}</strong><p>Auto-Sync: {connection.sync_enabled ? 'aktiv' : 'inaktiv'} · letzter Erfolg: {connection.last_successful_sync_at ? formatDate(connection.last_successful_sync_at) : '-'}</p>{connection.last_sync_error && <p className="text-red-700">{connection.last_sync_error}</p>}</div>)}
+          {data.pretix.map((connection) => <div key={connection.id} className="rounded-md bg-neutral-50 p-3 text-sm"><strong>{connection.pretix_organizer_slug}</strong><p>Auto-Sync: {connection.sync_enabled ? 'aktiv' : 'inaktiv'} Â· letzter Erfolg: {connection.last_successful_sync_at ? formatDate(connection.last_successful_sync_at) : '-'}</p>{connection.last_sync_error && <p className="text-red-700">{connection.last_sync_error}</p>}</div>)}
         </div>
       </Panel>
       <Panel title="Webhooks">
-        <div className="space-y-2">{data.webhooks.map((hook) => <div key={hook.id} className="rounded-md bg-neutral-50 p-3 text-sm"><strong>{hook.url}</strong><p>Status: {hook.last_status || '-'} · {hook.last_called_at ? formatDate(hook.last_called_at) : 'noch nicht aufgerufen'}</p>{hook.last_error && <p className="text-red-700">{hook.last_error}</p>}</div>)}</div>
+        <div className="space-y-2">{data.webhooks.map((hook) => <div key={hook.id} className="rounded-md bg-neutral-50 p-3 text-sm"><strong>{hook.url}</strong><p>Status: {hook.last_status || '-'} Â· {hook.last_called_at ? formatDate(hook.last_called_at) : 'noch nicht aufgerufen'}</p>{hook.last_error && <p className="text-red-700">{hook.last_error}</p>}</div>)}</div>
       </Panel>
     </div>}
   </div>;
@@ -1634,7 +1500,7 @@ function SmtpSettings() {
         </div>
       </form>
       {message && <p className="mt-4 rounded-md bg-blue-50 p-3 text-sm text-blue-800">{message}</p>}
-      {data?.last_test_at && <p className="mt-3 text-sm text-neutral-500">Letzter Test: {formatDate(data.last_test_at)} · {data.last_test_status || '-'}</p>}
+      {data?.last_test_at && <p className="mt-3 text-sm text-neutral-500">Letzter Test: {formatDate(data.last_test_at)} Â· {data.last_test_status || '-'}</p>}
       {data?.last_test_error && <p className="mt-2 text-sm text-red-700">{data.last_test_error}</p>}
     </Panel>
   </div>;

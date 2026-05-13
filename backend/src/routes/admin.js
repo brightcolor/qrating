@@ -1,7 +1,7 @@
 import express from 'express';
 import QRCode from 'qrcode';
 import bcrypt from 'bcryptjs';
-import { query } from '../db/pool.js';
+import { query, withTransaction } from '../db/pool.js';
 import { canAccessEvent, hasRole, requireAdmin, requireRole } from '../middleware/auth.js';
 import { httpError } from '../middleware/errors.js';
 import { env } from '../config/env.js';
@@ -24,6 +24,7 @@ import {
   getBillingOverview,
   updateBillingPlans
 } from '../services/billingService.js';
+import { getQuestionProfile, questionProfiles, toProfileQuestionRows } from '../services/questionProfiles.js';
 
 export const adminRouter = express.Router();
 adminRouter.use(requireAdmin);
@@ -99,9 +100,53 @@ async function ensureActiveEventLimit(req) {
     [req.admin.organizationId]
   )).rows[0]?.count || 0);
   if (count >= plan.limits.activeEvents) {
-    throw httpError(402, `Der ${plan.name}-Plan erlaubt maximal ${plan.limits.activeEvents} aktive Events. Bitte upgrade auf Pro oder Business.`);
+    throw httpError(402, `Der ${plan.name}-Plan erlaubt maximal ${plan.limits.activeEvents} aktive Events. Bitte pruefe den internen Plan.`);
   }
   return plan;
+}
+
+async function ensureFormLimit(req) {
+  const plan = await currentPlanForRequest(req);
+  if (plan.limits.templates === null) return plan;
+  const count = Number((await query(
+    'SELECT count(*)::int AS count FROM feedback_forms WHERE organization_id = $1',
+    [req.admin.organizationId]
+  )).rows[0]?.count || 0);
+  if (count >= plan.limits.templates) {
+    throw httpError(402, `Der ${plan.name}-Plan enthaelt maximal ${plan.limits.templates} Formulare oder Profile. Bitte pruefe den internen Plan.`);
+  }
+  return plan;
+}
+
+async function insertQuestionRows(db, formId, questions) {
+  const rows = toProfileQuestionRows(questions);
+  for (const item of rows) {
+    await db.query(
+      `INSERT INTO feedback_questions (
+        feedback_form_id, question_type, internal_name, label, help_text, placeholder, required, sort_order, active,
+        category, privacy_relevant, show_in_export, show_in_dashboard, anonymous_answer, visibility_rules, options
+      )
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+      [
+        formId,
+        item.questionType,
+        item.internalName,
+        item.label,
+        item.helpText,
+        item.placeholder,
+        item.required,
+        item.sortOrder,
+        item.active,
+        item.category,
+        item.privacyRelevant,
+        item.showInExport,
+        item.showInDashboard,
+        item.anonymousAnswer,
+        item.visibilityRules ? JSON.stringify(item.visibilityRules) : null,
+        item.options ? JSON.stringify(item.options) : null
+      ]
+    );
+  }
 }
 
 adminRouter.get('/dashboard', async (req, res, next) => {
@@ -649,6 +694,104 @@ adminRouter.get('/forms', async (req, res, next) => {
   }
 });
 
+adminRouter.get('/forms/profiles', async (req, res, next) => {
+  try {
+    const saved = await query(
+      `SELECT f.id, f.name, f.description, f.created_at, f.updated_at, count(q.id)::int AS question_count
+       FROM feedback_forms f
+       LEFT JOIN feedback_questions q ON q.feedback_form_id = f.id
+       WHERE f.organization_id = $1 AND f.is_template = true
+       GROUP BY f.id
+       ORDER BY f.updated_at DESC`,
+      [req.admin.organizationId]
+    );
+    res.json({
+      builtIn: questionProfiles.map((profile) => ({
+        id: profile.id,
+        name: profile.name,
+        summary: profile.summary,
+        badge: profile.badge,
+        tone: profile.tone,
+        questionCount: profile.questions.length
+      })),
+      saved: saved.rows
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.post('/forms/from-profile', async (req, res, next) => {
+  try {
+    await ensureFormLimit(req);
+    const eventId = req.body.eventId || null;
+    if (eventId) await ensureEventAccess(req, eventId);
+
+    let sourceName = 'Fragenprofil';
+    let sourceDescription = '';
+    let questions = [];
+
+    if (req.body.profileId) {
+      const profile = getQuestionProfile(req.body.profileId);
+      if (!profile) throw httpError(400, 'Fragenprofil nicht gefunden.');
+      sourceName = profile.name;
+      sourceDescription = profile.summary;
+      questions = profile.questions;
+    } else if (req.body.templateFormId) {
+      const source = (await query(
+        'SELECT * FROM feedback_forms WHERE id = $1 AND organization_id = $2 AND is_template = true',
+        [req.body.templateFormId, req.admin.organizationId]
+      )).rows[0];
+      if (!source) throw httpError(400, 'Gespeichertes Fragenprofil nicht gefunden.');
+      sourceName = source.name;
+      sourceDescription = source.description || '';
+      const existing = await query(
+        'SELECT * FROM feedback_questions WHERE feedback_form_id = $1 ORDER BY sort_order, created_at',
+        [source.id]
+      );
+      questions = existing.rows.map((item) => ({
+        questionType: item.question_type,
+        internalName: item.internal_name,
+        label: item.label,
+        helpText: item.help_text,
+        placeholder: item.placeholder,
+        required: item.required,
+        sortOrder: item.sort_order,
+        active: item.active,
+        category: item.category,
+        privacyRelevant: item.privacy_relevant,
+        showInExport: item.show_in_export,
+        showInDashboard: item.show_in_dashboard,
+        anonymousAnswer: item.anonymous_answer,
+        visibilityRules: item.visibility_rules,
+        options: item.options
+      }));
+    } else {
+      throw httpError(400, 'Bitte waehle ein Fragenprofil aus.');
+    }
+
+    const created = await withTransaction(async (client) => {
+      const form = (await client.query(
+        `INSERT INTO feedback_forms (organization_id, event_id, name, description, is_template, active)
+         VALUES ($1,$2,$3,$4,$5,true)
+         RETURNING *`,
+        [
+          req.admin.organizationId,
+          eventId,
+          req.body.name || sourceName,
+          req.body.description ?? sourceDescription,
+          Boolean(req.body.isTemplate)
+        ]
+      )).rows[0];
+      await insertQuestionRows(client, form.id, questions);
+      return form;
+    });
+    res.status(201).json(created);
+  } catch (error) {
+    next(error);
+  }
+});
+
 adminRouter.get('/forms/:id', async (req, res, next) => {
   try {
     const form = (await query(
@@ -668,11 +811,8 @@ adminRouter.get('/forms/:id', async (req, res, next) => {
 
 adminRouter.post('/forms', async (req, res, next) => {
   try {
-    const plan = await currentPlanForRequest(req);
-    if (plan.limits.templates !== null) {
-      const count = Number((await query('SELECT count(*)::int AS count FROM feedback_forms WHERE organization_id = $1', [req.admin.organizationId])).rows[0]?.count || 0);
-      if (count >= plan.limits.templates) throw httpError(402, `Der ${plan.name}-Plan enthaelt maximal ${plan.limits.templates} Formularvorlagen/Formulare.`);
-    }
+    await ensureFormLimit(req);
+    if (req.body.eventId) await ensureEventAccess(req, req.body.eventId);
     const result = await query(
       `INSERT INTO feedback_forms (organization_id, event_id, name, description, is_template, active)
        VALUES ($1,$2,$3,$4,$5,$6)
@@ -682,7 +822,7 @@ adminRouter.post('/forms', async (req, res, next) => {
         req.body.eventId || null,
         req.body.name || 'Neues Formular',
         req.body.description || null,
-        Boolean(req.body.isTemplate),
+        Boolean(req.body.isTemplate ?? !req.body.eventId),
         req.body.active !== false
       ]
     );
@@ -711,8 +851,46 @@ adminRouter.patch('/forms/:id', async (req, res, next) => {
   }
 });
 
+adminRouter.post('/forms/:id/save-profile', async (req, res, next) => {
+  try {
+    await ensureFormLimit(req);
+    const form = (await query(
+      'SELECT * FROM feedback_forms WHERE id = $1 AND organization_id = $2',
+      [req.params.id, req.admin.organizationId]
+    )).rows[0];
+    if (!form) throw httpError(404, 'Formular nicht gefunden.');
+    const created = await withTransaction(async (client) => {
+      const profile = (await client.query(
+        `INSERT INTO feedback_forms (organization_id, event_id, name, description, is_template, active)
+         VALUES ($1,null,$2,$3,true,true)
+         RETURNING *`,
+        [req.admin.organizationId, req.body.name || `${form.name} Profil`, req.body.description ?? form.description]
+      )).rows[0];
+      await client.query(
+        `INSERT INTO feedback_questions (
+          feedback_form_id, question_type, internal_name, label, help_text, placeholder, required, sort_order, active,
+          category, privacy_relevant, show_in_export, show_in_dashboard, anonymous_answer, visibility_rules, options
+        )
+        SELECT $1, question_type, internal_name, label, help_text, placeholder, required, sort_order, active,
+          category, privacy_relevant, show_in_export, show_in_dashboard, anonymous_answer, visibility_rules, options
+        FROM feedback_questions WHERE feedback_form_id = $2`,
+        [profile.id, form.id]
+      );
+      return profile;
+    });
+    res.status(201).json(created);
+  } catch (error) {
+    next(error);
+  }
+});
+
 adminRouter.post('/forms/:id/questions', async (req, res, next) => {
   try {
+    const form = (await query(
+      'SELECT id FROM feedback_forms WHERE id = $1 AND organization_id = $2',
+      [req.params.id, req.admin.organizationId]
+    )).rows[0];
+    if (!form) throw httpError(404, 'Formular nicht gefunden.');
     const result = await query(
       `INSERT INTO feedback_questions (feedback_form_id, question_type, internal_name, label, help_text, placeholder, required, sort_order, options, visibility_rules)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
@@ -752,7 +930,11 @@ adminRouter.patch('/forms/:id/questions/:questionId', async (req, res, next) => 
        show_in_export = COALESCE($13, show_in_export),
        show_in_dashboard = COALESCE($14, show_in_dashboard),
        updated_at = now()
-       WHERE id = $2 AND feedback_form_id = $1 RETURNING *`,
+       WHERE id = $2
+         AND feedback_form_id IN (
+           SELECT id FROM feedback_forms WHERE id = $1 AND organization_id = $15
+         )
+       RETURNING *`,
       [
         req.params.id,
         req.params.questionId,
@@ -767,9 +949,11 @@ adminRouter.patch('/forms/:id/questions/:questionId', async (req, res, next) => 
         req.body.options ? JSON.stringify(req.body.options) : null,
         req.body.visibilityRules ? JSON.stringify(req.body.visibilityRules) : null,
         req.body.showInExport,
-        req.body.showInDashboard
+        req.body.showInDashboard,
+        req.admin.organizationId
       ]
     );
+    if (!result.rows[0]) throw httpError(404, 'Frage nicht gefunden.');
     res.json(result.rows[0]);
   } catch (error) {
     next(error);
@@ -778,7 +962,14 @@ adminRouter.patch('/forms/:id/questions/:questionId', async (req, res, next) => 
 
 adminRouter.delete('/forms/:id/questions/:questionId', async (req, res, next) => {
   try {
-    await query('DELETE FROM feedback_questions WHERE id = $1 AND feedback_form_id = $2', [req.params.questionId, req.params.id]);
+    await query(
+      `DELETE FROM feedback_questions
+       WHERE id = $1
+         AND feedback_form_id IN (
+           SELECT id FROM feedback_forms WHERE id = $2 AND organization_id = $3
+         )`,
+      [req.params.questionId, req.params.id, req.admin.organizationId]
+    );
     res.json({ ok: true });
   } catch (error) {
     next(error);
@@ -787,15 +978,19 @@ adminRouter.delete('/forms/:id/questions/:questionId', async (req, res, next) =>
 
 adminRouter.post('/forms/:id/duplicate', async (req, res, next) => {
   try {
+    await ensureFormLimit(req);
     const form = (await query(
       'SELECT * FROM feedback_forms WHERE id = $1 AND organization_id = $2',
       [req.params.id, req.admin.organizationId]
     )).rows[0];
     if (!form) throw httpError(404, 'Formular nicht gefunden.');
+    const isTemplate = Boolean(req.body.isTemplate);
+    const eventId = isTemplate ? null : (req.body.eventId || form.event_id);
+    if (eventId) await ensureEventAccess(req, eventId);
     const duplicated = (await query(
       `INSERT INTO feedback_forms (organization_id, event_id, name, description, is_template, active)
-       VALUES ($1,$2,$3,$4,false,true) RETURNING *`,
-      [req.admin.organizationId, req.body.eventId || form.event_id, `${form.name} Kopie`, form.description]
+       VALUES ($1,$2,$3,$4,$5,true) RETURNING *`,
+      [req.admin.organizationId, eventId, req.body.name || `${form.name} Kopie`, req.body.description ?? form.description, isTemplate]
     )).rows[0];
     await query(
       `INSERT INTO feedback_questions (
