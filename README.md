@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.13.0
+**Version:** 0.14.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -17,6 +17,8 @@ This repository was built with AI-assisted, vibe-coded development. Treat it lik
 - No self-service checkout flow: operators create users and assign access manually
 - First-user setup: no default admin account is shipped
 - HTTP-only admin cookie sessions; admin JWTs are not stored in browser storage
+- Security Center with production checks, 2FA status, PII Vault, and recent audit events
+- TOTP-based two-factor authentication for admin accounts with recovery codes
 - Dynamic organization QR code: `https://qrat.ing/f/{organizationSlug}`
 - Event-specific QR code: `https://qrat.ing/e/{event_feedback_token}`
 - Mobile-first guest feedback page with event image, large touch targets, and sticky submit
@@ -32,6 +34,7 @@ This repository was built with AI-assisted, vibe-coded development. Treat it lik
 - Data retention tools with anonymization of low-rating contact data
 - Webhooks for new feedback, low ratings, and newsletter opt-ins
 - Privacy-hardened outbound payloads: raw email addresses, callback phone numbers, and contact notes are not sent to generic webhooks or chat/push channels
+- Explicit PII reveal flow for low-rating contacts and newsletter emails with audit logging
 - Local Pretix image cache with metadata and prepared variants
 - QR source analytics with scan and feedback metrics
 - Monitoring page for jobs, Pretix, SMTP, and webhook status
@@ -260,6 +263,8 @@ Outbound notifications are intentionally redacted:
 - newsletter opt-in webhooks do not include raw email addresses; they include `emailProvided`, `emailHash`, and `emailDomain`
 - newsletter CSV export requires Event Manager permissions or higher and decrypts encrypted emails only for that export response
 
+The Security Center contains the PII Vault. Sensitive values are not shown in normal workflow lists. Authorized users must explicitly reveal callback phone numbers, contact notes, or newsletter email addresses; each reveal is written to `audit_log`. The PII Vault also supports deletion of individual newsletter opt-ins and low-rating contact data.
+
 Before production use, configure:
 
 - privacy and imprint content in the Website admin area
@@ -294,6 +299,8 @@ Admin authentication:
 Admin areas include events, analytics, exports, forms, texts, QR sources, Pretix connections, SMTP, notifications, webhooks, users, retention, branding, website content, and internal plan administration.
 
 Admin authentication uses the `qrating_admin` HTTP-only cookie. The frontend does not store session tokens in `localStorage` or expose them to JavaScript.
+
+Two-factor authentication can be enabled in the Security Center. It uses standard TOTP apps and provides one-time recovery codes during setup.
 
 ## Tests And CI
 
@@ -350,7 +357,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.13.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.14.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

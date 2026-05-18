@@ -4,6 +4,23 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.14.0] - 2026-05-18
+
+### Added
+
+- Security Center with production checks for secrets, HTTPS URLs, CORS configuration, failed jobs, SMTP, legacy plaintext rows, and owner/admin 2FA coverage.
+- TOTP-based two-factor authentication for admin accounts with QR setup, recovery codes, 2FA login challenge, and disable flow.
+- PII Vault for explicit, audited access to low-rating callback data and newsletter emails.
+- Audit log entries for first admin setup, 2FA changes, PII reveals, newsletter exports, PII deletion, and legacy plaintext cleanup.
+- DSGVO-oriented deletion actions for newsletter opt-ins and low-rating contact data.
+- Unit tests for the TOTP/base32 implementation.
+
+### Changed
+
+- Low-rating workflow no longer shows callback phone numbers or contact notes by default; authorized users must explicitly reveal them from the PII Vault.
+- Admin navigation now includes a dedicated Security Center page.
+- Version bumped to `0.14.0`.
+
 ## [0.13.0] - 2026-05-13
 
 ### Added

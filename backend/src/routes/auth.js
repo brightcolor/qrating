@@ -1,13 +1,16 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
+import QRCode from 'qrcode';
 import { query, withTransaction } from '../db/pool.js';
 import { signAdmin, requireAdmin } from '../middleware/auth.js';
 import { httpError } from '../middleware/errors.js';
 import { env } from '../config/env.js';
-import { hashValue, randomToken, slugify } from '../utils/crypto.js';
+import { decryptSecret, encryptSecret, hashValue, randomToken, slugify } from '../utils/crypto.js';
 import { SmtpService } from '../services/smtpService.js';
 import { clearAdminCookie, setAdminCookie } from '../utils/security.js';
+import { buildOtpAuthUrl, generateRecoveryCodes, generateTotpSecret, verifyTotp } from '../services/twoFactorService.js';
+import { writeAudit } from '../services/auditService.js';
 
 export const authRouter = express.Router();
 
@@ -26,6 +29,49 @@ const passwordResetLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Zu viele Reset-Anfragen. Bitte versuche es spaeter erneut.' }
 });
+
+function publicUser(user) {
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    twoFactorEnabled: Boolean(user.two_factor_enabled)
+  };
+}
+
+function recoveryHashes(codes) {
+  return codes.map((code) => hashValue(String(code).trim().toUpperCase()));
+}
+
+function consumeRecoveryCode(user, code) {
+  const normalized = String(code || '').trim().toUpperCase();
+  const hashes = Array.isArray(user.two_factor_recovery_hashes) ? user.two_factor_recovery_hashes : [];
+  const hash = hashValue(normalized);
+  if (!hashes.includes(hash)) return null;
+  return hashes.filter((item) => item !== hash);
+}
+
+function verifyUserSecondFactor(user, code) {
+  if (!user.two_factor_enabled || !user.two_factor_secret_encrypted) return { ok: true, recoveryHashes: null };
+  const secret = decryptSecret(user.two_factor_secret_encrypted);
+  if (verifyTotp(secret, code)) return { ok: true, recoveryHashes: null };
+  const remainingRecoveryHashes = consumeRecoveryCode(user, code);
+  if (remainingRecoveryHashes) return { ok: true, recoveryHashes: remainingRecoveryHashes };
+  return { ok: false, recoveryHashes: null };
+}
+
+async function completeLogin(res, user, secondFactorResult = { recoveryHashes: null }) {
+  if (secondFactorResult.recoveryHashes) {
+    await query('UPDATE users SET two_factor_recovery_hashes = $2::jsonb, updated_at = now() WHERE id = $1', [
+      user.id,
+      JSON.stringify(secondFactorResult.recoveryHashes)
+    ]);
+  }
+  await query('UPDATE users SET last_login_at = now(), two_factor_challenge_hash = null, two_factor_challenge_expires_at = null WHERE id = $1', [user.id]);
+  setAdminCookie(res, signAdmin(user));
+  return publicUser(user);
+}
 
 authRouter.get('/setup/status', async (req, res, next) => {
   try {
@@ -95,9 +141,15 @@ authRouter.post('/setup/first-admin', authLimiter, async (req, res, next) => {
       return user;
     });
 
-    const token = signAdmin(created);
-    setAdminCookie(res, token);
-    res.status(201).json({ user: { id: created.id, name: created.name, email: created.email, role: created.role } });
+    const user = await completeLogin(res, created);
+    await writeAudit({ query }, {
+      organizationId: created.organization_id,
+      userId: created.id,
+      action: 'admin.first_user_created',
+      entityType: 'user',
+      entityId: created.id
+    });
+    res.status(201).json({ user });
   } catch (error) {
     next(error);
   }
@@ -113,10 +165,51 @@ authRouter.post('/login', authLimiter, async (req, res, next) => {
     }
     if (user.status === 'disabled') throw httpError(403, 'Dieser Benutzer ist deaktiviert.');
     if (user.status === 'invited') throw httpError(403, 'Bitte schliesse zuerst die Einladung ab.');
-    await query('UPDATE users SET last_login_at = now() WHERE id = $1', [user.id]);
-    const token = signAdmin(user);
-    setAdminCookie(res, token);
-    res.json({ user: { id: user.id, name: user.name, email: user.email, role: user.role } });
+    if (user.two_factor_enabled) {
+      const challengeToken = randomToken(32);
+      await query(
+        `UPDATE users
+         SET two_factor_challenge_hash = $2,
+             two_factor_challenge_expires_at = now() + interval '10 minutes',
+             updated_at = now()
+         WHERE id = $1`,
+        [user.id, hashValue(challengeToken)]
+      );
+      return res.json({
+        twoFactorRequired: true,
+        challengeToken,
+        user: { email: user.email, name: user.name }
+      });
+    }
+    res.json({ user: await completeLogin(res, user) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+authRouter.post('/login/2fa', authLimiter, async (req, res, next) => {
+  try {
+    const challengeToken = String(req.body.challengeToken || '');
+    const code = String(req.body.code || '');
+    const user = (await query(
+      `SELECT * FROM users
+       WHERE two_factor_challenge_hash = $1
+         AND two_factor_challenge_expires_at > now()
+         AND status = 'active'`,
+      [hashValue(challengeToken)]
+    )).rows[0];
+    if (!user) throw httpError(401, 'Die 2FA-Anmeldung ist abgelaufen. Bitte melde dich erneut an.');
+    const secondFactor = verifyUserSecondFactor(user, code);
+    if (!secondFactor.ok) throw httpError(401, 'Der 2FA-Code ist ungueltig.');
+    const signedInUser = await completeLogin(res, user, secondFactor);
+    await writeAudit({ query }, {
+      organizationId: user.organization_id,
+      userId: user.id,
+      action: 'admin.login_2fa',
+      entityType: 'user',
+      entityId: user.id
+    });
+    res.json({ user: signedInUser });
   } catch (error) {
     next(error);
   }
@@ -150,8 +243,7 @@ authRouter.post('/accept-invite', authLimiter, async (req, res, next) => {
        RETURNING *`,
       [user.id, passwordHash, name]
     )).rows[0];
-    setAdminCookie(res, signAdmin(updated));
-    res.json({ user: { id: updated.id, name: updated.name, email: updated.email, role: updated.role } });
+    res.json({ user: await completeLogin(res, updated) });
   } catch (error) {
     next(error);
   }
@@ -211,8 +303,7 @@ authRouter.post('/password-reset/confirm', authLimiter, async (req, res, next) =
        RETURNING *`,
       [user.id, passwordHash]
     )).rows[0];
-    setAdminCookie(res, signAdmin(updated));
-    res.json({ user: { id: updated.id, name: updated.name, email: updated.email, role: updated.role } });
+    res.json({ user: await completeLogin(res, updated) });
   } catch (error) {
     next(error);
   }
@@ -226,11 +317,116 @@ authRouter.post('/logout', (req, res) => {
 authRouter.get('/me', requireAdmin, async (req, res, next) => {
   try {
     const result = await query(
-      `SELECT u.id, u.name, u.email, u.role, o.id AS organization_id, o.name AS organization_name, o.slug AS organization_slug
+      `SELECT u.id, u.name, u.email, u.role, u.two_factor_enabled,
+              o.id AS organization_id, o.name AS organization_name, o.slug AS organization_slug
        FROM users u JOIN organizations o ON o.id = u.organization_id WHERE u.id = $1`,
       [req.admin.sub]
     );
-    res.json(result.rows[0]);
+    const user = result.rows[0];
+    res.json({
+      ...user,
+      twoFactorEnabled: Boolean(user.two_factor_enabled),
+      two_factor_enabled: undefined
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+authRouter.post('/2fa/setup', requireAdmin, async (req, res, next) => {
+  try {
+    const user = (await query('SELECT * FROM users WHERE id = $1', [req.admin.sub])).rows[0];
+    if (!user) throw httpError(404, 'Benutzer nicht gefunden.');
+    if (user.two_factor_enabled) throw httpError(409, '2FA ist bereits aktiv.');
+    const secret = generateTotpSecret();
+    const provisioningUri = buildOtpAuthUrl({ account: user.email, secret });
+    await query(
+      `UPDATE users
+       SET two_factor_secret_encrypted = $2,
+           two_factor_enabled = false,
+           two_factor_confirmed_at = null,
+           two_factor_recovery_hashes = '[]'::jsonb,
+           updated_at = now()
+       WHERE id = $1`,
+      [user.id, encryptSecret(secret)]
+    );
+    await writeAudit({ query }, {
+      organizationId: user.organization_id,
+      userId: user.id,
+      action: 'security.2fa_setup_started',
+      entityType: 'user',
+      entityId: user.id
+    });
+    res.json({
+      secret,
+      provisioningUri,
+      qrSvg: await QRCode.toString(provisioningUri, { type: 'svg', margin: 1 })
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+authRouter.post('/2fa/confirm', requireAdmin, async (req, res, next) => {
+  try {
+    const user = (await query('SELECT * FROM users WHERE id = $1', [req.admin.sub])).rows[0];
+    if (!user?.two_factor_secret_encrypted) throw httpError(400, 'Bitte starte zuerst die 2FA-Einrichtung.');
+    const secret = decryptSecret(user.two_factor_secret_encrypted);
+    if (!verifyTotp(secret, req.body.code)) throw httpError(400, 'Der 2FA-Code ist ungueltig.');
+    const recoveryCodes = generateRecoveryCodes();
+    await query(
+      `UPDATE users
+       SET two_factor_enabled = true,
+           two_factor_confirmed_at = now(),
+           two_factor_recovery_hashes = $2::jsonb,
+           updated_at = now()
+       WHERE id = $1`,
+      [user.id, JSON.stringify(recoveryHashes(recoveryCodes))]
+    );
+    await writeAudit({ query }, {
+      organizationId: user.organization_id,
+      userId: user.id,
+      action: 'security.2fa_enabled',
+      entityType: 'user',
+      entityId: user.id
+    });
+    res.json({ ok: true, recoveryCodes });
+  } catch (error) {
+    next(error);
+  }
+});
+
+authRouter.post('/2fa/disable', requireAdmin, authLimiter, async (req, res, next) => {
+  try {
+    const user = (await query('SELECT * FROM users WHERE id = $1', [req.admin.sub])).rows[0];
+    if (!user) throw httpError(404, 'Benutzer nicht gefunden.');
+    if (!(await bcrypt.compare(String(req.body.password || ''), user.password_hash))) {
+      throw httpError(401, 'Passwort ist falsch.');
+    }
+    if (user.two_factor_enabled) {
+      const secondFactor = verifyUserSecondFactor(user, req.body.code);
+      if (!secondFactor.ok) throw httpError(401, 'Der 2FA-Code ist ungueltig.');
+    }
+    await query(
+      `UPDATE users
+       SET two_factor_secret_encrypted = null,
+           two_factor_enabled = false,
+           two_factor_confirmed_at = null,
+           two_factor_recovery_hashes = '[]'::jsonb,
+           two_factor_challenge_hash = null,
+           two_factor_challenge_expires_at = null,
+           updated_at = now()
+       WHERE id = $1`,
+      [user.id]
+    );
+    await writeAudit({ query }, {
+      organizationId: user.organization_id,
+      userId: user.id,
+      action: 'security.2fa_disabled',
+      entityType: 'user',
+      entityId: user.id
+    });
+    res.json({ ok: true });
   } catch (error) {
     next(error);
   }

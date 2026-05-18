@@ -28,6 +28,8 @@ import './styles/index.css';
 import { API_BASE, api, assetUrl } from './lib/api.js';
 import { FormBuilder } from './admin/FormBuilder.jsx';
 
+const SecurityCenter = React.lazy(() => import('./admin/SecurityCenter.jsx').then((module) => ({ default: module.SecurityCenter })));
+
 const positiveTags = ['Tolle Stimmung', 'Gute Musik', 'Schoene Location', 'Nettes Team', 'Guter Sound', 'Gerne wieder'];
 const improvementTags = ['Einlass', 'Wartezeiten', 'Sound', 'Getraenke', 'Preise', 'Toiletten', 'Zu voll'];
 
@@ -224,6 +226,7 @@ function AdminApp() {
   if (!authenticated) return <AuthGate onLogin={() => setAuthenticated(true)} />;
   const nav = [
     ['dashboard', 'Dashboard', BarChart3],
+    ['security', 'Sicherheit', ShieldCheck],
     ['events', 'Events', CalendarDays],
     ['forms', 'Formulare', FileText],
     ['analytics', 'Auswertung', BarChart3],
@@ -253,6 +256,7 @@ function AdminApp() {
           {nav.map(([id, label]) => <button key={id} onClick={() => setPage(id)} className="rounded-md bg-white px-3 py-2 text-sm">{label}</button>)}
         </div>
         {page === 'dashboard' && <Dashboard />}
+        {page === 'security' && <React.Suspense fallback={<p>Lade Security Center ...</p>}><SecurityCenter /></React.Suspense>}
         {page === 'events' && <Events />}
         {page === 'forms' && <FormBuilder />}
         {page === 'analytics' && <Analytics />}
@@ -338,6 +342,8 @@ function FirstAdminSetup({ setup, onLogin }) {
 function Login({ onLogin }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [twoFactor, setTwoFactor] = useState(null);
+  const [twoFactorCode, setTwoFactorCode] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   async function submit(e) {
@@ -345,6 +351,24 @@ function Login({ onLogin }) {
     setError('');
     try {
       const data = await api('/admin/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+      if (data.twoFactorRequired) {
+        setTwoFactor(data);
+        setMessage('Bitte bestaetige den zweiten Faktor.');
+        return;
+      }
+      onLogin(data.user);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+  async function submitTwoFactor(e) {
+    e.preventDefault();
+    setError('');
+    try {
+      const data = await api('/admin/login/2fa', {
+        method: 'POST',
+        body: JSON.stringify({ challengeToken: twoFactor.challengeToken, code: twoFactorCode })
+      });
       onLogin(data.user);
     } catch (err) {
       setError(err.message);
@@ -360,6 +384,17 @@ function Login({ onLogin }) {
       setError(err.message);
     }
   }
+  if (twoFactor) return <div className="flex min-h-screen items-center justify-center bg-neutral-100 p-4">
+    <form onSubmit={submitTwoFactor} className="w-full max-w-sm rounded-lg bg-white p-6 shadow-sm">
+      <h1 className="text-2xl font-semibold">2FA bestaetigen</h1>
+      <p className="mt-3 text-sm text-neutral-600">Gib den Code aus deiner Authenticator-App oder einen Recovery-Code ein.</p>
+      <label className="mt-6 block text-sm font-medium">Code<input className="mt-2 w-full rounded-md border px-3 py-2" value={twoFactorCode} onChange={(e) => setTwoFactorCode(e.target.value)} autoFocus /></label>
+      {error && <p className="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+      {message && <p className="mt-4 rounded-md bg-blue-50 p-3 text-sm text-blue-800">{message}</p>}
+      <button className="mt-6 w-full rounded-md bg-neutral-950 px-4 py-3 font-semibold text-white">Einloggen</button>
+      <button type="button" onClick={() => setTwoFactor(null)} className="mt-3 w-full text-sm text-neutral-600 hover:text-neutral-950">Zurueck zum Login</button>
+    </form>
+  </div>;
   return <div className="flex min-h-screen items-center justify-center bg-neutral-100 p-4">
     <form onSubmit={submit} className="w-full max-w-sm rounded-lg bg-white p-6 shadow-sm">
       <h1 className="text-2xl font-semibold">qrating Admin</h1>
@@ -576,6 +611,7 @@ function LowRatingWorkflow() {
   const { data, loading, error } = useAsync(() => api('/admin/low-rating-cases'), [reload]);
   const { data: users } = useAsync(() => api('/admin/users'), [reload]);
   const [message, setMessage] = useState('');
+  const [revealed, setRevealed] = useState({});
 
   async function updateCase(item, patch) {
     try {
@@ -585,6 +621,16 @@ function LowRatingWorkflow() {
       });
       setMessage('Fall aktualisiert.');
       setReload(reload + 1);
+    } catch (err) {
+      setMessage(err.message);
+    }
+  }
+
+  async function revealContact(item) {
+    try {
+      const result = await api(`/admin/pii-vault/low-rating-cases/${item.id}/reveal`, { method: 'POST', body: '{}' });
+      setRevealed({ ...revealed, [item.id]: result });
+      setMessage('Kontaktdaten wurden aus dem PII-Vault geladen und im Audit-Log erfasst.');
     } catch (err) {
       setMessage(err.message);
     }
@@ -607,11 +653,12 @@ function LowRatingWorkflow() {
               <span className="text-sm text-neutral-500">{formatDate(item.submitted_at)}</span>
             </div>
             <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
-              <Info label="Rueckrufnummer" value={item.contactPhone || 'Nicht hinterlegt'} />
+              <Info label="Rueckrufnummer" value={revealed[item.id]?.contactPhone || (item.contactPhoneAvailable ? 'Im PII-Vault hinterlegt' : 'Nicht hinterlegt')} />
               <Info label="Status" value={caseStatusLabel(item.status)} />
-              <Info label="Kontakt-Hinweis" value={item.contactNote || 'Kein Hinweis'} />
+              <Info label="Kontakt-Hinweis" value={revealed[item.id]?.contactNote || (item.contactNoteAvailable ? 'Im PII-Vault hinterlegt' : 'Kein Hinweis')} />
               <Info label="Zugewiesen" value={item.assigned_user_name || 'Noch niemand'} />
             </div>
+            {(item.contactPhoneAvailable || item.contactNoteAvailable) && <button className="button-secondary mt-3" onClick={() => revealContact(item)}>Kontaktdaten anzeigen</button>}
             <div className="mt-4 rounded-md bg-neutral-50 p-3 text-sm">
               <strong>Feedback</strong>
               <p className="mt-1 whitespace-pre-wrap">{item.comment_improvement || item.general_comment || item.comment_positive || 'Kein Freitext hinterlegt.'}</p>

@@ -25,6 +25,7 @@ import {
   updateBillingPlans
 } from '../services/billingService.js';
 import { getQuestionProfile, questionProfiles, toProfileQuestionRows } from '../services/questionProfiles.js';
+import { writeAudit } from '../services/auditService.js';
 
 export const adminRouter = express.Router();
 adminRouter.use(requireAdmin);
@@ -523,6 +524,14 @@ adminRouter.get('/events/:id/newsletter.csv', requireRole('event_manager'), asyn
     }));
     res.setHeader('content-type', 'text/csv; charset=utf-8');
     res.setHeader('content-disposition', 'attachment; filename="qrating-newsletter.csv"');
+    await writeAudit({ query }, {
+      organizationId: req.admin.organizationId,
+      userId: req.admin.sub,
+      action: 'pii.export_newsletter_csv',
+      entityType: 'event',
+      entityId: req.params.id,
+      metadata: { rows: rows.length }
+    });
     res.send(toCsv(rows));
   } catch (error) {
     next(error);
@@ -1486,8 +1495,8 @@ adminRouter.get('/low-rating-cases', async (req, res, next) => {
       contact_phone_encrypted: undefined,
       contact_note_encrypted: undefined,
       contact_note: undefined,
-      contactPhone: row.contact_phone_encrypted ? decryptSecret(row.contact_phone_encrypted) : null,
-      contactNote: row.contact_note_encrypted ? decryptSecret(row.contact_note_encrypted) : row.contact_note
+      contactPhoneAvailable: Boolean(row.contact_phone_encrypted),
+      contactNoteAvailable: Boolean(row.contact_note_encrypted || row.contact_note)
     })));
   } catch (error) {
     next(error);
@@ -1524,8 +1533,8 @@ adminRouter.patch('/low-rating-cases/:id', async (req, res, next) => {
       contact_phone_encrypted: undefined,
       contact_note_encrypted: undefined,
       contact_note: undefined,
-      contactPhone: row.contact_phone_encrypted ? decryptSecret(row.contact_phone_encrypted) : null,
-      contactNote: row.contact_note_encrypted ? decryptSecret(row.contact_note_encrypted) : row.contact_note
+      contactPhoneAvailable: Boolean(row.contact_phone_encrypted),
+      contactNoteAvailable: Boolean(row.contact_note_encrypted || row.contact_note)
     });
   } catch (error) {
     next(error);

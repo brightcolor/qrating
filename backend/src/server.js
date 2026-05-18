@@ -6,6 +6,7 @@ import path from 'path';
 import { env } from './config/env.js';
 import { authRouter } from './routes/auth.js';
 import { adminRouter } from './routes/admin.js';
+import { securityRouter } from './routes/security.js';
 import { publicRouter } from './routes/public.js';
 import { errorHandler, notFound } from './middleware/errors.js';
 import { runMigrations, seedDefaultData } from './db/bootstrap.js';
@@ -42,6 +43,7 @@ app.use('/admin', (req, res, next) => {
   next();
 });
 app.use('/admin', authRouter);
+app.use('/admin', securityRouter);
 app.use('/admin', adminRouter);
 app.use('/public', publicRouter);
 app.use(notFound);
