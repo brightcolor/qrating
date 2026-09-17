@@ -77,6 +77,14 @@ describe('backend flows against PostgreSQL', () => {
     expect(eventQr.body.texts.submit).toBe('Abschicken');
   });
 
+  it('shows a contact address on the product domain on the public website', async () => {
+    const site = await request('GET', '/public/site');
+
+    expect(site.status).toBe(200);
+    expect(site.body.content.contactEmail).toBe('kontakt@qrating.de');
+    expect(site.body.content.imprint).toContain('E-Mail: kontakt@qrating.de');
+  });
+
   it('stores guest feedback with the answers of the event form', async () => {
     const event = await demoEvent();
     const response = await request('POST', `/public/events/${event.event_feedback_token}/feedback`, {

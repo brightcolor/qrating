@@ -11,7 +11,7 @@ export const defaultSiteContent = {
   secondaryCtaLabel: 'Feedback-Beispiel',
   secondaryCtaUrl: '/f/demo-events',
   trustText: 'Self-hosting geeignet, SaaS-ready und ohne Pretix-Abhaengigkeit in der Besucheransicht.',
-  contactEmail: 'kontakt@qrating.app',
+  contactEmail: 'kontakt@qrating.de',
   footerText: 'qrating hilft Veranstaltern, aus jedem Event konkrete Erkenntnisse zu gewinnen.',
   features: [
     {
@@ -99,7 +99,7 @@ export const defaultSiteContent = {
       answer: 'Ja. Landingpage, FAQ, Impressum und Datenschutz koennen im Adminbereich bearbeitet werden.'
     }
   ],
-  imprint: 'Angaben gemaess Impressumspflicht\n\nqrating Betreiber\nMusterstrasse 1\n12345 Musterstadt\n\nE-Mail: kontakt@qrating.app\n\nBitte passe dieses Impressum vor dem produktiven Betrieb im Adminbereich an.',
+  imprint: 'Angaben gemaess Impressumspflicht\n\nqrating Betreiber\nMusterstrasse 1\n12345 Musterstadt\n\nE-Mail: kontakt@qrating.de\n\nBitte passe dieses Impressum vor dem produktiven Betrieb im Adminbereich an.',
   privacy: 'Datenschutzerklaerung\n\nqrating kann anonymes Veranstaltungsfeedback erfassen. Personenbezogene Daten wie E-Mail-Adressen fuer Newsletter oder freiwillige Rueckrufnummern werden nur fuer den jeweils gewaehlten Zweck verarbeitet.\n\nBitte passe diese Datenschutzerklaerung vor dem produktiven Betrieb im Adminbereich an.'
 };
 

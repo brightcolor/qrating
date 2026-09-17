@@ -4,6 +4,21 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.15.0] - 2026-09-17
+
+### Added
+
+- `TRUST_PROXY` sets the number of proxy hops in front of the API. Behind a reverse proxy or tunnel, `2` keeps guests apart in rate limits and address hashes.
+- `FRONTEND_PORT` and `BACKEND_PORT` set the host bindings, `POSTGRES_DATA` a bind mount for the database files.
+
+### Changed
+
+- Default domains: admin, invitation, and password reset links use `https://app.qrating.de`, the product website is `https://qrating.de`, QR codes stay on `https://qrat.ing`.
+- The seeded contact address on the public website is `kontakt@qrating.de`. Migration `011` updates it where the old seed value is still present.
+- `docker-compose.yml` passes rate limit, worker, image cache, and proxy settings from `.env` to the backend, and all services restart automatically.
+- `.env.example` starts with `NODE_ENV=production` and a bind mount for the database files.
+- Version bumped to `0.15.0`.
+
 ## [0.14.1] - 2026-09-17
 
 ### Fixed

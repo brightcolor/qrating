@@ -1,12 +1,14 @@
 services:
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-qrating}
       POSTGRES_USER: ${POSTGRES_USER:-qrating}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-qrating}
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      # A path such as ./data/postgres gives a bind mount; the default keeps the named volume of older installs.
+      - ${POSTGRES_DATA:-postgres-data}:/var/lib/postgresql/data
       - ./database/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-qrating} -d ${POSTGRES_DB:-qrating}"]
@@ -18,6 +20,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    restart: unless-stopped
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       DATABASE_URL: postgres://${POSTGRES_USER:-qrating}:${POSTGRES_PASSWORD:-qrating}@postgres:5432/${POSTGRES_DB:-qrating}
@@ -30,22 +33,29 @@ services:
       ORGANIZATION_NAME: ${ORGANIZATION_NAME:-Demo Events}
       ORGANIZATION_SLUG: ${ORGANIZATION_SLUG:-demo-events}
       BILLING_ADMIN_EMAILS: ${BILLING_ADMIN_EMAILS:-}
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-30}
+      IMAGE_CACHE_MAX_BYTES: ${IMAGE_CACHE_MAX_BYTES:-5242880}
+      WORKER_INTERVAL_MS: ${WORKER_INTERVAL_MS:-5000}
+      PRETIX_SCHEDULER_INTERVAL_MS: ${PRETIX_SCHEDULER_INTERVAL_MS:-60000}
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
       - ./storage:/app/storage
     ports:
-      - "127.0.0.1:4000:4000"
+      - "${BACKEND_PORT:-127.0.0.1:4000}:4000"
 
   frontend:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+    restart: unless-stopped
     depends_on:
       - backend
     ports:
-      - "8080:80"
+      - "${FRONTEND_PORT:-8080}:80"
 
 volumes:
   postgres-data:

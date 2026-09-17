@@ -7,5 +7,6 @@ frontend/dist
 coverage
 *.log
 .env
+data
 storage/event-images/*
 !storage/event-images/.gitkeep

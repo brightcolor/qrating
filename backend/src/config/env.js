@@ -4,8 +4,17 @@ dotenv.config();
 
 const normalizeUrl = (value) => String(value || '').replace(/\/+$/, '');
 const nodeEnv = process.env.NODE_ENV || 'development';
-const defaultAdminAppUrl = nodeEnv === 'production' ? 'https://qrating.app' : 'http://localhost:8080';
+const defaultAdminAppUrl = nodeEnv === 'production' ? 'https://app.qrating.de' : 'http://localhost:8080';
 const defaultFeedbackAppUrl = nodeEnv === 'production' ? 'https://qrat.ing' : 'http://localhost:8080';
+
+// Express "trust proxy": a hop count (the frontend nginx is one hop), true/false, or an address list.
+export function parseTrustProxy(value) {
+  const raw = String(value ?? '').trim();
+  if (raw === '') return 1;
+  if (/^\d+$/.test(raw)) return Number(raw);
+  if (raw === 'true' || raw === 'false') return raw === 'true';
+  return raw;
+}
 
 const adminAppUrl = normalizeUrl(process.env.ADMIN_APP_URL || process.env.PUBLIC_APP_URL || defaultAdminAppUrl);
 const feedbackAppUrl = normalizeUrl(
@@ -31,6 +40,7 @@ export const env = {
   imageCacheMaxBytes: Number(process.env.IMAGE_CACHE_MAX_BYTES || 5242880),
   workerIntervalMs: Number(process.env.WORKER_INTERVAL_MS || 5000),
   pretixSchedulerIntervalMs: Number(process.env.PRETIX_SCHEDULER_INTERVAL_MS || 60000),
+  trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
   corsAllowedOrigins,
   billingAdminEmails: String(process.env.BILLING_ADMIN_EMAILS || '')
     .split(',')

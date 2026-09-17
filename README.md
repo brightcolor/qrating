@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.14.1
+**Version:** 0.15.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -10,7 +10,8 @@ This repository was built with AI-assisted, vibe-coded development. Treat it lik
 
 ## Highlights
 
-- Admin/Web UI domain: `https://qrating.app`
+- Product website: `https://qrating.de`
+- Admin/Web UI domain: `https://app.qrating.de`
 - Feedback/QR domain: `https://qrat.ing`
 - Public marketing website on `/` with editable FAQ, imprint, and privacy pages
 - Internal Free, Pro, and Business plans with admin-configurable limits and overrides
@@ -49,7 +50,7 @@ This repository was built with AI-assisted, vibe-coded development. Treat it lik
 For a fresh Linux server with Docker and Git:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/brightcolor/qrating/main/scripts/quickstart.sh | sudo env QRATING_ADMIN_APP_URL="https://qrating.app" QRATING_FEEDBACK_APP_URL="https://qrat.ing" bash
+curl -fsSL https://raw.githubusercontent.com/brightcolor/qrating/main/scripts/quickstart.sh | sudo env QRATING_ADMIN_APP_URL="https://app.example.com" QRATING_FEEDBACK_APP_URL="https://feedback.example.com" bash
 ```
 
 The script:
@@ -66,7 +67,7 @@ Optional parameters:
 ```bash
 QRATING_DIR=/opt/qrating
 QRATING_REPO=brightcolor/qrating
-QRATING_ADMIN_APP_URL=https://qrating.app
+QRATING_ADMIN_APP_URL=https://app.qrating.de
 QRATING_FEEDBACK_APP_URL=https://qrat.ing
 QRATING_ORGANIZATION_NAME="Demo Events"
 QRATING_ORGANIZATION_SLUG=demo-events
@@ -108,10 +109,12 @@ After setup:
 
 qrating separates admin links from visitor feedback links:
 
-- `ADMIN_APP_URL`: admin UI, invitations, and password reset links, for example `https://qrating.app`
-- `FEEDBACK_APP_URL`: public QR and feedback URLs, for example `https://qrat.ing`
+- `ADMIN_APP_URL`: admin UI, invitations, and password reset links, default `https://app.qrating.de`
+- `FEEDBACK_APP_URL`: public QR and feedback URLs, default `https://qrat.ing`
 
-Both hostnames can point to the same server. The reverse proxy must route both to the frontend container and keep the `/api/*` proxy available.
+Self-hosted installations set both to their own domains. Both hostnames can point to the same server. The reverse proxy must route both to the frontend container and keep the `/api/*` proxy available.
+
+Behind a reverse proxy or tunnel, set `TRUST_PROXY=2` (the frontend nginx is the first hop, the proxy the second). Rate limits and stored address hashes then use the real guest address. Keep `TRUST_PROXY=1` when browsers reach the frontend container directly; a higher value would let clients choose their own address.
 
 ## Configuration
 
@@ -120,13 +123,15 @@ Start with `.env.example`:
 ```env
 NODE_ENV=production
 PORT=4000
-ADMIN_APP_URL=https://qrating.app
+ADMIN_APP_URL=https://app.qrating.de
 FEEDBACK_APP_URL=https://qrat.ing
+CORS_ALLOWED_ORIGINS=https://app.qrating.de,https://qrat.ing
 
 POSTGRES_DB=qrating
 POSTGRES_USER=qrating
 POSTGRES_PASSWORD=change-me
 DATABASE_URL=postgres://qrating:change-me@postgres:5432/qrating
+POSTGRES_DATA=./data/postgres
 
 SESSION_SECRET=change-me-at-least-32-chars
 PRETIX_TOKEN_SECRET=change-me-32-byte-secret-value!!
@@ -134,15 +139,22 @@ PRETIX_TOKEN_SECRET=change-me-32-byte-secret-value!!
 ORGANIZATION_NAME=Demo Events
 ORGANIZATION_SLUG=demo-events
 
+FRONTEND_PORT=8080
+BACKEND_PORT=127.0.0.1:4000
+TRUST_PROXY=1
+
 RATE_LIMIT_WINDOW_MS=60000
 RATE_LIMIT_MAX=30
 IMAGE_CACHE_MAX_BYTES=5242880
 WORKER_INTERVAL_MS=5000
 PRETIX_SCHEDULER_INTERVAL_MS=60000
-CORS_ALLOWED_ORIGINS=https://qrating.app,https://qrat.ing
 
 BILLING_ADMIN_EMAILS=
 ```
+
+- `POSTGRES_DATA`: a path gives a bind mount for the database files. Installations that started with the named volume keep working with an empty value.
+- `FRONTEND_PORT` and `BACKEND_PORT`: host bindings, for example `127.0.0.1:8140` when a tunnel or local reverse proxy is the only entry.
+- All values above reach the backend container through `docker-compose.yml`.
 
 `BILLING_ADMIN_EMAILS` is only used for internal platform administration of plans and overrides. It does not enable external provider flows.
 
@@ -160,7 +172,7 @@ The stack contains:
 - `backend`: Express API and background worker
 - `frontend`: Vite build served through nginx with `/api` proxy
 
-The backend runs migrations on startup.
+All three services restart automatically (`restart: unless-stopped`). The backend runs migrations on startup.
 
 ## Plans And Access
 
@@ -361,7 +373,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.14.1`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.15.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

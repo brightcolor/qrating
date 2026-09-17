@@ -16,7 +16,7 @@ import { corsOrigin } from './utils/security.js';
 
 const app = express();
 
-app.set('trust proxy', 1);
+app.set('trust proxy', env.trustProxy);
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors({
   origin: corsOrigin,

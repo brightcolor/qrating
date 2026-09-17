@@ -371,7 +371,7 @@ async function sharePlan(item) {
 }
 
 function planContactUrl(site, item) {
-  const email = site.contactEmail || 'kontakt@qrating.app';
+  const email = site.contactEmail || 'kontakt@qrating.de';
   const subject = `qrating ${item.name || 'Plan'}`;
   const body = `Hallo,\n\nich interessiere mich fuer den Plan ${item.name || ''}.\n\n`;
   return `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
