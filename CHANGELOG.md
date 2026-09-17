@@ -4,6 +4,14 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.24.0] - 2026-09-17
+
+### Changed
+
+- The print sheet of an event carries the event name and the date of the event, and it leaves the feedback address off the paper. Guests scan the code, so there is nothing left to type.
+- The sheet fills one A4 page: rating stars and the question in the middle, the event below a rule, and the name of the organization at the top. The accent color comes from the organization settings.
+- Version bumped to `0.24.0`.
+
 ## [0.23.0] - 2026-09-17
 
 ### Changed

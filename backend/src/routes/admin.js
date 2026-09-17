@@ -4,7 +4,6 @@ import bcrypt from 'bcryptjs';
 import { query, withTransaction } from '../db/pool.js';
 import { canAccessEvent, hasRole, requireAdmin, requireRole } from '../middleware/auth.js';
 import { httpError } from '../middleware/errors.js';
-import { escapeHtml } from '../utils/html.js';
 import { env } from '../config/env.js';
 import { decryptSecret, encryptSecret, hashValue } from '../utils/crypto.js';
 import { randomToken, slugify } from '../utils/crypto.js';
@@ -15,6 +14,7 @@ import { normalizeEventInput, normalizeEventImageUpdate } from '../db/bootstrap.
 import { toCsv, toXlsx } from '../utils/export.js';
 import { defaultTexts, defaultTextsByLanguage } from '../services/textService.js';
 import { buildEventReportPdf } from '../utils/pdf.js';
+import { renderQrPrintSheet } from '../utils/printSheet.js';
 import { SmtpService } from '../services/smtpService.js';
 import { NotificationService, publicChannel } from '../services/notificationService.js';
 import { enqueueJob } from '../services/jobService.js';
@@ -717,9 +717,9 @@ adminRouter.get('/events/:id/qr-print', async (req, res, next) => {
       'content-security-policy',
       `default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'self'`
     );
-    // Event names come from admins and from the Pretix sync, so every value is escaped.
-    const name = escapeHtml(event.name);
-    res.type('html').send(`<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>QR ${name}</title><style>body{font-family:Arial,sans-serif;margin:0;padding:48px;text-align:center}.sheet{border:1px solid #ddd;padding:48px;max-width:640px;margin:auto}svg{width:320px;height:320px}h1{font-size:34px;margin:0 0 16px}p{font-size:18px;color:#555}.actions{margin:24px 0 0}button{font:inherit;font-size:16px;padding:10px 22px;border:1px solid #171717;border-radius:8px;background:#171717;color:#fff;cursor:pointer}@media print{.actions{display:none}.sheet{border:0;padding:0}}</style></head><body><div class="sheet"><h1>${name}</h1>${svg}<p>Scannen, bewerten, fertig.</p><p>${escapeHtml(url)}</p></div><p class="actions"><button type="button" id="print">Drucken</button></p><script nonce="${nonce}">document.getElementById('print').addEventListener('click',function(){window.print();});window.addEventListener('load',function(){window.print();});</script></body></html>`);
+    const organization = (await query('SELECT name, primary_color FROM organizations WHERE id = $1', [req.admin.organizationId])).rows[0];
+    // Event names come from admins and from the Pretix sync, so every value is escaped inside the sheet.
+    res.type('html').send(renderQrPrintSheet({ event, organizationName: organization?.name, accentColor: organization?.primary_color, qrSvg: svg, nonce }));
   } catch (error) {
     next(error);
   }

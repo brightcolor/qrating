@@ -204,8 +204,8 @@ describe('backend flows against PostgreSQL', () => {
     expect(response.status).toBe(200);
     const page = await response.text();
 
-    expect(page).toContain('<h1>&lt;img src=x onerror=alert(1)&gt;</h1>');
-    expect(page).toContain('<title>QR &lt;img src=x onerror=alert(1)&gt;</title>');
+    expect(page).toContain('<p class="event">&lt;img src=x onerror=alert(1)&gt;</p>');
+    expect(page).toContain('<title>QR-Aushang: &lt;img src=x onerror=alert(1)&gt;</title>');
     expect(page).not.toContain('<img');
     expect(page).not.toContain('onerror=alert(1)>');
 
