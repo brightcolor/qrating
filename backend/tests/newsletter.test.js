@@ -41,11 +41,19 @@ function recordingClient(calls, { fail = null } = {}) {
   };
 }
 
-async function submitFeedback(email) {
-  const answer = await request('POST', `/public/events/${event.event_feedback_token}/feedback`, {
-    body: { rating: 5, newsletterOptin: true, newsletterEmail: email, sourceType: 'event_specific' }
+async function submitFeedback(email, sourceType = 'event_specific') {
+  return request('POST', `/public/events/${event.event_feedback_token}/feedback`, {
+    body: { rating: 5, newsletterOptin: true, newsletterEmail: email, sourceType }
   });
-  return answer;
+}
+
+// Runs the handover of the entry that came in last and returns what went to MailWizz.
+async function syncNewest() {
+  const job = (await query("SELECT * FROM background_jobs WHERE job_type = 'newsletter.sync' ORDER BY created_at DESC")).rows[0];
+  const calls = [];
+  const newsletter = new NewsletterService({ query }, { createClient: () => recordingClient(calls) });
+  await newsletter.syncOptin(job.payload.optinId);
+  return calls;
 }
 
 describe('newsletter connection to MailWizz', () => {
@@ -127,6 +135,7 @@ describe('newsletter connection to MailWizz', () => {
       event_field_tag: 'VERANSTALTUNG',
       source_field_tag: 'QUELLE',
       source_field_value: 'qrating',
+      source_field_use_qr: true,
       has_api_key: true
     });
     expect(JSON.stringify(saved.body)).not.toContain('geheimer-schluessel');
@@ -200,6 +209,27 @@ describe('newsletter connection to MailWizz', () => {
     const after = (await query("SELECT count(*)::int AS total FROM background_jobs WHERE job_type = 'newsletter.sync'")).rows[0].total;
     expect(after).toBe(before);
     await query('UPDATE newsletter_connections SET enabled = true');
+  });
+
+  it('names the QR source the entry came through', async () => {
+    // The demo data carry one QR source with the slug "bar" and the label "Bar".
+    const feedback = await submitFeedback('bargast@example.com', 'bar');
+    expect(feedback.status).toBe(201);
+
+    const calls = await syncNewest();
+
+    expect(calls).toEqual([{ EMAIL: 'bargast@example.com', VERANSTALTUNG: pretixName, QUELLE: 'Bar' }]);
+  });
+
+  it('keeps the fixed value while the QR source is switched off', async () => {
+    await query('UPDATE newsletter_connections SET source_field_use_qr = false');
+    const feedback = await submitFeedback('barzwei@example.com', 'bar');
+    expect(feedback.status).toBe(201);
+
+    const calls = await syncNewest();
+
+    expect(calls).toEqual([{ EMAIL: 'barzwei@example.com', VERANSTALTUNG: pretixName, QUELLE: 'qrating' }]);
+    await query('UPDATE newsletter_connections SET source_field_use_qr = true');
   });
 
   it('takes an own tag for the way and leaves the field out without a value', async () => {

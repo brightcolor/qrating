@@ -4,6 +4,13 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.28.0] - 2026-09-18
+
+### Changed
+
+- The way an entry came in names the QR source it was scanned from, for example `Bändchen` or `Bar`. Entries without a QR source keep the fallback value of the connection, by default `qrating`, and the connection can switch the QR source out of that field.
+- Version bumped to `0.28.0`.
+
 ## [0.27.0] - 2026-09-18
 
 ### Added

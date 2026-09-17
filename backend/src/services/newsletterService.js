@@ -117,9 +117,20 @@ export class NewsletterService {
     const fields = { EMAIL: email };
     const eventName = pretixEventName(event);
     if (eventName) fields[connection.event_field_tag] = eventName;
-    const source = String(connection.source_field_value ?? '').trim();
+    const source = await this.sourceValueFor(optin, connection);
     if (connection.source_field_tag && source) fields[connection.source_field_tag] = source;
     return fields;
+  }
+
+  // The QR source the guest scanned names the way; without one the connection decides.
+  async sourceValueFor(optin, connection) {
+    const fallback = String(connection.source_field_value ?? '').trim();
+    if (!connection.source_field_use_qr || !optin.feedback_response_id) return fallback;
+    const label = (await this.db.query(
+      'SELECT s.label FROM feedback_responses f JOIN qr_sources s ON s.id = f.qr_source_id WHERE f.id = $1',
+      [optin.feedback_response_id]
+    )).rows[0]?.label;
+    return String(label || '').trim() || fallback;
   }
 
   async syncOptin(optinId) {

@@ -1732,11 +1732,12 @@ function newsletterInput(body, existing) {
   const fieldTag = mailwizzFieldTag(body.eventFieldTag, 'VERANSTALTUNG');
   const sourceTag = mailwizzFieldTag(body.sourceFieldTag, 'QUELLE');
   const sourceValue = String(body.sourceFieldValue ?? 'qrating').trim().slice(0, 100);
+  const sourceUseQr = body.sourceFieldUseQr === undefined ? true : Boolean(body.sourceFieldUseQr);
   const apiKeyProvided = typeof body.apiKey === 'string' && body.apiKey.trim().length > 0;
   if (!apiKeyProvided && !existing?.api_key_encrypted) {
     throw httpError(400, 'Der API-Schlüssel fehlt. Lege ihn in MailWizz unter „API keys“ an und trage ihn hier ein.');
   }
-  return { apiUrl, listUid, fieldTag, sourceTag, sourceValue, apiKeyProvided, apiKey: apiKeyProvided ? body.apiKey.trim() : null };
+  return { apiUrl, listUid, fieldTag, sourceTag, sourceValue, sourceUseQr, apiKeyProvided, apiKey: apiKeyProvided ? body.apiKey.trim() : null };
 }
 
 adminRouter.get('/newsletter', requireRole('admin'), async (req, res, next) => {
@@ -1763,17 +1764,19 @@ adminRouter.put('/newsletter', requireRole('admin'), async (req, res, next) => {
     const input = newsletterInput(req.body, existing);
     const result = await query(
       `INSERT INTO newsletter_connections (
-         organization_id, provider, api_url, api_key_encrypted, list_uid, event_field_tag, source_field_tag, source_field_value, enabled
+         organization_id, provider, api_url, api_key_encrypted, list_uid, event_field_tag,
+         source_field_tag, source_field_value, source_field_use_qr, enabled
        )
-       VALUES ($1,'mailwizz',$2,$3,$4,$5,$6,$7,$8)
+       VALUES ($1,'mailwizz',$2,$3,$4,$5,$6,$7,$8,$9)
        ON CONFLICT (organization_id)
        DO UPDATE SET
          api_url = EXCLUDED.api_url,
-         api_key_encrypted = CASE WHEN $9::boolean THEN EXCLUDED.api_key_encrypted ELSE newsletter_connections.api_key_encrypted END,
+         api_key_encrypted = CASE WHEN $10::boolean THEN EXCLUDED.api_key_encrypted ELSE newsletter_connections.api_key_encrypted END,
          list_uid = EXCLUDED.list_uid,
          event_field_tag = EXCLUDED.event_field_tag,
          source_field_tag = EXCLUDED.source_field_tag,
          source_field_value = EXCLUDED.source_field_value,
+         source_field_use_qr = EXCLUDED.source_field_use_qr,
          enabled = EXCLUDED.enabled,
          updated_at = now()
        RETURNING *`,
@@ -1785,6 +1788,7 @@ adminRouter.put('/newsletter', requireRole('admin'), async (req, res, next) => {
         input.fieldTag,
         input.sourceTag,
         input.sourceValue,
+        input.sourceUseQr,
         req.body.enabled === undefined ? true : Boolean(req.body.enabled),
         input.apiKeyProvided
       ]
