@@ -4,6 +4,12 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.19.1] - 2026-09-17
+
+### Fixed
+
+- The API starts again. The shared HTML escaping helper `backend/src/utils/html.js`, which the admin routes import for the QR print sheet, was missing from the previous release, so the backend container stopped with `ERR_MODULE_NOT_FOUND`.
+
 ## [0.19.0] - 2026-09-17
 
 ### Added
