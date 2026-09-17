@@ -4,6 +4,18 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.19.2] - 2026-09-17
+
+### Fixed
+
+- The print page of an event QR code (`GET /admin/events/:id/qr-print`) puts the event name and the feedback address on the page as text. An event name that contains HTML, for example one imported from a ticket shop, is shown the way it was typed and stays out of the page structure.
+- Printing works again. The page carries a visible button "Drucken" and receives its print script through a Content Security Policy that belongs to this single response, so the security headers of the whole API stay as strict as before.
+
+### Changed
+
+- The error pages and the print page share one escaping helper (`backend/src/utils/html.js`); the copy inside the error middleware is gone.
+- Version bumped to `0.19.2`.
+
 ## [0.19.1] - 2026-09-17
 
 ### Fixed

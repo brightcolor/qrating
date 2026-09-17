@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { env } from '../config/env.js';
+import { escapeHtml } from '../utils/html.js';
 
 // Every error that reaches a person says what happened and what to do next.
 
@@ -8,10 +9,6 @@ export function httpError(status, message) {
   error.status = status;
   error.publicMessage = message;
   return error;
-}
-
-function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 }
 
 function errorPage(status, message) {
