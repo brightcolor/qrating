@@ -137,6 +137,31 @@ describe('platform administration', () => {
     expect(entries.rows[1].entity_id).toBe(secondOrganizationId);
   });
 
+  it('lets the platform role unlock a plan, and nobody else', async () => {
+    const unlocked = await request('PATCH', '/admin/billing/override', {
+      cookie: platformCookie,
+      body: { plan: 'business', reason: 'Plattform-Freischaltung' }
+    });
+    expect(unlocked.status).toBe(200);
+    expect(unlocked.body.billing).toMatchObject({ overridePlan: 'business', canOverride: true, effectivePlan: 'business' });
+
+    const created = await query(
+      `INSERT INTO users (organization_id, name, email, password_hash, role, status)
+       VALUES ((SELECT id FROM organizations WHERE slug = 'hsp-events'), 'Eigene Admina', 'admina@example.test', 'x', 'admin', 'active')
+       RETURNING id`
+    );
+    const { signAdmin } = await import('../src/middleware/auth.js');
+    const user = (await query('SELECT * FROM users WHERE id = $1', [created.rows[0].id])).rows[0];
+
+    const refused = await request('PATCH', '/admin/billing/override', {
+      cookie: `qrating_admin=${signAdmin(user)}`,
+      body: { plan: 'business' }
+    });
+
+    expect(refused.status).toBe(403);
+    expect(refused.body.error).toContain('Plattform-Admins');
+  });
+
   it('keeps the platform area away from accounts of a single tenant', async () => {
     const created = await query(
       `INSERT INTO users (organization_id, name, email, password_hash, role, status)

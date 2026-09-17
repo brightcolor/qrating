@@ -175,8 +175,8 @@ export async function getPublicPricingPlans(db) {
 }
 
 export async function updateBillingPlans(db, userId, incomingPlans = []) {
-  const user = (await db.query('SELECT id, email FROM users WHERE id = $1', [userId])).rows[0] || {};
-  if (!canOverrideBilling(user)) throw httpError(403, 'Tarife dürfen nur Plattform-Admins ändern. Ihre E-Mail-Adressen stehen in BILLING_ADMIN_EMAILS.');
+  const user = (await db.query('SELECT id, email, platform_admin FROM users WHERE id = $1', [userId])).rows[0] || {};
+  if (!canOverrideBilling(user)) throw httpError(403, 'Tarife dürfen nur Plattform-Admins ändern. Diese Rolle vergibt ein Plattform-Admin unter Mandanten.');
   const allowed = new Set(defaultPlanDefinitions.map((plan) => plan.id));
   const normalized = incomingPlans
     .map((plan) => normalizePlan({
@@ -242,8 +242,9 @@ export function effectiveBillingPlan(organization, now = new Date()) {
   return { plan: 'free', source: 'free' };
 }
 
+// The platform role decides over the plans of every tenant; the mail list stays as a fallback.
 function canOverrideBilling(user) {
-  return env.billingAdminEmails.includes(String(user.email || '').toLowerCase());
+  return Boolean(user.platform_admin) || env.billingAdminEmails.includes(String(user.email || '').toLowerCase());
 }
 
 function publicBilling(organization, user) {
@@ -265,7 +266,7 @@ function publicBilling(organization, user) {
 
 export async function getBillingOverview(db, organizationId, userId) {
   const org = (await db.query('SELECT * FROM organizations WHERE id = $1', [organizationId])).rows[0];
-  const user = (await db.query('SELECT id, email FROM users WHERE id = $1', [userId])).rows[0] || {};
+  const user = (await db.query('SELECT id, email, platform_admin FROM users WHERE id = $1', [userId])).rows[0] || {};
   const plans = await getBillingPlans(db);
   return {
     billing: publicBilling(org, user),
@@ -276,8 +277,8 @@ export async function getBillingOverview(db, organizationId, userId) {
 
 export async function applyBillingOverride(db, organizationId, userId, { plan, expiresAt = null, reason = '' }) {
   if (!['free', 'pro', 'business'].includes(plan)) throw httpError(400, 'Diesen Tarif gibt es nicht. Wähle Free, Pro oder Business.');
-  const user = (await db.query('SELECT id, email FROM users WHERE id = $1', [userId])).rows[0] || {};
-  if (!canOverrideBilling(user)) throw httpError(403, 'Tarife freischalten dürfen nur Plattform-Admins. Ihre E-Mail-Adressen stehen in BILLING_ADMIN_EMAILS.');
+  const user = (await db.query('SELECT id, email, platform_admin FROM users WHERE id = $1', [userId])).rows[0] || {};
+  if (!canOverrideBilling(user)) throw httpError(403, 'Tarife freischalten dürfen nur Plattform-Admins. Diese Rolle vergibt ein Plattform-Admin unter Mandanten.');
   const result = await db.query(
     `UPDATE organizations
      SET billing_override_plan = $2,

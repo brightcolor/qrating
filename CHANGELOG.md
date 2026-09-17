@@ -4,6 +4,13 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.22.0] - 2026-09-17
+
+### Changed
+
+- The platform role unlocks plans and edits the plan matrix. `BILLING_ADMIN_EMAILS` keeps working as a fallback.
+- Version bumped to `0.22.0`.
+
 ## [0.21.0] - 2026-09-17
 
 ### Added

@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.21.0
+**Version:** 0.22.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -168,7 +168,7 @@ BILLING_ADMIN_EMAILS=
 - `FRONTEND_PORT` and `BACKEND_PORT`: host bindings, for example `127.0.0.1:8140` when a tunnel or local reverse proxy is the only entry.
 - All values above reach the backend container through `docker-compose.yml`.
 
-`BILLING_ADMIN_EMAILS` is only used for internal platform administration of plans and overrides. It does not enable external provider flows.
+Plans and overrides belong to the platform role. `BILLING_ADMIN_EMAILS` stays as a fallback for installations that grant those rights by email address; it does not enable external provider flows.
 
 ## Docker
 
@@ -436,7 +436,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.21.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.22.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 
