@@ -6,7 +6,7 @@ import { canAccessEvent, hasRole, requireAdmin, requireRole } from '../middlewar
 import { httpError } from '../middleware/errors.js';
 import { env } from '../config/env.js';
 import { decryptSecret, encryptSecret, hashValue } from '../utils/crypto.js';
-import { randomToken } from '../utils/crypto.js';
+import { randomToken, slugify } from '../utils/crypto.js';
 import { EventResolver, calculateFeedbackWindow } from '../services/eventResolver.js';
 import { PretixService } from '../services/pretixService.js';
 import { normalizeEventInput } from '../db/bootstrap.js';
@@ -226,30 +226,37 @@ adminRouter.post('/events', requireRole('event_manager'), async (req, res, next)
     const organization = (await query('SELECT * FROM organizations WHERE id = $1', [req.admin.organizationId])).rows[0];
     const input = normalizeEventInput(req.body, organization);
     if (!input.name || !input.date_from) throw httpError(400, 'Eventname und Datum sind erforderlich.');
-    const result = await query(
-      `INSERT INTO events (
-        organization_id, source, name, slug, event_feedback_token, date_from, date_to, event_timezone, location,
-        image_url, image_alt, image_source, status, feedback_enabled, feedback_window_days, feedback_window_hours, feedback_starts_mode
-      )
-      VALUES ($1, 'manual', $2, $3, $4, $5, $6, $7, $8, $9, $10, CASE WHEN $9 IS NULL THEN null ELSE 'manual' END, 'active', true, $11, $12, $13)
-      RETURNING *`,
-      [
-        req.admin.organizationId,
-        input.name,
-        input.slug,
-        randomToken(),
-        input.date_from,
-        input.date_to,
-        input.event_timezone,
-        input.location,
-        input.image_url,
-        input.image_alt,
-        input.feedback_window_days,
-        input.feedback_window_hours,
-        input.feedback_starts_mode
-      ]
-    );
-    const event = result.rows[0];
+    let event = null;
+    // Recurring events reuse their name, so a taken slug gets a random suffix.
+    for (let attempt = 0; !event && attempt < 5; attempt += 1) {
+      const slug = attempt === 0 ? input.slug : slugify(`${input.slug}-${randomToken(3)}`);
+      event = (await query(
+        `INSERT INTO events (
+          organization_id, source, name, slug, event_feedback_token, date_from, date_to, event_timezone, location,
+          image_url, image_alt, image_source, status, feedback_enabled, feedback_window_days, feedback_window_hours, feedback_starts_mode
+        )
+        VALUES ($1, 'manual', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'active', true, $12, $13, $14)
+        ON CONFLICT (organization_id, slug) DO NOTHING
+        RETURNING *`,
+        [
+          req.admin.organizationId,
+          input.name,
+          slug,
+          randomToken(),
+          input.date_from,
+          input.date_to,
+          input.event_timezone,
+          input.location,
+          input.image_url,
+          input.image_alt,
+          input.image_url ? 'manual' : null,
+          input.feedback_window_days,
+          input.feedback_window_hours,
+          input.feedback_starts_mode
+        ]
+      )).rows[0];
+    }
+    if (!event) throw httpError(409, 'Für diesen Eventnamen ließ sich kein freier Kurzname finden. Bitte wähle einen anderen Namen.');
     await query(
       `INSERT INTO feedback_forms (organization_id, event_id, name, description, active)
        VALUES ($1, $2, 'Standardformular', 'Gesamtbewertung, Freitext und Newsletter', true)`,

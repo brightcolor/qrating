@@ -4,6 +4,23 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.14.1] - 2026-09-17
+
+### Fixed
+
+- The guest feedback page loads again with PostgreSQL; every request returned HTTP 500.
+- Manual events can be created again, including several events with the same name.
+- The backend starts again after the first-admin setup renamed the organization. Demo data is seeded only into an empty database.
+- Backend restarts keep a single demo form.
+- The admin form shows errors during event creation.
+
+### Changed
+
+- Migration `010` replaces the Pretix identity rule on `events` with a partial unique index and removes demo forms that earlier releases duplicated. The first copy and every copy with answers stay.
+- Database tests run the migrations and the main admin and guest flows in an in-process PostgreSQL (PGlite).
+- CI runs the dependency audit as a separate job and an end-to-end smoke test against PostgreSQL 16.
+- Version bumped to `0.14.1`.
+
 ## [0.14.0] - 2026-05-18
 
 ### Added

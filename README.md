@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.14.0
+**Version:** 0.14.1
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -313,14 +313,18 @@ npm run lint
 bash -n scripts/quickstart.sh
 ```
 
+`npm test` includes database tests that run the migrations, the demo seed, and the main admin and guest flows in an in-process PostgreSQL (PGlite) inside the test run.
+
+`scripts/smoke-test.sh` checks a freshly started Compose stack end to end: guest page, first-admin setup, event creation, and a backend restart.
+
 GitHub Actions runs Docker CI on `main`:
 
-- backend syntax and unit tests
+- backend syntax check, unit tests, and database tests
 - frontend production build
-- production dependency audit
+- production dependency audit as a separate job, so test and smoke test results stay visible when new advisories appear
 - Docker Compose validation
 - backend and frontend image builds
-- Compose smoke test with health checks and frontend API proxy check
+- Compose smoke test with health checks, frontend API proxy check, and `scripts/smoke-test.sh` against PostgreSQL 16
 
 ## Backup And Restore
 
@@ -357,7 +361,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.14.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.14.1`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

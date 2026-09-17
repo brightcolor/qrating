@@ -80,6 +80,7 @@ export class PretixService {
         event_timezone, location, status, feedback_enabled, feedback_window_days, raw_source_payload, last_synced_at
       ) VALUES ($1,'pretix',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'active',true,$16,$17,now())
       ON CONFLICT (pretix_connection_id, pretix_event_slug, pretix_subevent_id)
+        WHERE pretix_connection_id IS NOT NULL
       DO UPDATE SET
         name = EXCLUDED.name,
         date_from = EXCLUDED.date_from,

@@ -43,11 +43,8 @@ jobs:
       - name: Syntax check
         run: find src -name "*.js" -print0 | xargs -0 -n1 node --check
 
-      - name: Unit tests
+      - name: Unit and database tests
         run: npm test
-
-      - name: Production dependency audit
-        run: npm audit --omit=dev
 
   frontend:
     name: Frontend build
@@ -71,6 +68,28 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # Separate job keeps test and smoke test results visible when new advisories appear.
+  audit:
+    name: Dependency audit (${{ matrix.app }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app:
+          - backend
+          - frontend
+    defaults:
+      run:
+        working-directory: ${{ matrix.app }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
       - name: Production dependency audit
         run: npm audit --omit=dev
@@ -142,6 +161,9 @@ jobs:
           done
           docker compose logs frontend
           exit 1
+
+      - name: End-to-end smoke test
+        run: bash scripts/smoke-test.sh
 
       - name: Cleanup
         if: always()

@@ -505,9 +505,16 @@ function Events() {
 function EventCreate({ onCreated }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: '', dateFrom: new Date().toISOString().slice(0, 16), location: '' });
+  const [error, setError] = useState('');
   async function submit(e) {
     e.preventDefault();
-    await api('/admin/events', { method: 'POST', body: JSON.stringify({ ...form, dateFrom: new Date(form.dateFrom).toISOString() }) });
+    setError('');
+    try {
+      await api('/admin/events', { method: 'POST', body: JSON.stringify({ ...form, dateFrom: new Date(form.dateFrom).toISOString() }) });
+    } catch (err) {
+      setError(err.message);
+      return;
+    }
     setOpen(false);
     setForm({ name: '', dateFrom: new Date().toISOString().slice(0, 16), location: '' });
     onCreated();
@@ -518,6 +525,7 @@ function EventCreate({ onCreated }) {
       <input className="input" placeholder="Eventname" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
       <input className="input" type="datetime-local" value={form.dateFrom} onChange={(e) => setForm({ ...form, dateFrom: e.target.value })} required />
       <input className="input" placeholder="Location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+      {error && <p className="rounded-md bg-red-50 p-3 text-sm text-red-700 md:col-span-3">{error}</p>}
       <button className="button-blue md:col-span-3">Speichern</button>
     </form>}
   </Panel>;

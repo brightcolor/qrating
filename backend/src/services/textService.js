@@ -66,10 +66,10 @@ export async function loadResolvedTexts(db, organizationId, eventId = null, lang
     `SELECT key, value, event_id, language
      FROM text_templates
      WHERE organization_id = $1
-       AND language = ANY($4)
-       AND (event_id IS NULL OR event_id = $3)
+       AND language = ANY($3)
+       AND (event_id IS NULL OR event_id = $2)
      ORDER BY CASE WHEN language = 'de' THEN 0 ELSE 1 END, event_id NULLS FIRST`,
-    [organizationId, requestedLanguage, eventId, languages]
+    [organizationId, eventId, languages]
   );
   const merged = { ...defaultTexts, ...defaultTextsByLanguage[requestedLanguage] };
   for (const row of result.rows) {

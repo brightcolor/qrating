@@ -22,70 +22,59 @@ export async function runMigrations() {
   }
 }
 
+// Seeds the demo organization on the first start only; the first-admin setup renames it later.
 export async function seedDefaultData() {
-  const orgResult = await query(
-    `INSERT INTO organizations (name, slug, primary_color, privacy_text, ticketshop_url, website_url, instagram_url)
-     VALUES ($1, $2, '#2563eb', 'Feedback ist anonym möglich. E-Mail-Adressen werden nur für den gewählten Zweck gespeichert.', 'https://tickets.example.com', 'https://example.com', 'https://instagram.com/example')
-     ON CONFLICT (slug) DO UPDATE SET updated_at = now()
-     RETURNING *`,
-    [env.organizationName, env.organizationSlug]
-  );
-  const organization = orgResult.rows[0];
+  await withTransaction(async (client) => {
+    const existing = await client.query('SELECT 1 FROM organizations LIMIT 1');
+    if (existing.rows.length) return;
 
-  const eventResult = await query(
-    `INSERT INTO events (
-      organization_id, source, name, slug, event_feedback_token, date_from, date_to, event_timezone,
-      location, status, feedback_enabled, feedback_window_days, resolver_priority
-    )
-    VALUES ($1, 'manual', 'Demo Nacht', 'demo-nacht', $2, now() - interval '2 hours', now() + interval '2 hours',
-      'Europe/Berlin', 'Hauptsaal', 'active', true, 3, 10)
-    ON CONFLICT (organization_id, slug) DO UPDATE SET updated_at = now()
-    RETURNING *`,
-    [organization.id, randomToken()]
-  );
-  const event = eventResult.rows[0];
+    const organization = (await client.query(
+      `INSERT INTO organizations (name, slug, primary_color, privacy_text, ticketshop_url, website_url, instagram_url)
+       VALUES ($1, $2, '#2563eb', 'Feedback ist anonym möglich. E-Mail-Adressen werden nur für den gewählten Zweck gespeichert.', 'https://tickets.example.com', 'https://example.com', 'https://instagram.com/example')
+       ON CONFLICT (slug) DO NOTHING
+       RETURNING *`,
+      [env.organizationName, env.organizationSlug]
+    )).rows[0];
+    // A second backend instance seeded concurrently.
+    if (!organization) return;
 
-  const formResult = await query(
-    `INSERT INTO feedback_forms (organization_id, event_id, name, description, active)
-     VALUES ($1, $2, 'Schnellfeedback', 'Kurzes Standardformular', true)
-     ON CONFLICT DO NOTHING
-     RETURNING *`,
-    [organization.id, event.id]
-  );
-  const existingForm = formResult.rows[0] || (await query('SELECT * FROM feedback_forms WHERE event_id = $1 LIMIT 1', [event.id])).rows[0];
-  if (existingForm) {
-    const count = await query('SELECT count(*)::int AS count FROM feedback_questions WHERE feedback_form_id = $1', [existingForm.id]);
-    if (count.rows[0].count === 0) {
-      await query(
-        `INSERT INTO feedback_questions (feedback_form_id, question_type, internal_name, label, placeholder, sort_order, active, options)
-         VALUES
-         ($1, 'text_long', 'moment', 'Was war dein Moment des Abends?', 'Ein kurzer Gedanke reicht ...', 10, true, null),
-         ($1, 'checkboxes', 'positive_tags', 'Was hat für dich gepasst?', null, 20, true, $2::jsonb),
-         ($1, 'checkboxes', 'improvement_tags', 'Wo dürfen wir besser werden?', null, 30, true, $3::jsonb)`,
-        [
-          existingForm.id,
-          JSON.stringify(['Tolle Stimmung', 'Gute Musik', 'Schöne Location', 'Nettes Team', 'Guter Sound', 'Gerne wieder']),
-          JSON.stringify(['Einlass', 'Wartezeiten', 'Sound', 'Getränke', 'Preise', 'Toiletten', 'Zu voll'])
-        ]
-      );
-    }
-  }
+    const event = (await client.query(
+      `INSERT INTO events (
+        organization_id, source, name, slug, event_feedback_token, date_from, date_to, event_timezone,
+        location, status, feedback_enabled, feedback_window_days, resolver_priority
+      )
+      VALUES ($1, 'manual', 'Demo Nacht', 'demo-nacht', $2, now() - interval '2 hours', now() + interval '2 hours',
+        'Europe/Berlin', 'Hauptsaal', 'active', true, 3, 10)
+      RETURNING *`,
+      [organization.id, randomToken()]
+    )).rows[0];
 
-  await query(
-    `INSERT INTO qr_sources (organization_id, event_id, source_slug, label, type)
-     VALUES ($1, null, 'bar', 'Bar', 'dynamic_organization')
-     ON CONFLICT DO NOTHING`,
-    [organization.id]
-  );
+    const form = (await client.query(
+      `INSERT INTO feedback_forms (organization_id, event_id, name, description, active)
+       VALUES ($1, $2, 'Schnellfeedback', 'Kurzes Standardformular', true)
+       RETURNING *`,
+      [organization.id, event.id]
+    )).rows[0];
 
-  await query(
-    `INSERT INTO user_event_assignments (organization_id, user_id, event_id, notify_low_rating)
-     SELECT $1, users.id, $2, true
-     FROM users
-     WHERE users.organization_id = $1 AND users.role IN ('owner', 'admin')
-     ON CONFLICT (user_id, event_id) DO NOTHING`,
-    [organization.id, event.id]
-  ).catch(() => {});
+    await client.query(
+      `INSERT INTO feedback_questions (feedback_form_id, question_type, internal_name, label, placeholder, sort_order, active, options)
+       VALUES
+       ($1, 'text_long', 'moment', 'Was war dein Moment des Abends?', 'Ein kurzer Gedanke reicht ...', 10, true, null),
+       ($1, 'checkboxes', 'positive_tags', 'Was hat für dich gepasst?', null, 20, true, $2::jsonb),
+       ($1, 'checkboxes', 'improvement_tags', 'Wo dürfen wir besser werden?', null, 30, true, $3::jsonb)`,
+      [
+        form.id,
+        JSON.stringify(['Tolle Stimmung', 'Gute Musik', 'Schöne Location', 'Nettes Team', 'Guter Sound', 'Gerne wieder']),
+        JSON.stringify(['Einlass', 'Wartezeiten', 'Sound', 'Getränke', 'Preise', 'Toiletten', 'Zu voll'])
+      ]
+    );
+
+    await client.query(
+      `INSERT INTO qr_sources (organization_id, event_id, source_slug, label, type)
+       VALUES ($1, null, 'bar', 'Bar', 'dynamic_organization')`,
+      [organization.id]
+    );
+  });
 }
 
 export function eventToPublic(event, organization, questions = []) {
