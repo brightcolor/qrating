@@ -9,6 +9,7 @@ import { hashValue } from '../utils/crypto.js';
 import { env } from '../config/env.js';
 import { WebhookService } from '../services/webhookService.js';
 import { enqueueJob } from '../services/jobService.js';
+import { NewsletterService } from '../services/newsletterService.js';
 import { encryptSecret } from '../utils/crypto.js';
 import { getSiteContent } from '../services/siteContentService.js';
 import { emailDomain, emailHash, publicEventStatus, publicOrganization } from '../utils/security.js';
@@ -292,12 +293,13 @@ publicRouter.post('/events/:eventToken/feedback', feedbackLimiter, async (req, r
     const webhook = new WebhookService({ query });
     if (value.newsletterOptin) {
       const normalizedEmail = String(value.newsletterEmail || '').trim().toLowerCase();
-      await query(
+      const optin = (await query(
         `INSERT INTO newsletter_optins (
           organization_id, event_id, feedback_response_id, email, email_encrypted, email_hash, email_domain,
           consent_text, source
         )
-         VALUES ($1,$2,$3,null,$4,$5,$6,$7,'feedback')`,
+         VALUES ($1,$2,$3,null,$4,$5,$6,$7,'feedback')
+         RETURNING id`,
         [
           event.organization_id,
           event.id,
@@ -307,7 +309,12 @@ publicRouter.post('/events/:eventToken/feedback', feedbackLimiter, async (req, r
           emailDomain(normalizedEmail),
           defaultTexts.newsletter_label
         ]
-      );
+      )).rows[0];
+      // The handover to the newsletter system runs in the background, so the guest waits for nothing.
+      const newsletter = await new NewsletterService({ query }).connectionFor(event.organization_id);
+      if (newsletter) {
+        await enqueueJob({ query }, event.organization_id, 'newsletter.sync', { optinId: optin.id });
+      }
       await webhook.dispatch(event.organization_id, 'newsletter.optin', {
         eventId: event.id,
         feedbackId: feedback.id,

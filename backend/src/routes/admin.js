@@ -15,6 +15,7 @@ import { toCsv, toXlsx } from '../utils/export.js';
 import { defaultTexts, defaultTextsByLanguage } from '../services/textService.js';
 import { buildEventReportPdf } from '../utils/pdf.js';
 import { renderQrPrintSheet } from '../utils/printSheet.js';
+import { NewsletterService } from '../services/newsletterService.js';
 import { attachmentHeader } from '../utils/downloadName.js';
 import { SmtpService } from '../services/smtpService.js';
 import { NotificationService, publicChannel } from '../services/notificationService.js';
@@ -1700,6 +1701,144 @@ adminRouter.patch('/webhooks/:id', requireRole('admin'), async (req, res, next) 
     );
     if (!result.rows[0]) throw httpError(404, 'Diesen Webhook gibt es nicht mehr. Lade die Seite neu.');
     res.json(result.rows[0]);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// The newsletter system of the organization: connection, test and the handover of open entries.
+function newsletterConnectionForAdmin(row) {
+  if (!row) return null;
+  const { api_key_encrypted, ...rest } = row;
+  return { ...rest, has_api_key: Boolean(api_key_encrypted) };
+}
+
+function newsletterInput(body, existing) {
+  const apiUrl = String(body.apiUrl || '').trim().replace(/\/+$/, '');
+  if (!/^https?:\/\/.+/.test(apiUrl)) {
+    throw httpError(400, 'Die API-Adresse fehlt oder ist unvollständig. Sie sieht zum Beispiel so aus: https://news.example.com/api');
+  }
+  const listUid = String(body.listUid || '').trim();
+  if (!listUid) throw httpError(400, 'Die Listen-UID fehlt. Du findest sie in MailWizz in der Liste unter „List UID“.');
+  const fieldTag = String(body.eventFieldTag || 'VERANSTALTUNG').trim().toUpperCase();
+  if (!/^[A-Z][A-Z0-9_]{0,49}$/.test(fieldTag)) {
+    throw httpError(400, 'Das Feldkürzel passt nicht zu MailWizz. Erlaubt sind Großbuchstaben, Ziffern und Unterstriche, zum Beispiel VERANSTALTUNG.');
+  }
+  const apiKeyProvided = typeof body.apiKey === 'string' && body.apiKey.trim().length > 0;
+  if (!apiKeyProvided && !existing?.api_key_encrypted) {
+    throw httpError(400, 'Der API-Schlüssel fehlt. Lege ihn in MailWizz unter „API keys“ an und trage ihn hier ein.');
+  }
+  return { apiUrl, listUid, fieldTag, apiKeyProvided, apiKey: apiKeyProvided ? body.apiKey.trim() : null };
+}
+
+adminRouter.get('/newsletter', requireRole('admin'), async (req, res, next) => {
+  try {
+    const newsletter = new NewsletterService({ query });
+    const connection = await newsletter.connectionFor(req.admin.organizationId, { onlyEnabled: false });
+    const counts = (await query(
+      `SELECT count(*)::int AS total,
+              count(*) FILTER (WHERE synced_at IS NULL)::int AS open,
+              count(*) FILTER (WHERE sync_status = 'failed')::int AS failed
+       FROM newsletter_optins WHERE organization_id = $1`,
+      [req.admin.organizationId]
+    )).rows[0];
+    res.json({ connection: newsletterConnectionForAdmin(connection), optins: counts });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.put('/newsletter', requireRole('admin'), async (req, res, next) => {
+  try {
+    const newsletter = new NewsletterService({ query });
+    const existing = await newsletter.connectionFor(req.admin.organizationId, { onlyEnabled: false });
+    const input = newsletterInput(req.body, existing);
+    const result = await query(
+      `INSERT INTO newsletter_connections (organization_id, provider, api_url, api_key_encrypted, list_uid, event_field_tag, enabled)
+       VALUES ($1,'mailwizz',$2,$3,$4,$5,$6)
+       ON CONFLICT (organization_id)
+       DO UPDATE SET
+         api_url = EXCLUDED.api_url,
+         api_key_encrypted = CASE WHEN $7::boolean THEN EXCLUDED.api_key_encrypted ELSE newsletter_connections.api_key_encrypted END,
+         list_uid = EXCLUDED.list_uid,
+         event_field_tag = EXCLUDED.event_field_tag,
+         enabled = EXCLUDED.enabled,
+         updated_at = now()
+       RETURNING *`,
+      [
+        req.admin.organizationId,
+        input.apiUrl,
+        input.apiKeyProvided ? encryptSecret(input.apiKey) : null,
+        input.listUid,
+        input.fieldTag,
+        req.body.enabled === undefined ? true : Boolean(req.body.enabled),
+        input.apiKeyProvided
+      ]
+    );
+    await writeAudit({ query }, {
+      organizationId: req.admin.organizationId,
+      userId: req.admin.sub,
+      action: 'integration.newsletter.saved',
+      entityType: 'newsletter_connection',
+      entityId: result.rows[0].id,
+      metadata: { provider: 'mailwizz', listUid: input.listUid, eventFieldTag: input.fieldTag }
+    });
+    res.json(newsletterConnectionForAdmin(result.rows[0]));
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.post('/newsletter/test', requireRole('admin'), async (req, res, next) => {
+  try {
+    const newsletter = new NewsletterService({ query });
+    const connection = await newsletter.connectionFor(req.admin.organizationId, { onlyEnabled: false });
+    if (!connection?.api_key_encrypted) {
+      throw httpError(400, 'Für diese Organisation ist noch kein Newsletter-System hinterlegt. Trage API-Adresse, Schlüssel und Listen-UID ein und speichere.');
+    }
+    const result = await newsletter.testConnection(connection);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.post('/newsletter/sync-pending', requireRole('admin'), async (req, res, next) => {
+  try {
+    const newsletter = new NewsletterService({ query });
+    const connection = await newsletter.connectionFor(req.admin.organizationId);
+    if (!connection?.api_key_encrypted) {
+      throw httpError(400, 'Das Newsletter-System ist ausgeschaltet oder noch nicht hinterlegt. Speichere die Verbindung und schalte sie ein.');
+    }
+    const pending = await query(
+      `SELECT id FROM newsletter_optins
+       WHERE organization_id = $1 AND synced_at IS NULL
+       ORDER BY consent_given_at
+       LIMIT 500`,
+      [req.admin.organizationId]
+    );
+    for (const row of pending.rows) {
+      await enqueueJob({ query }, req.admin.organizationId, 'newsletter.sync', { optinId: row.id });
+    }
+    res.json({ queued: pending.rows.length });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.delete('/newsletter', requireRole('admin'), async (req, res, next) => {
+  try {
+    const removed = await query('DELETE FROM newsletter_connections WHERE organization_id = $1 RETURNING id', [req.admin.organizationId]);
+    if (!removed.rows.length) throw httpError(404, 'Für diese Organisation ist kein Newsletter-System hinterlegt.');
+    await writeAudit({ query }, {
+      organizationId: req.admin.organizationId,
+      userId: req.admin.sub,
+      action: 'integration.newsletter.removed',
+      entityType: 'newsletter_connection',
+      entityId: removed.rows[0].id,
+      metadata: {}
+    });
+    res.json({ removed: true });
   } catch (error) {
     next(error);
   }

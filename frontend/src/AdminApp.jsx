@@ -77,6 +77,7 @@ function AdminApp() {
     ['notifications', 'Benachrichtigungen', Bell],
     ['operations', 'Betrieb', Activity],
     ['smtp', 'SMTP', Mail],
+    ['newsletter', 'Newsletter', Send],
     ['webhooks', 'Webhooks', Webhook]
   ];
   return <div className="min-h-screen bg-neutral-100">
@@ -110,6 +111,7 @@ function AdminApp() {
         {page === 'notifications' && <Notifications />}
         {page === 'operations' && <Operations />}
         {page === 'smtp' && <SmtpSettings />}
+        {page === 'newsletter' && <Newsletter />}
         {page === 'webhooks' && <Webhooks />}
       </div>
     </main>
@@ -1693,6 +1695,106 @@ function SmtpSettings() {
       {data?.last_test_at && <p className="mt-3 text-sm text-neutral-500">Letzter Test: {formatDate(data.last_test_at)} · {data.last_test_status || '-'}</p>}
       {data?.last_test_error && <p className="mt-2 text-sm text-red-700">{data.last_test_error}</p>}
     </Panel>
+  </div>;
+}
+
+function Newsletter() {
+  const [reload, setReload] = useState(0);
+  const { data, loading, error } = useAsync(() => api('/admin/newsletter'), [reload]);
+  const [form, setForm] = useState({ apiUrl: '', apiKey: '', listUid: '', eventFieldTag: 'VERANSTALTUNG', enabled: true });
+  const [message, setMessage] = useState('');
+  const connection = data?.connection;
+
+  useEffect(() => {
+    if (connection) {
+      setForm({
+        apiUrl: connection.api_url || '',
+        apiKey: '',
+        listUid: connection.list_uid || '',
+        eventFieldTag: connection.event_field_tag || 'VERANSTALTUNG',
+        enabled: Boolean(connection.enabled)
+      });
+    }
+  }, [data]);
+
+  async function save(e) {
+    e.preventDefault();
+    setMessage('Speichere Verbindung …');
+    try {
+      await api('/admin/newsletter', { method: 'PUT', body: JSON.stringify(form) });
+      setForm({ ...form, apiKey: '' });
+      setMessage('Verbindung gespeichert. Jede neue Anmeldung geht ab sofort an MailWizz.');
+      setReload(reload + 1);
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
+  }
+
+  async function test() {
+    setMessage('Frage die Liste bei MailWizz ab …');
+    try {
+      const result = await api('/admin/newsletter/test', { method: 'POST' });
+      setMessage(result.list ? `Verbindung steht. MailWizz meldet die Liste „${result.list}“.` : 'Verbindung steht. MailWizz hat die Liste bestätigt.');
+      setReload(reload + 1);
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
+  }
+
+  async function syncPending() {
+    setMessage('Übergebe offene Anmeldungen …');
+    try {
+      const result = await api('/admin/newsletter/sync-pending', { method: 'POST' });
+      setMessage(result.queued
+        ? `${result.queued} Anmeldungen stehen zur Übergabe bereit. Sie laufen im Hintergrund durch.`
+        : 'Es gibt keine offenen Anmeldungen.');
+      setReload(reload + 1);
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
+  }
+
+  async function remove() {
+    if (!window.confirm('Verbindung zu MailWizz löschen? Neue Anmeldungen bleiben dann in qrating stehen.')) return;
+    setMessage('Lösche Verbindung …');
+    try {
+      await api('/admin/newsletter', { method: 'DELETE' });
+      setForm({ apiUrl: '', apiKey: '', listUid: '', eventFieldTag: 'VERANSTALTUNG', enabled: true });
+      setMessage('Verbindung gelöscht.');
+      setReload(reload + 1);
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
+  }
+
+  return <div>
+    <Header title="Newsletter" />
+    {loading && <p>Lade Newsletter-Verbindung ...</p>}
+    {error && <ErrorBox error={error} />}
+    <Panel title="MailWizz verbinden">
+      <form onSubmit={save} className="grid gap-3 md:grid-cols-2">
+        <label className="block"><span className="text-sm font-medium">API-Adresse</span><input className="input mt-1" value={form.apiUrl} onChange={(e) => setForm({ ...form, apiUrl: e.target.value })} placeholder="https://news.example.com/api" required /></label>
+        <label className="block"><span className="text-sm font-medium">API-Schlüssel</span><input className="input mt-1" type="password" value={form.apiKey} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} placeholder={connection?.has_api_key ? 'Bleibt unverändert, wenn leer' : 'Aus MailWizz unter „API keys“'} /></label>
+        <label className="block"><span className="text-sm font-medium">Listen-UID</span><input className="input mt-1" value={form.listUid} onChange={(e) => setForm({ ...form, listUid: e.target.value })} placeholder="ab1cd2ef3gh4i" required /></label>
+        <label className="block"><span className="text-sm font-medium">Feldkürzel für die Veranstaltung</span><input className="input mt-1" value={form.eventFieldTag} onChange={(e) => setForm({ ...form, eventFieldTag: e.target.value.toUpperCase() })} placeholder="VERANSTALTUNG" required /></label>
+        <label className="flex items-center gap-2 rounded-md bg-neutral-50 p-3 md:col-span-2"><input type="checkbox" checked={form.enabled} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} /> Anmeldungen an MailWizz übergeben</label>
+        <p className="text-sm text-neutral-500 md:col-span-2">Jede Anmeldung geht mit ihrer E-Mail-Adresse an die Liste. Das Feldkürzel muss in MailWizz als Custom Field der Liste angelegt sein; qrating trägt dort den Namen der Veranstaltung laut Pretix ein. Die Übergabe an MailWizz gehört in deine Datenschutzerklärung.</p>
+        <div className="flex flex-wrap gap-2 md:col-span-2">
+          <button className="button-primary"><Send size={16} /> Speichern</button>
+          <button type="button" onClick={test} className="button-secondary"><RefreshCw size={16} /> Verbindung testen</button>
+          <button type="button" onClick={syncPending} className="button-secondary"><Send size={16} /> Offene Anmeldungen übergeben</button>
+          {connection && <button type="button" onClick={remove} className="button-secondary text-red-700"><Trash2 size={16} /> Verbindung löschen</button>}
+        </div>
+      </form>
+      <Notice message={message} />
+    </Panel>
+    {data && <Panel title="Stand">
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="rounded-md bg-neutral-50 p-3 text-sm"><strong>Anmeldungen</strong><p>{data.optins.total} gesamt · {data.optins.open} offen · {data.optins.failed} mit Fehler</p></div>
+        <div className="rounded-md bg-neutral-50 p-3 text-sm"><strong>Letzter Test</strong><p>{connection?.last_test_at ? `${formatDate(connection.last_test_at)} · ${connection.last_test_status || '-'}` : 'noch nicht getestet'}</p>{connection?.last_test_error && <p className="text-red-700">{connection.last_test_error}</p>}</div>
+        <div className="rounded-md bg-neutral-50 p-3 text-sm"><strong>Letzte Übergabe</strong><p>{connection?.last_sync_at ? `${formatDate(connection.last_sync_at)} · ${connection.last_sync_status || '-'}` : 'noch keine Übergabe'}</p>{connection?.last_sync_error && <p className="text-red-700">{connection.last_sync_error}</p>}</div>
+      </div>
+    </Panel>}
   </div>;
 }
 

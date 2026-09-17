@@ -4,6 +4,15 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.26.0] - 2026-09-18
+
+### Added
+
+- Newsletter connection to MailWizz per organization: API address, API key, list UID and the tag of the custom field that carries the event. The key is stored encrypted and never leaves the server again.
+- Every newsletter opt-in goes to the list through the background worker. The subscriber carries the address and, in the configured custom field, the name of the event the entry came from, as Pretix wrote it. Events created by hand use their own name.
+- A connection test asks MailWizz for the list, and open opt-ins from the time before the connection can be handed over afterwards. Failed handovers keep the reason of MailWizz at the entry.
+- Version bumped to `0.26.0`.
+
 ## [0.25.0] - 2026-09-18
 
 ### Changed

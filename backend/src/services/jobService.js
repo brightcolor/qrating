@@ -2,6 +2,7 @@ import { NotificationService } from './notificationService.js';
 import { PretixService } from './pretixService.js';
 import { buildEventReportPdf } from '../utils/pdf.js';
 import { buildDownloadName } from '../utils/downloadName.js';
+import { NewsletterService } from './newsletterService.js';
 import { env } from '../config/env.js';
 
 export async function enqueueJob(db, organizationId, jobType, payload, options = {}) {
@@ -74,6 +75,7 @@ export class JobWorker {
       else if (job.job_type === 'report.email') await this.handleReportEmail(job);
       else if (job.job_type === 'pretix.sync') await this.handlePretixSync(job.payload);
       else if (job.job_type === 'privacy.retention') await this.handlePrivacyRetention(job);
+      else if (job.job_type === 'newsletter.sync') await this.handleNewsletterSync(job.payload);
       else throw new Error(`Unbekannte Hintergrundaufgabe „${job.job_type}“. Sie stammt vermutlich aus einer anderen qrating-Version.`);
       await this.db.query(
         `UPDATE background_jobs SET status = 'done', last_error = null, updated_at = now() WHERE id = $1`,
@@ -130,6 +132,11 @@ export class JobWorker {
     if (sent?.skipped) {
       throw new Error('Der Report wurde nicht verschickt: Der E-Mail-Versand ist nicht eingerichtet oder ausgeschaltet. Richte ihn unter SMTP ein.');
     }
+  }
+
+  async handleNewsletterSync(payload) {
+    const newsletter = new NewsletterService(this.db);
+    await newsletter.syncOptin(payload.optinId);
   }
 
   async handlePretixSync(payload) {

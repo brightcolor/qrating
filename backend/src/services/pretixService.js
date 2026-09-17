@@ -13,7 +13,7 @@ function connectionToken(connection) {
   return connection.api_token || openSecret(connection.api_token_encrypted, 'Der gespeicherte Pretix-API-Token');
 }
 
-function localizedName(value) {
+export function localizedName(value) {
   if (!value) return 'Unbenanntes Event';
   if (typeof value === 'string') return value;
   return value.de || value.en || Object.values(value)[0] || 'Unbenanntes Event';

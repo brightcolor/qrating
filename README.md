@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.25.0
+**Version:** 0.26.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -31,6 +31,7 @@ This repository was built with AI-assisted, vibe-coded development. Treat it lik
 - Pretix event sync with settings sync and robust event image detection
 - Event pictures kept by hand: picture URL and description per event in the admin area, marked as manual so a Pretix sync keeps them
 - Form builder with 13 German templates (party, festival, birthday, wedding, company party, conference, workshop, and more), saved custom templates, and a preview of the guest flow
+- Newsletter opt-ins handed to MailWizz, with the event of the entry in a custom field
 - Dashboard, CSV/XLSX exports, newsletter export, and multi-page PDF reports; every download is named after its event, the event date and the moment of the download
 - Configurable SMTP for password resets, invitations, low-rating alerts, and report delivery
 - Per-user notification channels scoped to assigned events
@@ -322,6 +323,21 @@ Notification channels are configured per user:
 
 Report delivery uses the background worker and SMTP settings.
 
+## Newsletter Connection
+
+An organization can hand its newsletter opt-ins to a MailWizz installation. The connection lives in the admin area under **Newsletter** and holds the API address, the API key (encrypted at rest), the list UID, and the tag of the custom field that carries the event.
+
+Every opt-in is handed over by the background worker, so a guest never waits for the newsletter system. The subscriber carries:
+
+- `EMAIL`: the address of the guest
+- the configured field tag, by default `VERANSTALTUNG`: the name of the event as Pretix wrote it; events created by hand use their own name
+
+The field tag must exist as a custom field of that list in MailWizz, otherwise MailWizz stores the address without it. A known address is updated instead of created, so a second handover stays harmless.
+
+Opt-ins that arrived before the connection existed are still open. "Offene Anmeldungen übergeben" queues up to 500 of them. Every opt-in keeps the state of its handover, and a failed handover keeps the reason of MailWizz at the entry and at the connection.
+
+Handing personal data to a newsletter system belongs in the privacy statement of the organization.
+
 ## Privacy And PII Handling
 
 > **Production warning for upgrades from versions before `0.13.0`: legacy databases may still contain plaintext personal data.**
@@ -372,7 +388,7 @@ Admin authentication:
 - `POST /admin/password-reset/request`
 - `POST /admin/password-reset/confirm`
 
-Admin areas include events, analytics, exports, forms, texts, QR sources, Pretix connections, SMTP, notifications, webhooks, users, retention, branding, website content, and internal plan administration.
+Admin areas include events, analytics, exports, forms, texts, QR sources, Pretix connections, SMTP, the newsletter connection (`GET|PUT|DELETE /admin/newsletter`, `POST /admin/newsletter/test`, `POST /admin/newsletter/sync-pending`), notifications, webhooks, users, retention, branding, website content, and internal plan administration.
 
 Admin authentication uses the `qrating_admin` HTTP-only cookie. The frontend does not store session tokens in `localStorage` or expose them to JavaScript.
 
@@ -437,7 +453,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.25.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.26.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 
