@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.22.0
+**Version:** 0.23.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -12,7 +12,7 @@ This repository was built with AI-assisted, vibe-coded development. Treat it lik
 
 - Product website: `https://qrating.de`
 - Admin/Web UI domain: `https://app.qrating.de`
-- Feedback/QR domain: `https://qrat.ing`
+- Feedback/QR domain: `https://qrat.ing`; its start page leads to the product website, links with parameters stay on the short domain
 - Public product website on `/` with editable texts, section headings, FAQ, imprint, and privacy pages
 - Platform level above the organizations: tenant list, new tenants, and entering a tenant with an entry in the audit log
 - Internal Free, Pro, and Business plans with admin-configurable limits and overrides
@@ -436,7 +436,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.22.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.23.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

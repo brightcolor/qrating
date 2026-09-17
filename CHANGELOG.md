@@ -4,6 +4,13 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.23.0] - 2026-09-17
+
+### Changed
+
+- The start page of the short feedback domain leads to the product website. A link with parameters, for example campaign tracking, keeps its target, and QR code links stay untouched.
+- Version bumped to `0.23.0`.
+
 ## [0.22.0] - 2026-09-17
 
 ### Changed

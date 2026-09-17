@@ -3,6 +3,7 @@
 set -euo pipefail
 
 API_URL="${API_URL:-http://localhost:8080/api}"
+WEB_URL="${WEB_URL:-http://localhost:8080}"
 BACKEND_URL="${BACKEND_URL:-http://localhost:4000}"
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
@@ -58,5 +59,16 @@ wait_for_backend
 [ "$(sql 'SELECT count(*) FROM organizations')" = "1" ] || fail "the restart added an organization"
 [ "$(sql "SELECT count(*) FROM feedback_forms WHERE name = 'Schnellfeedback'")" = "1" ] || fail "the restart duplicated the demo form"
 curl -fsS -o /dev/null "$BACKEND_URL/public/f/smoke-events" || fail "guest page after the restart failed"
+
+echo "Short domain leads to the website, tracking links keep their target"
+web_status() {
+  curl -sS -o /dev/null -w '%{http_code}' -H "Host: $1" "$WEB_URL$2"
+}
+[ "$(web_status qrat.ing /)" = "301" ] || fail "qrat.ing/ does not lead to the website"
+[ "$(curl -sS -o /dev/null -w '%{redirect_url}' -H 'Host: qrat.ing' "$WEB_URL/")" = "https://qrating.de/" ] \
+  || fail "qrat.ing/ leads somewhere else than the website"
+[ "$(web_status qrat.ing '/?utm_source=flyer')" = "200" ] || fail "a tracking link on qrat.ing/ was redirected"
+[ "$(web_status qrating.de /)" = "200" ] || fail "the website domain was redirected"
+[ "$(web_status qrat.ing /f/demo-events)" = "200" ] || fail "the guest page on qrat.ing was redirected"
 
 echo "Smoke test passed"
