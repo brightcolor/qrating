@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.18.1
+**Version:** 0.18.2
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -273,6 +273,8 @@ GET /api/v1/organizers/{organizer}/events/{event}/settings/?explain=true
 
 If that fails, it falls back to the settings endpoint without `explain=true`. Settings values are normalized before known and configured image keys are inspected. Relative media paths are resolved against the Pretix base URL.
 
+Pretix keeps the shop header in `logo_image` and the social preview in `og_image`; qrating reads both, prefers the shop header, and accepts the other known keys of plugins and older installations. A connection can name its own key under "preferred image settings key".
+
 ## Notifications
 
 Low ratings can create a workflow case and notify only users who are allowed to access the affected event.
@@ -407,7 +409,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.18.1`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.18.2`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

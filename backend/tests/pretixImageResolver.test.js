@@ -39,6 +39,28 @@ describe('PretixImageResolver', () => {
     expect(candidates.map((candidate) => candidate.key)).toEqual(['header_image', 'logo']);
   });
 
+  it('finds the picture in the settings Pretix delivers', () => {
+    const settings = normalizeSettings({
+      og_image: { value: null, label: 'Social-Media-Bild' },
+      logo_image: { value: 'https://tickets.example.com/media/pub/demo/Shop%20Header.jpg.Beq1WMGn.jpg', label: 'Header-Bild' },
+      logo_image_large: { value: true, label: 'Volle Höhe des Header-Bildes verwenden' },
+      invoice_logo_image: { value: 'https://tickets.example.com/media/pub/demo/logo.jpg', label: 'Logo auf der Rechnung' }
+    });
+
+    const candidates = extractImageCandidates(settings, [], 'https://tickets.example.com');
+
+    expect(candidates.map((candidate) => candidate.key)).toEqual(['logo_image']);
+    expect(chooseBestImage(candidates).url).toBe('https://tickets.example.com/media/pub/demo/Shop%20Header.jpg.Beq1WMGn.jpg');
+  });
+
+  it('prefers the shop header over the social picture', () => {
+    const best = chooseBestImage([
+      { key: 'og_image', url: 'https://tickets.example.com/social.png' },
+      { key: 'logo_image', url: 'https://tickets.example.com/header.png' }
+    ]);
+    expect(best.key).toBe('logo_image');
+  });
+
   it('uses an admin-preferred settings key first', () => {
     const best = chooseBestImage([
       { key: 'logo', url: 'https://tickets.example.com/logo.png' },

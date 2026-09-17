@@ -4,6 +4,16 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.18.2] - 2026-09-17
+
+### Fixed
+
+- Pictures of Pretix events are found again: the sync reads the shop header (`logo_image`) and the social preview (`og_image`) from the event settings and prefers the shop header.
+
+### Changed
+
+- Version bumped to `0.18.2`.
+
 ## [0.18.1] - 2026-09-17
 
 ### Fixed

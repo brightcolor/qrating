@@ -17,7 +17,11 @@ function formatMegabytes(bytes) {
   return `${(bytes / 1024 / 1024).toLocaleString('de-DE', { maximumFractionDigits: 1 })} MB`;
 }
 
+// Pretix keeps the shop header in logo_image and the social preview in og_image.
+// The other keys cover plugins and older installations.
 export const defaultImageKeys = [
+  'logo_image',
+  'og_image',
   'header_image',
   'shop_header_image',
   'frontend_header_image',
@@ -82,7 +86,7 @@ export function chooseBestImage(candidates, priorityConfig = {}) {
     const preferred = candidates.find((candidate) => candidate.key === priorityConfig.preferredKey);
     if (preferred) return preferred;
   }
-  const priority = ['header', 'shop', 'front', 'banner', 'primary', 'social', 'logo'];
+  const priority = ['logo_image', 'og_image', 'header', 'shop', 'front', 'banner', 'primary', 'social', 'logo'];
   return [...candidates].sort((a, b) => {
     const rank = (candidate) => {
       const key = candidate.key.toLowerCase();
