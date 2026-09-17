@@ -75,7 +75,8 @@ function AdminApp() {
   return <div className="min-h-screen bg-neutral-100">
     <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-neutral-200 bg-white p-5 lg:block">
       <div className="text-xl font-semibold">qrating</div>
-      <nav className="mt-8 space-y-1">
+      <TenantBadge />
+      <nav className="mt-6 space-y-1">
         {nav.map(([id, label, Icon]) => <NavButton key={id} icon={Icon} label={label} active={page === id} onClick={() => setPage(id)} />)}
       </nav>
       <button className="absolute bottom-5 flex items-center gap-2 text-sm text-neutral-600" onClick={async () => { await api('/admin/logout', { method: 'POST', body: JSON.stringify({}) }).catch(() => null); setAuthenticated(false); }}><LogOut size={16} /> Abmelden</button>
@@ -103,6 +104,16 @@ function AdminApp() {
         {page === 'webhooks' && <Webhooks />}
       </div>
     </main>
+  </div>;
+}
+
+// Shows which tenant this login belongs to; the slug is the one in the QR codes.
+function TenantBadge() {
+  const { data } = useAsync(() => api('/admin/me'), []);
+  if (!data?.organization_name) return null;
+  return <div className="mt-4 rounded-md bg-neutral-100 px-3 py-2">
+    <p className="text-sm font-semibold leading-tight">{data.organization_name}</p>
+    <p className="mt-0.5 font-mono text-xs text-neutral-500">{data.organization_slug}</p>
   </div>;
 }
 
@@ -920,6 +931,23 @@ function BrandingSettings() {
     <Header title="Branding & Datenschutz" />
     {loading && <p className="mt-4">Lade Branding ...</p>}
     {error && <ErrorBox error={error} />}
+    {form && data && <Panel title="Mandant">
+      <div className="grid gap-4 md:grid-cols-2">
+        <div>
+          <span className="text-sm font-medium">Name</span>
+          <p className="mt-1 text-lg font-semibold">{data.name}</p>
+        </div>
+        <div>
+          <span className="text-sm font-medium">Slug</span>
+          <p className="mt-1 font-mono text-lg">{data.slug}</p>
+        </div>
+        <div className="md:col-span-2">
+          <span className="text-sm font-medium">Gästeseite dieses Mandanten</span>
+          <p className="mt-1 break-all"><a className="text-blue-700 underline" href={`${data.feedbackAppUrl}/f/${data.slug}`} target="_blank" rel="noreferrer">{data.feedbackAppUrl}/f/{data.slug}</a></p>
+          <p className="mt-2 text-sm text-neutral-600">Der Slug steht im QR-Code und bleibt deshalb fest. Den Namen änderst du unten; er erscheint auf der Gästeseite und in Berichten.</p>
+        </div>
+      </div>
+    </Panel>}
     {form && <Panel title="Organisation und öffentliche Besucheransicht">
       <form onSubmit={saveBranding} className="grid gap-4 md:grid-cols-2">
         <label className="block"><span className="text-sm font-medium">Organisationsname</span><input className="input mt-1" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>

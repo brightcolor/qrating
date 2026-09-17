@@ -1280,7 +1280,7 @@ adminRouter.get('/branding', async (req, res, next) => {
        FROM organizations WHERE id = $1`,
       [req.admin.organizationId]
     );
-    res.json(result.rows[0]);
+    res.json({ ...result.rows[0], feedbackAppUrl: env.feedbackAppUrl });
   } catch (error) {
     next(error);
   }

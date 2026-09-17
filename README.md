@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.18.3
+**Version:** 0.18.4
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -409,7 +409,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.18.3`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.18.4`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

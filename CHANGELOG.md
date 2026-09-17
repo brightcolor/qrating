@@ -4,6 +4,16 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.18.4] - 2026-09-17
+
+### Added
+
+- The admin area names its tenant: the sidebar shows the organization with its slug, and Branding opens with name, slug, and the guest link of that tenant.
+
+### Changed
+
+- Version bumped to `0.18.4`.
+
 ## [0.18.3] - 2026-09-17
 
 ### Changed
