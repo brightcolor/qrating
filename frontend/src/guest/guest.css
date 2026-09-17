@@ -264,7 +264,7 @@
 
 .guest-poster {
   position: relative;
-  margin: 0 0 24px;
+  margin: 0 0 18px;
   overflow: hidden;
   border-radius: 22px;
   aspect-ratio: 16 / 10;
@@ -277,26 +277,6 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-}
-
-.guest-poster::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(0deg, rgba(10, 7, 14, 0.72), transparent 55%);
-}
-
-.guest-poster figcaption {
-  position: absolute;
-  right: 16px;
-  bottom: 13px;
-  left: 16px;
-  z-index: 1;
-  color: rgba(255, 255, 255, 0.92);
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 
 @media (max-height: 44rem) {

@@ -4,6 +4,13 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.18.3] - 2026-09-17
+
+### Changed
+
+- The event picture on the guest page shows in full; date and location moved below it.
+- Version bumped to `0.18.3`.
+
 ## [0.18.2] - 2026-09-17
 
 ### Fixed

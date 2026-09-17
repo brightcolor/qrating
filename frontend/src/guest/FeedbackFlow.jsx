@@ -394,12 +394,10 @@ function RatingStep({ event, texts, image, locale, rating, onChoose, title }) {
   const [preview, setPreview] = useState(0);
   const meta = [formatDay(event.dateFrom, locale), event.location].filter(Boolean).join(' · ');
   return <>
-    {image
-      ? <figure className="guest-poster">
-        <img src={image} alt={event.imageAlt || ''} fetchpriority="high" />
-        {meta && <figcaption>{meta}</figcaption>}
-      </figure>
-      : meta && <p className="guest-meta">{meta}</p>}
+    {image && <figure className="guest-poster">
+      <img src={image} alt={event.imageAlt || ''} fetchpriority="high" />
+    </figure>}
+    {meta && <p className="guest-meta">{meta}</p>}
     {title(texts.headline)}
     {texts.subtitle && <p className="guest-help">{texts.subtitle}</p>}
     <div className="guest-rating guest-rating--hero">
