@@ -7,6 +7,8 @@ import {
   CreditCard,
   Download,
   Activity,
+  Archive,
+  Eye,
   ExternalLink,
   FileText,
   Globe2,
@@ -430,6 +432,7 @@ function EventCard({ event, onChanged }) {
   const eventUrl = event.feedbackUrl || `/e/${event.event_feedback_token}`;
   const [message, setMessage] = useState('');
   const [imageOpen, setImageOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(null);
   const [imageForm, setImageForm] = useState({ imageUrl: event.image_url || '', imageAlt: event.image_alt || '' });
   async function syncImage() {
     try {
@@ -454,6 +457,49 @@ function EventCard({ event, onChanged }) {
     e.preventDefault();
     saveImage({ imageUrl: imageForm.imageUrl.trim(), imageAlt: imageForm.imageAlt.trim() });
   }
+  // The preview opens the guest page of this event, also outside its feedback round.
+  async function openPreview() {
+    setMessage('');
+    const tab = window.open('', '_blank');
+    try {
+      const { url } = await api(`/admin/events/${event.id}/preview-link`);
+      if (tab) tab.location = url;
+      else window.location.href = url;
+    } catch (err) {
+      tab?.close();
+      setMessage(errorNotice(err));
+    }
+  }
+  async function toggleArchive() {
+    setMessage('');
+    const archived = event.status === 'archived';
+    try {
+      await api(`/admin/events/${event.id}`, { method: 'PATCH', body: JSON.stringify({ status: archived ? 'active' : 'archived' }) });
+      setMessage(archived ? 'Das Event ist wieder aktiv.' : 'Das Event ist archiviert und fällt aus QR-Code und Gästeseite.');
+      onChanged?.();
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
+  }
+  async function askDelete() {
+    setMessage('');
+    try {
+      const analytics = await api(`/admin/events/${event.id}/analytics`);
+      setConfirmDelete({ feedbacks: Number(analytics?.summary?.total || 0) });
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
+  }
+  async function removeEvent() {
+    setMessage('');
+    try {
+      await api(`/admin/events/${event.id}`, { method: 'DELETE' });
+      setConfirmDelete(null);
+      onChanged?.();
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
+  }
   return <article className="rounded-lg bg-white p-5 shadow-sm">
     <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
       <div className="flex gap-4">
@@ -461,7 +507,11 @@ function EventCard({ event, onChanged }) {
           {event.image_url ? <img className="h-full w-full object-cover" src={assetUrl(event.image_url)} alt="" /> : <Image className="text-neutral-400" />}
         </div>
         <div>
-          <div className="flex items-center gap-2"><h2 className="font-semibold">{event.name}</h2><span className="rounded bg-neutral-100 px-2 py-1 text-xs">{event.source}</span></div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="font-semibold">{event.name}</h2>
+            <span className="rounded bg-neutral-100 px-2 py-1 text-xs">{event.source}</span>
+            {event.status === 'archived' && <span className="rounded bg-amber-100 px-2 py-1 text-xs text-amber-900">archiviert</span>}
+          </div>
           <p className="mt-1 text-sm text-neutral-600">{formatDate(event.date_from)} · {event.location || 'Keine Location'}</p>
           <p className="mt-1 text-sm text-neutral-500">Bildquelle: {event.image_source || 'Fallback'} {event.detected_image_settings_key ? `· Key: ${event.detected_image_settings_key}` : ''}</p>
         </div>
@@ -473,9 +523,23 @@ function EventCard({ event, onChanged }) {
         <button onClick={() => setImageOpen(!imageOpen)} className="button-secondary"><Image size={16} /> Bild bearbeiten</button>
         {event.source === 'pretix' && <button onClick={syncImage} className="button-secondary"><Image size={16} /> Bild neu laden</button>}
         <a className="button-secondary" href={`${API_BASE}/admin/events/${event.id}/qr-print`} target="_blank"><QrCode size={16} /> Druck</a>
+        <button onClick={openPreview} className="button-secondary"><Eye size={16} /> Vorschau</button>
+        <button onClick={toggleArchive} className="button-secondary"><Archive size={16} /> {event.status === 'archived' ? 'Wieder aktivieren' : 'Archivieren'}</button>
+        <button onClick={askDelete} className="button-secondary" title="Event löschen"><Trash2 size={16} /></button>
         <a className="button-blue" href={eventUrl} target="_blank"><ExternalLink size={16} /> Feedback</a>
       </div>
     </div>
+    {confirmDelete && <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-4">
+      <p className="text-sm text-red-900">
+        Event „{event.name}“ endgültig löschen? {confirmDelete.feedbacks > 0
+          ? `Damit verschwinden auch ${confirmDelete.feedbacks} Bewertungen samt Antworten, Rückrufen und Newsletter-Anmeldungen.`
+          : 'Für dieses Event gibt es noch keine Bewertungen.'} Archivieren nimmt das Event aus QR-Code und Gästeseite und lässt die Daten stehen.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button onClick={removeEvent} className="inline-flex items-center justify-center gap-2 rounded-md bg-red-700 px-4 py-2 text-sm font-medium text-white hover:bg-red-800"><Trash2 size={16} /> Endgültig löschen</button>
+        <button onClick={() => setConfirmDelete(null)} className="button-secondary">Abbrechen</button>
+      </div>
+    </div>}
     {imageOpen && <form onSubmit={submitImage} className="mt-4 grid gap-3 border-t border-neutral-100 pt-4 md:grid-cols-[2fr_2fr_auto]">
       <label className="grid gap-1 text-sm text-neutral-600">
         Bild-URL

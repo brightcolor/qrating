@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.20.0
+**Version:** 0.21.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -21,6 +21,8 @@ This repository was built with AI-assisted, vibe-coded development. Treat it lik
 - HTTP-only admin cookie sessions; admin JWTs are not stored in browser storage
 - Security Center with production checks, 2FA status, PII Vault, and recent audit events
 - TOTP-based two-factor authentication for admin accounts with recovery codes
+- Preview link for the guest page of any event, also outside its feedback round
+- Events can be archived and deleted from the admin area
 - Dynamic organization QR code: `https://qrat.ing/f/{organizationSlug}`
 - Event-specific QR code: `https://qrat.ing/e/{event_feedback_token}`
 - Mobile-first guest feedback flow: one question per step, single answers move on by themselves, a ticket-style summary, and a stamp after sending
@@ -244,6 +246,19 @@ Workshop & Seminar, Theater, Lesung & Comedy, Emotionaler Rückblick, and Nachfa
 Every template creates editable questions; the panel next to the editor shows the guest flow that results from them.
 Question types: short answer, long answer, multiple selection, single selection, yes/no, recommendation (0 to 10), and stars (1 to 5).
 
+## Event Preview
+
+Every event card carries a "Vorschau" button. It asks the admin API for a link that opens the guest page of that event, signed and valid for two hours:
+
+```text
+GET /api/admin/events/{id}/preview-link
+/e/{event_feedback_token}?preview={expiry}.{signature}
+```
+
+The preview shows the page even while no feedback round runs, marks itself with a banner, stores nothing, and stays out of the scan statistics. Without a valid signature the page answers as it does for any guest.
+
+Archiving an event takes it out of the QR code and the guest page and keeps its data; deleting it removes the event with its feedback, answers, callback cases, and newsletter opt-ins. The confirmation in the admin area names how many responses are affected.
+
 ## Dynamic QR Code
 
 The dynamic QR endpoint is:
@@ -421,7 +436,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.20.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.21.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

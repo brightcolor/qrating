@@ -50,6 +50,7 @@ export const textLabels = {
   submit: ['Knopf zum Abschicken'],
   sending_label: ['Knopf während des Sendens'],
   stamp_label: ['Stempel auf der Karte'],
+  preview_hint: ['Hinweis in der Vorschau'],
   thank_headline: ['Dank, Überschrift'],
   thank_text: ['Dank, Text'],
   no_event_headline: ['Kein Event offen, Überschrift'],
@@ -84,7 +85,7 @@ export const textGroups = [
   ['Zusammenfassung und Dank', [
     'summary_headline', 'summary_text', 'summary_rating_label', 'summary_contact_label', 'summary_newsletter_label',
     'summary_skipped', 'edit_label', 'privacy_short', 'submit', 'sending_label', 'stamp_label',
-    'thank_headline', 'thank_text'
+    'thank_headline', 'thank_text', 'preview_hint'
   ]],
   ['Seiten ohne offene Bewertung', [
     'no_event_headline', 'no_event_text', 'expired_headline', 'expired_text',

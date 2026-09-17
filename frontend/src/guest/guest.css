@@ -118,6 +118,19 @@
   padding: max(14px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) 0 max(20px, env(safe-area-inset-left));
 }
 
+.guest-preview {
+  margin: 0 0 12px;
+  padding: 9px 14px;
+  border: 1px solid rgba(255, 196, 84, 0.45);
+  border-radius: 999px;
+  background: rgba(255, 176, 64, 0.16);
+  color: #ffd9a1;
+  font-size: 0.86rem;
+  font-weight: 650;
+  line-height: 1.35;
+  text-align: center;
+}
+
 .guest-progress {
   display: flex;
   gap: 5px;

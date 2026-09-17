@@ -53,6 +53,12 @@ export function GuestScreen({ brandColor, imageUrl, lang, loading = false, child
   </GuestStage>;
 }
 
+// A preview opens the page outside the feedback round; nothing a visitor does here is stored.
+function PreviewBanner({ preview, texts }) {
+  if (!preview) return null;
+  return <p className="guest-preview" role="status">{texts.preview_hint}</p>;
+}
+
 // The public payload falls back to the organizer logo when an event has no picture of its own.
 export function eventImage(event) {
   const url = event?.imageUrl;
@@ -60,7 +66,7 @@ export function eventImage(event) {
   return assetUrl(url);
 }
 
-export function FeedbackFlow({ event, texts, sourceType, lang = 'de' }) {
+export function FeedbackFlow({ event, texts, sourceType, lang = 'de', preview = false }) {
   const locale = lang === 'en' ? 'en-GB' : 'de-DE';
   const questions = useMemo(() => event.questions || [], [event.questions]);
   const [draft] = useState(() => loadDraft(event.token));
@@ -229,6 +235,12 @@ export function FeedbackFlow({ event, texts, sourceType, lang = 'de' }) {
       setProblem(blocker.problem);
       return;
     }
+    // A preview shows the thank-you page without storing anything.
+    if (preview) {
+      clearDraft(event.token);
+      setDone(true);
+      return;
+    }
     setSending(true);
     setSubmitError('');
     try {
@@ -248,6 +260,7 @@ export function FeedbackFlow({ event, texts, sourceType, lang = 'de' }) {
   if (done) {
     return <GuestStage brandColor={brandColor} imageUrl={image} lang={lang}>
       <div className="guest-frame">
+        <PreviewBanner preview={preview} texts={texts} />
         <section className="guest-step guest-thanks" aria-labelledby="guest-thanks-title">
           <Ticket event={event} locale={locale} logo={logo} stamp={texts.stamp_label}>
             <div className="guest-ticket-rating">
@@ -362,6 +375,7 @@ export function FeedbackFlow({ event, texts, sourceType, lang = 'de' }) {
 
   return <GuestStage brandColor={brandColor} imageUrl={image} lang={lang}>
     <div className="guest-frame">
+      <PreviewBanner preview={preview} texts={texts} />
       <header className="guest-top">
         <div className="guest-progress" aria-hidden="true">
           {steps.slice(0, total).map((item, itemIndex) => (

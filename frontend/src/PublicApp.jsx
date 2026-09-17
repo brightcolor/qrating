@@ -22,9 +22,14 @@ function useAsync(fn, deps = []) {
 }
 
 function PublicFeedback({ mode, identifier, source }) {
-  const language = new URLSearchParams(window.location.search).get('lang');
+  const search = new URLSearchParams(window.location.search);
+  const language = search.get('lang');
   const lang = language === 'en' ? 'en' : 'de';
-  const suffix = language ? `?lang=${encodeURIComponent(language)}` : '';
+  // A preview link from the admin area opens the page outside the feedback window.
+  const parameters = new URLSearchParams();
+  if (language) parameters.set('lang', language);
+  if (search.get('preview')) parameters.set('preview', search.get('preview'));
+  const suffix = parameters.toString() ? `?${parameters}` : '';
   const path = mode === 'event' ? `/public/e/${identifier}${suffix}` : `/public/f/${identifier}${source ? `/${source}` : ''}${suffix}`;
   const { loading, data, error } = useAsync(() => api(path), [path]);
 
@@ -52,7 +57,7 @@ function PublicFeedback({ mode, identifier, source }) {
       <p>{notice.text}</p>
     </GuestScreen>;
   }
-  return <FeedbackFlow event={data.event} texts={data.texts} sourceType={source || mode} lang={lang} />;
+  return <FeedbackFlow event={data.event} texts={data.texts} sourceType={source || mode} lang={lang} preview={Boolean(data.preview)} />;
 }
 
 // Headline and text for guest pages without an open feedback round.

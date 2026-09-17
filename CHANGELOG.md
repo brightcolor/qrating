@@ -4,6 +4,18 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.21.0] - 2026-09-17
+
+### Added
+
+- A preview link opens the guest page of an event at any time, also while no feedback round runs. The admin area hands it out per event; it carries a signature, lasts two hours, marks the page with a banner, stores nothing, and counts as no scan.
+- Events can be archived and brought back from the admin area. An archived event falls out of the QR code and the guest page and keeps its data.
+- Events can be deleted from the admin area. The confirmation names how many responses go with the event.
+
+### Changed
+
+- Version bumped to `0.21.0`.
+
 ## [0.20.0] - 2026-09-17
 
 ### Added

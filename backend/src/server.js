@@ -8,6 +8,7 @@ import { authRouter } from './routes/auth.js';
 import { adminRouter } from './routes/admin.js';
 import { securityRouter } from './routes/security.js';
 import { platformRouter } from './routes/platform.js';
+import { eventPreviewRouter } from './routes/eventPreview.js';
 import { publicRouter } from './routes/public.js';
 import { errorHandler, notFound } from './middleware/errors.js';
 import { runMigrations, seedDefaultData } from './db/bootstrap.js';
@@ -45,6 +46,7 @@ app.use('/admin', (req, res, next) => {
 });
 app.use('/admin', authRouter);
 app.use('/admin/platform', platformRouter);
+app.use('/admin', eventPreviewRouter);
 app.use('/admin', securityRouter);
 app.use('/admin', adminRouter);
 app.use('/public', publicRouter);

@@ -13,6 +13,7 @@ import { encryptSecret } from '../utils/crypto.js';
 import { getSiteContent } from '../services/siteContentService.js';
 import { emailDomain, emailHash, publicEventStatus, publicOrganization } from '../utils/security.js';
 import { describeWait } from '../middleware/errors.js';
+import { verifyPreviewToken } from '../utils/previewLink.js';
 
 export const publicRouter = express.Router();
 
@@ -179,7 +180,16 @@ publicRouter.get('/e/:eventToken', async (req, res, next) => {
   try {
     const resolver = new EventResolver({ query });
     const resolved = await resolver.resolveEventByToken(req.params.eventToken);
+    // A signed preview link from the admin area shows the page while no feedback round runs.
+    const preview = verifyPreviewToken(req.params.eventToken, req.query.preview);
     if (resolved.status !== 'ok') {
+      if (preview && resolved.event) {
+        return res.json({
+          status: 'ok',
+          preview: true,
+          ...(await publicPayload({ event: resolved.event }, await activeQuestions(resolved.event.id), req.query.lang))
+        });
+      }
       const feedbackWindow = resolved.event ? calculateFeedbackWindow(resolved.event) : null;
       return res.status(410).json({
         status: resolved.status,
@@ -188,8 +198,9 @@ publicRouter.get('/e/:eventToken', async (req, res, next) => {
         feedback: feedbackWindow ? { opensAt: feedbackWindow.feedbackStart?.toISO(), closesAt: feedbackWindow.feedbackEnd?.toISO() } : null
       });
     }
-    await trackQrScan(resolved.event, req.query.source, null, 'event_specific');
-    res.json({ status: 'ok', ...(await publicPayload({ event: resolved.event }, await activeQuestions(resolved.event.id), req.query.lang)) });
+    // A preview stays out of the scan statistics.
+    if (!preview) await trackQrScan(resolved.event, req.query.source, null, 'event_specific');
+    res.json({ status: 'ok', preview, ...(await publicPayload({ event: resolved.event }, await activeQuestions(resolved.event.id), req.query.lang)) });
   } catch (error) {
     next(error);
   }
