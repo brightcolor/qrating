@@ -4,6 +4,17 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.18.1] - 2026-09-17
+
+### Fixed
+
+- A Pretix sync that met an event without a picture stopped with "Cannot read properties of null". Events without a picture are imported now, and the sync continues with the following events.
+- An event whose picture could not be read keeps the reason in its "image error" field, and a later successful lookup clears it.
+
+### Changed
+
+- Version bumped to `0.18.1`.
+
 ## [0.18.0] - 2026-09-17
 
 ### Added

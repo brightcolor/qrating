@@ -57,8 +57,16 @@ export class PretixService {
       const saved = await this.upsertPretixEvent(connection, pretixEvent);
       imported += 1;
       if (connection.import_event_images) {
+        // Events without a picture answer with null; a failed lookup keeps its reason on the event.
         const resolved = await this.syncImageForEvent(authConnection, saved, pretixEvent.slug).catch((error) => ({ error }));
-        if (!resolved.error && resolved?.url) images += 1;
+        if (resolved?.error) {
+          await this.db.query(
+            'UPDATE events SET image_sync_error = $1, image_last_synced_at = now(), updated_at = now() WHERE id = $2',
+            [resolved.error.message || String(resolved.error), saved.id]
+          );
+        } else if (resolved?.url) {
+          images += 1;
+        }
       }
     }
 
@@ -152,6 +160,7 @@ export class PretixService {
            cached_image_url = $3,
            detected_image_settings_key = $4,
            raw_settings_payload = $5,
+           image_sync_error = null,
            image_last_synced_at = now(),
            updated_at = now()
        WHERE id = $6`,

@@ -232,6 +232,41 @@ describe('backend flows against PostgreSQL', () => {
     expect(events.rows).toEqual([{ name: 'Herbstfest 2026' }]);
   });
 
+  it('imports Pretix events that carry no picture', async () => {
+    const organizationId = (await query('SELECT id FROM organizations')).rows[0].id;
+    const connection = (await query(
+      `INSERT INTO pretix_connections (organization_id, base_url, pretix_organizer_slug, api_token_encrypted, import_event_images)
+       VALUES ($1, 'https://pretix.example.test', 'ohne-bild', $2, true)
+       RETURNING *`,
+      [organizationId, encryptSecret('test-token')]
+    )).rows[0];
+    const eventList = {
+      count: 2,
+      results: [
+        { slug: 'sommernacht', name: { de: 'Sommernacht' }, date_from: '2026-08-01T18:00:00Z', live: true },
+        { slug: 'winternacht', name: { de: 'Winternacht' }, date_from: '2026-12-01T18:00:00Z', live: true }
+      ]
+    };
+    // Pretix answers the settings of both events without any image key.
+    const fetchImpl = vi.fn(async (url) => ({
+      ok: true,
+      status: 200,
+      json: async () => (url.includes('/settings/') ? {} : eventList)
+    }));
+
+    const result = await new PretixService({ query }, fetchImpl).syncConnection(connection);
+
+    expect(result).toEqual({ imported: 2, images: 0 });
+    const events = await query(
+      'SELECT slug, image_sync_error FROM events WHERE pretix_connection_id = $1 ORDER BY slug',
+      [connection.id]
+    );
+    expect(events.rows.map((row) => row.slug)).toEqual(['sommernacht', 'winternacht']);
+    expect(events.rows[0].image_sync_error).toBe('Kein Bild-Key in Pretix-Settings gefunden.');
+    const status = await query('SELECT last_sync_status, last_sync_error FROM pretix_connections WHERE id = $1', [connection.id]);
+    expect(status.rows[0]).toEqual({ last_sync_status: '2 Events synchronisiert, 0 Bilder erkannt', last_sync_error: null });
+  });
+
   it('removes demo forms that older releases duplicated on every start', async () => {
     const event = await demoEvent();
     const seededForm = (await query('SELECT id FROM feedback_forms WHERE event_id = $1', [event.id])).rows[0].id;
