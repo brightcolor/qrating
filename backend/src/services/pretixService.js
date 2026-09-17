@@ -1,6 +1,17 @@
-import { decryptSecret } from '../utils/crypto.js';
 import { PretixImageResolver, normalizeSettings, extractImageCandidates, chooseBestImage } from './pretixImageResolver.js';
 import { randomToken, slugify } from '../utils/crypto.js';
+import { fetchService, openSecret } from '../utils/serviceErrors.js';
+
+// Pretix answers for the organizer event list.
+const pretixEventListReasons = {
+  401: ['hat den API-Token abgelehnt', 'Trage in der Verbindung einen gültigen Token ein.'],
+  403: ['erlaubt dem API-Token keinen Zugriff auf diesen Veranstalter', 'Prüfe die Rechte des Tokens in Pretix.'],
+  404: ['kennt diesen Veranstalter nicht', 'Prüfe Pretix-Adresse und Organizer-Slug der Verbindung.']
+};
+
+function connectionToken(connection) {
+  return connection.api_token || openSecret(connection.api_token_encrypted, 'Der gespeicherte Pretix-API-Token');
+}
 
 function localizedName(value) {
   if (!value) return 'Unbenanntes Event';
@@ -16,31 +27,26 @@ export class PretixService {
   }
 
   async testConnection(connection) {
-    const token = connection.api_token || decryptSecret(connection.api_token_encrypted);
+    const token = connectionToken(connection);
     const base = connection.base_url.replace(/\/$/, '');
     const organizer = connection.pretix_organizer_slug;
-    const response = await this.fetchImpl(`${base}/api/v1/organizers/${organizer}/events/`, {
+    const response = await fetchService('Pretix', this.fetchImpl, `${base}/api/v1/organizers/${organizer}/events/`, {
       headers: { Authorization: `Token ${token}` }
-    });
-    if (!response.ok) {
-      const messages = { 401: 'Token ungültig.', 403: 'Keine Rechte für diesen Organizer.', 404: 'Organizer nicht gefunden.' };
-      throw new Error(messages[response.status] || `Pretix antwortet mit Status ${response.status}.`);
-    }
+    }, { overrides: pretixEventListReasons });
     const data = await response.json();
     return { ok: true, eventsFound: data.count ?? data.results?.length ?? 0 };
   }
 
   async syncConnection(connection) {
-    const token = decryptSecret(connection.api_token_encrypted);
+    const token = connectionToken({ ...connection, api_token: null });
     const authConnection = { ...connection, api_token: token };
     const base = connection.base_url.replace(/\/$/, '');
     const organizer = connection.pretix_organizer_slug;
     let imported = 0;
     let images = 0;
-    const response = await this.fetchImpl(`${base}/api/v1/organizers/${organizer}/events/`, {
+    const response = await fetchService('Pretix', this.fetchImpl, `${base}/api/v1/organizers/${organizer}/events/`, {
       headers: { Authorization: `Token ${token}` }
-    });
-    if (!response.ok) throw new Error(`Pretix Events konnten nicht geladen werden (${response.status}).`);
+    }, { overrides: pretixEventListReasons });
     const data = await response.json();
     const events = data.results || [];
 

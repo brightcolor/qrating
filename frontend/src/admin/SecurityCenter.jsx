@@ -32,7 +32,19 @@ function Stat({ title, value }) {
 }
 
 function ErrorBox({ error }) {
-  return <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error.message || String(error)}</p>;
+  return <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error.message || String(error)}</p>;
+}
+
+// Messages are plain strings (information) or { tone: 'error', text } from errorNotice().
+function errorNotice(error) {
+  return { tone: 'error', text: error?.message || String(error) };
+}
+
+function Notice({ message, className = '' }) {
+  if (!message) return null;
+  const isError = typeof message === 'object' && message.tone === 'error';
+  const text = typeof message === 'object' ? message.text : message;
+  return <p role={isError ? 'alert' : 'status'} className={`${className} rounded-md p-3 text-sm ${isError ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-800'}`}>{text}</p>;
 }
 
 function CheckRow({ item }) {
@@ -60,25 +72,48 @@ function TwoFactorSetup({ onRefresh }) {
 
   async function startSetup() {
     setMessage('');
-    setSetup(await api('/admin/2fa/setup', { method: 'POST', body: '{}' }));
+    try {
+      setSetup(await api('/admin/2fa/setup', { method: 'POST', body: '{}' }));
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
   }
 
   async function confirmSetup() {
-    const result = await api('/admin/2fa/confirm', { method: 'POST', body: JSON.stringify({ code }) });
-    setRecoveryCodes(result.recoveryCodes || []);
-    setSetup(null);
-    setEnabledOverride(true);
-    setMessage('2FA ist aktiv. Bewahre die Recovery-Codes sicher auf.');
-    onRefresh?.();
+    setMessage('');
+    if (!code.trim()) {
+      setMessage(errorNotice({ message: 'Bitte gib den 6-stelligen Code aus deiner Authenticator-App ein.' }));
+      return;
+    }
+    try {
+      const result = await api('/admin/2fa/confirm', { method: 'POST', body: JSON.stringify({ code }) });
+      setRecoveryCodes(result.recoveryCodes || []);
+      setSetup(null);
+      setCode('');
+      setEnabledOverride(true);
+      setMessage('2FA ist aktiv. Bewahre die Recovery-Codes sicher auf.');
+      onRefresh?.();
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
   }
 
   async function disable2fa() {
-    await api('/admin/2fa/disable', { method: 'POST', body: JSON.stringify({ password, code }) });
-    setPassword('');
-    setCode('');
-    setEnabledOverride(false);
-    setMessage('2FA wurde deaktiviert.');
-    onRefresh?.();
+    setMessage('');
+    if (!password || !code.trim()) {
+      setMessage(errorNotice({ message: 'Zum Ausschalten brauchst du dein Passwort und einen aktuellen 2FA- oder Recovery-Code.' }));
+      return;
+    }
+    try {
+      await api('/admin/2fa/disable', { method: 'POST', body: JSON.stringify({ password, code }) });
+      setPassword('');
+      setCode('');
+      setEnabledOverride(false);
+      setMessage('2FA wurde deaktiviert.');
+      onRefresh?.();
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
   }
 
   if (loading) return <p className="text-sm text-neutral-500">Lade 2FA-Status ...</p>;
@@ -87,7 +122,7 @@ function TwoFactorSetup({ onRefresh }) {
       <p className="font-medium">Status: {enabled ? 'aktiv' : 'nicht aktiv'}</p>
       <p className="mt-1 text-sm text-neutral-600">2FA schuetzt Admin-Zugaenge auch dann, wenn ein Passwort kompromittiert wird.</p>
     </div>
-    {message && <p className="rounded-md bg-blue-50 p-3 text-sm text-blue-800">{message}</p>}
+    <Notice message={message} />
     {!enabled && !setup && <button className="button-primary" onClick={startSetup}><ShieldCheck size={16} /> 2FA einrichten</button>}
     {setup && <div className="space-y-4 rounded-md border border-neutral-200 p-4">
       <div className="max-w-44" dangerouslySetInnerHTML={{ __html: setup.qrSvg }} />
@@ -115,30 +150,43 @@ export function SecurityCenter() {
   const [revealed, setRevealed] = useState({});
   const [message, setMessage] = useState('');
 
+  // Runs one vault action and shows its outcome or its error.
+  async function run(action, success) {
+    setMessage('');
+    try {
+      const result = await action();
+      if (success) setMessage(typeof success === 'function' ? success(result) : success);
+      return result;
+    } catch (err) {
+      setMessage(errorNotice(err));
+      return null;
+    }
+  }
+
   async function revealLowCase(id) {
-    setRevealed({ ...revealed, [id]: await api(`/admin/pii-vault/low-rating-cases/${id}/reveal`, { method: 'POST', body: '{}' }) });
+    const result = await run(() => api(`/admin/pii-vault/low-rating-cases/${id}/reveal`, { method: 'POST', body: '{}' }));
+    if (result) setRevealed((old) => ({ ...old, [id]: result }));
   }
 
   async function revealNewsletter(id) {
-    setRevealed({ ...revealed, [`newsletter-${id}`]: await api(`/admin/pii-vault/newsletter-optins/${id}/reveal`, { method: 'POST', body: '{}' }) });
+    const result = await run(() => api(`/admin/pii-vault/newsletter-optins/${id}/reveal`, { method: 'POST', body: '{}' }));
+    if (result) setRevealed((old) => ({ ...old, [`newsletter-${id}`]: result }));
   }
 
   async function deleteLowCaseContact(id) {
-    await api(`/admin/pii-vault/low-rating-cases/${id}/contact`, { method: 'DELETE' });
-    setMessage('Kontaktdaten geloescht.');
-    setReload(reload + 1);
+    if (await run(() => api(`/admin/pii-vault/low-rating-cases/${id}/contact`, { method: 'DELETE' }), 'Kontaktdaten gelöscht.')) setReload(reload + 1);
   }
 
   async function deleteNewsletter(id) {
-    await api(`/admin/pii-vault/newsletter-optins/${id}`, { method: 'DELETE' });
-    setMessage('Newsletter-Opt-in geloescht.');
-    setReload(reload + 1);
+    if (await run(() => api(`/admin/pii-vault/newsletter-optins/${id}`, { method: 'DELETE' }), 'Newsletter-Eintrag gelöscht.')) setReload(reload + 1);
   }
 
   async function cleanupLegacy() {
-    const result = await api('/admin/pii-vault/cleanup-legacy', { method: 'POST', body: '{}' });
-    setMessage(`Legacy-Bereinigung abgeschlossen. Newsletter-Zeilen bereinigt: ${result.newsletterRows || 0}.`);
-    setReload(reload + 1);
+    const result = await run(
+      () => api('/admin/pii-vault/cleanup-legacy', { method: 'POST', body: '{}' }),
+      (data) => `Bereinigung abgeschlossen. Bereinigte Newsletter-Zeilen: ${data.newsletterRows || 0}.`
+    );
+    if (result) setReload(reload + 1);
   }
 
   return <div>
@@ -149,7 +197,7 @@ export function SecurityCenter() {
       </div>
       <button onClick={() => setReload(reload + 1)} className="button-secondary"><RefreshCw size={16} /> Aktualisieren</button>
     </div>
-    {message && <p className="mt-4 rounded-md bg-blue-50 p-3 text-sm text-blue-800">{message}</p>}
+    <Notice message={message} className="mt-4" />
     {error && <div className="mt-4"><ErrorBox error={error} /></div>}
     {loading && <p className="mt-4 text-sm text-neutral-500">Lade Security Center ...</p>}
     {data && <div className="mt-6 grid gap-6">

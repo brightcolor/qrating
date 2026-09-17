@@ -73,7 +73,7 @@ export class JobWorker {
       else if (job.job_type === 'report.email') await this.handleReportEmail(job);
       else if (job.job_type === 'pretix.sync') await this.handlePretixSync(job.payload);
       else if (job.job_type === 'privacy.retention') await this.handlePrivacyRetention(job);
-      else throw new Error(`Unknown job type: ${job.job_type}`);
+      else throw new Error(`Unbekannte Hintergrundaufgabe „${job.job_type}“. Sie stammt vermutlich aus einer anderen qrating-Version.`);
       await this.db.query(
         `UPDATE background_jobs SET status = 'done', last_error = null, updated_at = now() WHERE id = $1`,
         [job.id]
@@ -96,7 +96,7 @@ export class JobWorker {
     const event = (await this.db.query('SELECT * FROM events WHERE id = $1', [payload.eventId])).rows[0];
     const feedback = (await this.db.query('SELECT * FROM feedback_responses WHERE id = $1', [payload.feedbackId])).rows[0];
     const lowCase = (await this.db.query('SELECT * FROM low_rating_cases WHERE feedback_response_id = $1', [payload.feedbackId])).rows[0];
-    if (!event || !feedback) throw new Error('Event oder Feedback nicht gefunden.');
+    if (!event || !feedback) throw new Error('Die Benachrichtigung entfällt: Das Event oder das Feedback wurde inzwischen gelöscht.');
     const service = new NotificationService(this.db);
     await service.dispatchLowRating(event, { ...feedback, low_rating_case: lowCase || null });
   }
@@ -105,7 +105,7 @@ export class JobWorker {
     const { eventId, userId } = job.payload;
     const event = (await this.db.query('SELECT * FROM events WHERE id = $1', [eventId])).rows[0];
     const user = (await this.db.query('SELECT * FROM users WHERE id = $1', [userId])).rows[0];
-    if (!event || !user) throw new Error('Event oder User nicht gefunden.');
+    if (!event || !user) throw new Error('Der Report entfällt: Das Event oder das Benutzerkonto wurde inzwischen gelöscht.');
     const summary = await this.db.query(
       `SELECT count(*)::int AS total, round(avg(rating)::numeric, 2) AS average_rating,
               round(avg(nps_score)::numeric, 2) AS average_nps,
@@ -120,17 +120,20 @@ export class JobWorker {
     const comments = await this.db.query(`SELECT rating, comment_positive, comment_improvement, general_comment, submitted_at FROM feedback_responses WHERE event_id = $1 ORDER BY submitted_at DESC LIMIT 50`, [event.id]);
     const pdf = buildEventReportPdf({ event, summary: summary.rows[0], distribution: distribution.rows, timeline: timeline.rows, questionStats: questionStats.rows, comments: comments.rows });
     const notification = new NotificationService(this.db);
-    await notification.smtpService.sendMail(event.organization_id, {
+    const sent = await notification.smtpService.sendMail(event.organization_id, {
       to: user.email,
       subject: `qrating Report: ${event.name}`,
       text: `Anbei der aktuelle qrating Report fuer ${event.name}.`,
       attachments: [{ filename: 'qrating-report.pdf', content: pdf }]
     });
+    if (sent?.skipped) {
+      throw new Error('Der Report wurde nicht verschickt: Der E-Mail-Versand ist nicht eingerichtet oder ausgeschaltet. Richte ihn unter SMTP ein.');
+    }
   }
 
   async handlePretixSync(payload) {
     const connection = (await this.db.query('SELECT * FROM pretix_connections WHERE id = $1', [payload.connectionId])).rows[0];
-    if (!connection) throw new Error('Pretix-Verbindung nicht gefunden.');
+    if (!connection) throw new Error('Der Abgleich entfällt: Die Pretix-Verbindung wurde inzwischen gelöscht.');
     const service = new PretixService(this.db);
     await service.syncConnection(connection);
   }

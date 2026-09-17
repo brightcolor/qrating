@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.16.0
+**Version:** 0.17.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -196,6 +196,16 @@ The product website (`/`, `/faq`, `/impressum`, `/datenschutz`) is a separate bu
 - pages switch in place, animations follow `prefers-reduced-motion`
 - migration `012` switches website texts and plan descriptions that were never saved in the admin area to the current defaults
 
+## Error Messages
+
+Every error tells people what happened and what to do next:
+
+- API errors answer with `{ "error": "…" }` in German. Unexpected server failures add a reference (`Fehlerkennung`) that also appears in the backend log: `docker compose logs backend | grep <Kennung>`.
+- Links opened directly in the browser (exports, QR codes, reports) show an error page.
+- Failures of Pretix, webhooks, chat channels, and mail servers are stored as readable text in the "last error" fields of the admin area.
+- The guest page separates unknown QR codes, feedback rounds that start later, and finished rounds.
+- While the backend is unavailable, nginx answers `/api/*` with HTTP 503 and a JSON message.
+
 ## Guest Experience
 
 The public feedback UI is designed for phones:
@@ -384,7 +394,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.16.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.17.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

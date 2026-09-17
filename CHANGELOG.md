@@ -4,6 +4,26 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.17.0] - 2026-09-17
+
+### Added
+
+- Readable error messages throughout: every error says what happened and what to do next. Unexpected server failures show a reference that also appears in the backend log.
+- Links opened directly in the browser (exports, QR codes, reports) show an error page.
+- The guest page tells unknown QR codes, feedback rounds that start later (with their start date) and finished rounds apart, and offers a reload button when it cannot load. The new texts `not_found_*` and `not_started_*` are editable under Texts.
+- Frontend tests for the API client; CI runs them before the build.
+
+### Changed
+
+- Admin area: every save action reports failures in a red notice and success in a blue one. Login, invitation, and password reset check empty fields before sending.
+- Pretix, webhooks, chat channels, and mail servers report failures in German with the cause and a hint, also in the stored "last error" fields.
+- An email notification channel reports an error while SMTP is switched off. A report by email is refused right away in that case, and a queued report fails visibly.
+- Invitations say whether the email went out and show the link to share otherwise.
+- Validation errors on the guest page name the affected field, rate limit messages name the waiting time.
+- nginx answers `/api/*` with HTTP 503 and a JSON message while the backend is unavailable.
+- The admin bundle no longer carries an unused copy of the guest page; broken special characters in the admin area are fixed.
+- Version bumped to `0.17.0`.
+
 ## [0.16.0] - 2026-09-17
 
 ### Added

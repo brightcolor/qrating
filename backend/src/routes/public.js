@@ -2,7 +2,7 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import Joi from 'joi';
 import { query } from '../db/pool.js';
-import { EventResolver } from '../services/eventResolver.js';
+import { EventResolver, calculateFeedbackWindow } from '../services/eventResolver.js';
 import { defaultTexts, defaultTextsByLanguage, loadResolvedTexts } from '../services/textService.js';
 import { eventToPublic } from '../db/bootstrap.js';
 import { hashValue } from '../utils/crypto.js';
@@ -12,8 +12,30 @@ import { enqueueJob } from '../services/jobService.js';
 import { encryptSecret } from '../utils/crypto.js';
 import { getSiteContent } from '../services/siteContentService.js';
 import { emailDomain, emailHash, publicEventStatus, publicOrganization } from '../utils/security.js';
+import { describeWait } from '../middleware/errors.js';
 
 export const publicRouter = express.Router();
+
+// Joi reports field problems in English; guests get a German sentence per field.
+const feedbackFieldMessages = {
+  rating: 'Bitte wähle eine Bewertung von 1 bis 5 Sternen.',
+  npsScore: 'Bitte wähle für die Weiterempfehlung einen Wert von 0 bis 10.',
+  commentPositive: 'Dein Kommentar ist zu lang. Bitte fasse dich kürzer (höchstens 3.000 Zeichen).',
+  commentImprovement: 'Dein Kommentar ist zu lang. Bitte fasse dich kürzer (höchstens 3.000 Zeichen).',
+  generalComment: 'Dein Kommentar ist zu lang. Bitte fasse dich kürzer (höchstens 3.000 Zeichen).',
+  newsletterEmail: 'Bitte gib eine gültige E-Mail-Adresse ein, zum Beispiel name@example.de.',
+  newsletterOptin: 'Die Angabe zum Newsletter ist ungültig. Lade die Seite neu und versuche es erneut.',
+  contactPhone: 'Bitte gib eine gültige Telefonnummer ein. Erlaubt sind Ziffern, Leerzeichen und die Zeichen + ( ) - /.',
+  contactNote: 'Dein Hinweis für den Rückruf ist zu lang. Bitte fasse dich kürzer (höchstens 500 Zeichen).',
+  answers: 'Die Antworten auf die Zusatzfragen ließen sich nicht lesen. Lade die Seite neu und versuche es erneut.',
+  startedAt: 'Das Formular ist nicht mehr aktuell. Lade die Seite neu und sende dein Feedback erneut.'
+};
+
+function feedbackValidationMessage(error) {
+  const field = error.details?.[0]?.path?.[0];
+  return feedbackFieldMessages[field]
+    || 'Einige Angaben sind ungültig. Bitte prüfe deine Eingaben und sende das Feedback erneut.';
+}
 
 publicRouter.get('/site', async (req, res, next) => {
   try {
@@ -38,7 +60,7 @@ const feedbackLimiter = rateLimit({
   max: env.rateLimitMax,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Es wurden zu viele Versuche erkannt. Bitte versuche es später erneut.' }
+  message: { error: `Von diesem Anschluss kamen gerade sehr viele Bewertungen. Bitte warte ${describeWait(env.rateLimitWindowMs)} und sende dein Feedback dann erneut.` }
 });
 
 async function activeQuestions(eventId) {
@@ -158,10 +180,12 @@ publicRouter.get('/e/:eventToken', async (req, res, next) => {
     const resolver = new EventResolver({ query });
     const resolved = await resolver.resolveEventByToken(req.params.eventToken);
     if (resolved.status !== 'ok') {
+      const feedbackWindow = resolved.event ? calculateFeedbackWindow(resolved.event) : null;
       return res.status(410).json({
         status: resolved.status,
         texts: systemTexts(req.query.lang),
-        event: publicEventStatus(resolved.event)
+        event: publicEventStatus(resolved.event),
+        feedback: feedbackWindow ? { opensAt: feedbackWindow.feedbackStart?.toISO(), closesAt: feedbackWindow.feedbackEnd?.toISO() } : null
       });
     }
     await trackQrScan(resolved.event, req.query.source, null, 'event_specific');
@@ -202,13 +226,13 @@ const feedbackSchema = Joi.object({
 publicRouter.post('/events/:eventToken/feedback', feedbackLimiter, async (req, res, next) => {
   try {
     const { value, error } = feedbackSchema.validate(req.body, { stripUnknown: true });
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return res.status(400).json({ error: feedbackValidationMessage(error) });
     if (value.newsletterOptin && !value.newsletterEmail) {
       return res.status(400).json({ error: 'Bitte gib eine gültige E-Mail-Adresse ein.' });
     }
     const resolver = new EventResolver({ query });
     const resolved = await resolver.resolveEventByToken(req.params.eventToken);
-    if (resolved.status !== 'ok') return res.status(410).json({ error: 'Die Feedbackrunde ist nicht geöffnet.' });
+    if (resolved.status !== 'ok') return res.status(410).json({ error: 'Die Bewertung für dieses Event ist gerade geschlossen. Dein Feedback konnte deshalb nicht gespeichert werden.' });
     const event = resolved.event;
     const antiSpam = event.anti_spam_settings || {};
     const secondsSinceStart = value.startedAt ? (Date.now() - new Date(value.startedAt).getTime()) / 1000 : null;

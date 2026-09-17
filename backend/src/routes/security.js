@@ -26,8 +26,8 @@ async function ensureCaseAccess(req, caseId) {
      WHERE lrc.id = $1 AND lrc.organization_id = $2`,
     [caseId, req.admin.organizationId]
   )).rows[0];
-  if (!row) throw httpError(404, 'Low-Rating-Fall nicht gefunden.');
-  if (!(await canAccessEvent({ query }, req.admin, row.event_id))) throw httpError(403, 'Keine Berechtigung fuer dieses Event.');
+  if (!row) throw httpError(404, 'Diesen Fall gibt es nicht mehr. Lade die Liste neu.');
+  if (!(await canAccessEvent({ query }, req.admin, row.event_id))) throw httpError(403, 'Du hast für dieses Event keine Berechtigung. Ein Event-Manager oder Admin kann dich dem Event zuweisen.');
   return row;
 }
 
@@ -224,8 +224,8 @@ securityRouter.post('/pii-vault/newsletter-optins/:id/reveal', requireRole('even
        WHERE no.id = $1 AND no.organization_id = $2`,
       [req.params.id, req.admin.organizationId]
     )).rows[0];
-    if (!row) throw httpError(404, 'Newsletter-Opt-in nicht gefunden.');
-    if (row.event_id && !(await canAccessEvent({ query }, req.admin, row.event_id))) throw httpError(403, 'Keine Berechtigung fuer dieses Event.');
+    if (!row) throw httpError(404, 'Diesen Newsletter-Eintrag gibt es nicht mehr. Lade die Seite neu.');
+    if (row.event_id && !(await canAccessEvent({ query }, req.admin, row.event_id))) throw httpError(403, 'Du hast für dieses Event keine Berechtigung. Ein Event-Manager oder Admin kann dich dem Event zuweisen.');
     await writeAudit({ query }, {
       organizationId: req.admin.organizationId,
       userId: req.admin.sub,
@@ -246,8 +246,8 @@ securityRouter.delete('/pii-vault/newsletter-optins/:id', requireRole('event_man
       'SELECT id, event_id, email_domain FROM newsletter_optins WHERE id = $1 AND organization_id = $2',
       [req.params.id, req.admin.organizationId]
     )).rows[0];
-    if (!row) throw httpError(404, 'Newsletter-Opt-in nicht gefunden.');
-    if (row.event_id && !(await canAccessEvent({ query }, req.admin, row.event_id))) throw httpError(403, 'Keine Berechtigung fuer dieses Event.');
+    if (!row) throw httpError(404, 'Diesen Newsletter-Eintrag gibt es nicht mehr. Lade die Seite neu.');
+    if (row.event_id && !(await canAccessEvent({ query }, req.admin, row.event_id))) throw httpError(403, 'Du hast für dieses Event keine Berechtigung. Ein Event-Manager oder Admin kann dich dem Event zuweisen.');
     await query('DELETE FROM newsletter_optins WHERE id = $1 AND organization_id = $2', [row.id, req.admin.organizationId]);
     await writeAudit({ query }, {
       organizationId: req.admin.organizationId,

@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
-import { decryptSecret } from '../utils/crypto.js';
+import { httpError } from '../middleware/errors.js';
+import { openSecret, smtpFailure } from '../utils/serviceErrors.js';
 
 function publicSettings(row) {
   if (!row) return null;
@@ -28,7 +29,7 @@ export class SmtpService {
       secure: Boolean(settings.secure),
       auth: settings.username ? {
         user: settings.username,
-        pass: settings.password_encrypted ? decryptSecret(settings.password_encrypted) : ''
+        pass: settings.password_encrypted ? openSecret(settings.password_encrypted, 'Das gespeicherte SMTP-Passwort') : ''
       } : undefined
     });
   }
@@ -38,11 +39,15 @@ export class SmtpService {
     const settings = result.rows[0];
     if (!settings) return { skipped: true, reason: 'smtp_disabled' };
     const transporter = this.createTransport(settings);
-    return transporter.sendMail({
-      from: settings.from_name ? `"${settings.from_name}" <${settings.from_email}>` : settings.from_email,
-      replyTo: settings.reply_to || undefined,
-      ...message
-    });
+    try {
+      return await transporter.sendMail({
+        from: settings.from_name ? `"${settings.from_name}" <${settings.from_email}>` : settings.from_email,
+        replyTo: settings.reply_to || undefined,
+        ...message
+      });
+    } catch (error) {
+      throw smtpFailure(error);
+    }
   }
 
   async sendLowRatingAlert(organizationId, payload) {
@@ -68,10 +73,11 @@ export class SmtpService {
   async testSettings(organizationId, to) {
     const settingsResult = await this.db.query('SELECT * FROM smtp_settings WHERE organization_id = $1', [organizationId]);
     const settings = settingsResult.rows[0];
-    if (!settings) throw new Error('Keine SMTP-Einstellungen gespeichert.');
-    const transporter = this.createTransport(settings);
+    if (!settings) throw httpError(400, 'Es sind noch keine SMTP-Einstellungen gespeichert. Trage den Mailserver ein und speichere, bevor du eine Testmail sendest.');
     const recipient = to || settings.notification_email || settings.from_email;
+    if (!recipient) throw httpError(400, 'Für die Testmail fehlt eine Empfängeradresse. Trage eine Absender-E-Mail oder eine Admin-Benachrichtigung ein.');
     try {
+      const transporter = this.createTransport(settings);
       await transporter.verify();
       await transporter.sendMail({
         from: settings.from_name ? `"${settings.from_name}" <${settings.from_email}>` : settings.from_email,
@@ -87,13 +93,14 @@ export class SmtpService {
       );
       return { ok: true, to: recipient };
     } catch (error) {
+      const failure = smtpFailure(error);
       await this.db.query(
         `UPDATE smtp_settings
          SET last_test_status = 'error', last_test_error = $2, last_test_at = now(), updated_at = now()
          WHERE organization_id = $1`,
-        [organizationId, error.message]
+        [organizationId, failure.message]
       );
-      throw error;
+      throw failure;
     }
   }
 }

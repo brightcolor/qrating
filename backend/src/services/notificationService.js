@@ -1,4 +1,5 @@
-import { decryptSecret } from '../utils/crypto.js';
+import { httpError } from '../middleware/errors.js';
+import { fetchService, openSecret } from '../utils/serviceErrors.js';
 import { SmtpService } from './smtpService.js';
 
 export const channelTypes = [
@@ -140,25 +141,34 @@ export class NotificationService {
 
   async sendChannel(channel, payload) {
     const config = channel.config || {};
-    const secret = channel.secret_encrypted ? decryptSecret(channel.secret_encrypted) : null;
-    if (channel.channel_type === 'email') {
-      return this.smtpService.sendMail(channel.organization_id, {
+    const secret = channel.secret_encrypted ? openSecret(channel.secret_encrypted, 'Das gespeicherte Secret dieses Kanals') : null;
+    const type = channel.channel_type;
+    if (type === 'email') {
+      const result = await this.smtpService.sendMail(channel.organization_id, {
         to: config.to || channel.user_email,
         subject: payload.title,
         text: payload.text
       });
+      if (result?.skipped) {
+        throw httpError(400, 'Der E-Mail-Versand ist nicht eingerichtet oder ausgeschaltet. Richte ihn unter SMTP ein und aktiviere ihn.');
+      }
+      return result;
     }
-    if (['discord', 'slack', 'mattermost', 'teams', 'webhook'].includes(channel.channel_type)) {
-      return this.sendWebhook(channel.channel_type, secret || config.url, payload);
+    if (['discord', 'slack', 'mattermost', 'teams', 'webhook'].includes(type)) {
+      return this.sendWebhook(type, secret || config.url, payload);
     }
-    if (channel.channel_type === 'telegram') {
-      return this.postJson(`https://api.telegram.org/bot${secret}/sendMessage`, {
+    if (type === 'telegram') {
+      requireSetting(secret, 'Für Telegram fehlt der Bot-Token. Trage ihn im Feld „Secret / Token / Webhook-URL“ ein.');
+      requireSetting(config.chatId, 'Für Telegram fehlt die Chat-ID. Trage sie im Feld „Config JSON“ ein, zum Beispiel {"chatId":"123456"}.');
+      return this.postJson(type, `https://api.telegram.org/bot${secret}/sendMessage`, {
         chat_id: config.chatId,
         text: payload.text
       });
     }
-    if (channel.channel_type === 'pushover') {
-      return this.postForm('https://api.pushover.net/1/messages.json', {
+    if (type === 'pushover') {
+      requireSetting(secret, 'Für Pushover fehlt der App-Token. Trage ihn im Feld „Secret / Token / Webhook-URL“ ein.');
+      requireSetting(config.userKey, 'Für Pushover fehlt der User-Key. Trage ihn im Feld „Config JSON“ ein, zum Beispiel {"userKey":"…"}.');
+      return this.postForm(type, 'https://api.pushover.net/1/messages.json', {
         token: secret,
         user: config.userKey,
         title: payload.title,
@@ -166,58 +176,85 @@ export class NotificationService {
         priority: String(config.priority ?? 0)
       });
     }
-    if (channel.channel_type === 'ntfy') {
+    if (type === 'ntfy') {
+      requireSetting(config.topicUrl, 'Für ntfy fehlt die Topic-Adresse. Trage sie im Feld „Config JSON“ ein, zum Beispiel {"topicUrl":"https://ntfy.sh/mein-topic"}.');
       const headers = {
         title: payload.title,
         priority: String(config.priority || 'high')
       };
       if (secret) headers.authorization = `Bearer ${secret}`;
-      return this.fetchChecked(config.topicUrl, { method: 'POST', headers, body: payload.text });
+      return this.fetchChecked(type, config.topicUrl, { method: 'POST', headers, body: payload.text });
     }
-    if (channel.channel_type === 'gotify') {
-      const url = new URL('/message', config.url.replace(/\/$/, ''));
-      return this.postJson(url.toString(), {
+    if (type === 'gotify') {
+      requireSetting(secret, 'Für Gotify fehlt der App-Token. Trage ihn im Feld „Secret / Token / Webhook-URL“ ein.');
+      requireSetting(config.url, 'Für Gotify fehlt die Server-Adresse. Trage sie im Feld „Config JSON“ ein, zum Beispiel {"url":"https://gotify.example.com"}.');
+      let url;
+      try {
+        url = new URL('/message', String(config.url).replace(/\/$/, ''));
+      } catch {
+        throw httpError(400, 'Die Gotify-Adresse im Feld „Config JSON“ ist ungültig. Sie muss mit https:// beginnen.');
+      }
+      return this.postJson(type, url.toString(), {
         title: payload.title,
         message: payload.text,
         priority: Number(config.priority || 5)
       }, { 'x-gotify-key': secret });
     }
-    throw new Error(`Unbekannter Kanaltyp: ${channel.channel_type}`);
+    throw httpError(400, `Den Kanaltyp „${type}“ kennt qrating nicht. Lege den Kanal mit einem der angebotenen Typen neu an.`);
   }
 
   async sendWebhook(type, url, payload) {
-    if (!url) throw new Error('Webhook-URL fehlt.');
+    requireSetting(url, 'Für diesen Kanal ist keine Webhook-URL hinterlegt. Trage sie im Feld „Secret / Token / Webhook-URL“ ein.');
     if (type === 'discord') {
-      return this.postJson(url, { content: `**${payload.title}**\n${payload.text}` });
+      return this.postJson(type, url, { content: `**${payload.title}**\n${payload.text}` });
     }
     if (type === 'slack' || type === 'mattermost') {
-      return this.postJson(url, { text: `*${payload.title}*\n${payload.text}` });
+      return this.postJson(type, url, { text: `*${payload.title}*\n${payload.text}` });
     }
     if (type === 'teams') {
-      return this.postJson(url, { text: `**${payload.title}**\n\n${payload.text}` });
+      return this.postJson(type, url, { text: `**${payload.title}**\n\n${payload.text}` });
     }
-    return this.postJson(url, { title: payload.title, text: payload.text, event: payload.event, feedback: payload.feedback });
+    return this.postJson(type, url, { title: payload.title, text: payload.text, event: payload.event, feedback: payload.feedback });
   }
 
-  async postJson(url, body, headers = {}) {
-    return this.fetchChecked(url, {
+  async postJson(type, url, body, headers = {}) {
+    return this.fetchChecked(type, url, {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...headers },
       body: JSON.stringify(body)
     });
   }
 
-  async postForm(url, body) {
-    return this.fetchChecked(url, {
+  async postForm(type, url, body) {
+    return this.fetchChecked(type, url, {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams(body).toString()
     });
   }
 
-  async fetchChecked(url, options) {
-    const response = await this.fetchImpl(url, options);
-    if (!response.ok) throw new Error(`Notification endpoint returned ${response.status}`);
+  async fetchChecked(type, url, options) {
+    const service = channelServiceNames[type] || 'Der Empfänger der Benachrichtigung';
+    const response = await fetchService(service, this.fetchImpl, url, options, {
+      overrides: type === 'telegram' ? { 404: ['kennt den Bot-Token nicht', 'Prüfe den Token von @BotFather.'] } : {}
+    });
     return { status: response.status };
   }
+}
+
+const channelServiceNames = {
+  discord: 'Discord',
+  slack: 'Slack',
+  mattermost: 'Mattermost',
+  teams: 'Microsoft Teams',
+  telegram: 'Telegram',
+  pushover: 'Pushover',
+  ntfy: 'Der ntfy-Server',
+  gotify: 'Der Gotify-Server',
+  webhook: 'Der Webhook-Empfänger'
+};
+
+function requireSetting(value, message) {
+  if (!value) throw httpError(400, message);
+  return value;
 }

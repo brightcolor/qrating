@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { decryptSecret } from '../utils/crypto.js';
+import { fetchService, openSecret } from '../utils/serviceErrors.js';
 
 export class WebhookService {
   constructor(db, fetchImpl = fetch) {
@@ -28,15 +28,14 @@ export class WebhookService {
   async callEndpoint(endpoint, eventName, payload) {
     const body = JSON.stringify({ event: eventName, payload });
     const headers = { 'content-type': 'application/json', 'user-agent': 'qrating-Webhook/0.1' };
-    const secret = endpoint.secret_encrypted ? decryptSecret(endpoint.secret_encrypted) : endpoint.secret;
+    const secret = endpoint.secret_encrypted ? openSecret(endpoint.secret_encrypted, 'Das gespeicherte Webhook-Secret') : endpoint.secret;
     if (secret) {
       headers['x-qrating-signature'] = crypto
         .createHmac('sha256', secret)
         .update(body)
         .digest('hex');
     }
-    const response = await this.fetchImpl(endpoint.url, { method: 'POST', headers, body });
-    if (!response.ok) throw new Error(`Webhook returned ${response.status}`);
+    const response = await fetchService('Der Webhook-Empfänger', this.fetchImpl, endpoint.url, { method: 'POST', headers, body });
     await this.db.query(
       'UPDATE webhook_endpoints SET last_status = $1, last_error = null, last_called_at = now() WHERE id = $2',
       [`${response.status}`, endpoint.id]

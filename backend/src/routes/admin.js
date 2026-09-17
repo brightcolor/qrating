@@ -7,6 +7,7 @@ import { httpError } from '../middleware/errors.js';
 import { env } from '../config/env.js';
 import { decryptSecret, encryptSecret, hashValue } from '../utils/crypto.js';
 import { randomToken, slugify } from '../utils/crypto.js';
+import { openSecret, smtpFailure } from '../utils/serviceErrors.js';
 import { EventResolver, calculateFeedbackWindow } from '../services/eventResolver.js';
 import { PretixService } from '../services/pretixService.js';
 import { normalizeEventInput } from '../db/bootstrap.js';
@@ -76,7 +77,7 @@ adminRouter.patch('/billing/plans', requireRole('admin'), async (req, res, next)
 
 async function ensureEventAccess(req, eventId) {
   if (!(await canAccessEvent({ query }, req.admin, eventId))) {
-    throw httpError(403, 'Keine Berechtigung fuer dieses Event.');
+    throw httpError(403, 'Du hast für dieses Event keine Berechtigung. Ein Event-Manager oder Admin kann dich dem Event zuweisen.');
   }
 }
 
@@ -101,7 +102,7 @@ async function ensureActiveEventLimit(req) {
     [req.admin.organizationId]
   )).rows[0]?.count || 0);
   if (count >= plan.limits.activeEvents) {
-    throw httpError(402, `Der ${plan.name}-Plan erlaubt maximal ${plan.limits.activeEvents} aktive Events. Bitte pruefe den internen Plan.`);
+    throw httpError(402, `Der Tarif ${plan.name} erlaubt höchstens ${plan.limits.activeEvents} aktive Events. Für weitere Events braucht deine Organisation einen größeren Tarif; ein Plattform-Admin kann ihn unter Plan & Billing freischalten.`);
   }
   return plan;
 }
@@ -114,7 +115,7 @@ async function ensureFormLimit(req) {
     [req.admin.organizationId]
   )).rows[0]?.count || 0);
   if (count >= plan.limits.templates) {
-    throw httpError(402, `Der ${plan.name}-Plan enthaelt maximal ${plan.limits.templates} Formulare oder Profile. Bitte pruefe den internen Plan.`);
+    throw httpError(402, `Der Tarif ${plan.name} erlaubt höchstens ${plan.limits.templates} Formulare und Fragenprofile. Für weitere braucht deine Organisation einen größeren Tarif; ein Plattform-Admin kann ihn unter Plan & Billing freischalten.`);
   }
   return plan;
 }
@@ -225,7 +226,7 @@ adminRouter.post('/events', requireRole('event_manager'), async (req, res, next)
     await ensureActiveEventLimit(req);
     const organization = (await query('SELECT * FROM organizations WHERE id = $1', [req.admin.organizationId])).rows[0];
     const input = normalizeEventInput(req.body, organization);
-    if (!input.name || !input.date_from) throw httpError(400, 'Eventname und Datum sind erforderlich.');
+    if (!input.name || !input.date_from) throw httpError(400, 'Bitte gib einen Eventnamen und ein Datum an.');
     let event = null;
     // Recurring events reuse their name, so a taken slug gets a random suffix.
     for (let attempt = 0; !event && attempt < 5; attempt += 1) {
@@ -272,7 +273,7 @@ adminRouter.get('/events/:id', async (req, res, next) => {
   try {
     await ensureEventAccess(req, req.params.id);
     const event = (await query('SELECT * FROM events WHERE id = $1 AND organization_id = $2', [req.params.id, req.admin.organizationId])).rows[0];
-    if (!event) throw httpError(404, 'Event nicht gefunden.');
+    if (!event) throw httpError(404, 'Dieses Event gibt es nicht mehr oder es gehört zu einer anderen Organisation. Lade die Liste neu.');
     const forms = await query('SELECT * FROM feedback_forms WHERE event_id = $1 ORDER BY created_at', [event.id]);
     const questions = await query(
       `SELECT q.* FROM feedback_questions q
@@ -288,7 +289,7 @@ adminRouter.get('/events/:id', async (req, res, next) => {
 
 adminRouter.get('/events/:id/assignments', async (req, res, next) => {
   try {
-    if (!hasRole(req.admin.role, 'event_manager')) throw httpError(403, 'Keine Berechtigung fuer Event-Zuweisungen.');
+    if (!hasRole(req.admin.role, 'event_manager')) throw httpError(403, 'Event-Zuweisungen können nur Event-Manager, Admins und Owner ändern.');
     const result = await query(
       `SELECT u.id AS user_id, u.name, u.email, COALESCE(uea.notify_low_rating, false) AS notify_low_rating,
               uea.id IS NOT NULL AS assigned
@@ -306,8 +307,8 @@ adminRouter.get('/events/:id/assignments', async (req, res, next) => {
 
 adminRouter.put('/events/:id/assignments', async (req, res, next) => {
   try {
-    if (!hasRole(req.admin.role, 'event_manager')) throw httpError(403, 'Keine Berechtigung fuer Event-Zuweisungen.');
-    await ensurePlanFeature(req, 'teams', 'Event-Zuweisungen und Team-Management sind im Business-Plan enthalten.');
+    if (!hasRole(req.admin.role, 'event_manager')) throw httpError(403, 'Event-Zuweisungen können nur Event-Manager, Admins und Owner ändern.');
+    await ensurePlanFeature(req, 'teams', 'Event-Zuweisungen gehören zum Tarif Business. Ein Plattform-Admin kann ihn unter Plan & Billing freischalten.');
     const assignments = Array.isArray(req.body.assignments) ? req.body.assignments : [];
     await query('DELETE FROM user_event_assignments WHERE event_id = $1 AND organization_id = $2', [req.params.id, req.admin.organizationId]);
     for (const assignment of assignments.filter((item) => item.assigned)) {
@@ -356,7 +357,7 @@ adminRouter.patch('/events/:id', async (req, res, next) => {
         req.body.resolverPriority
       ]
     );
-    if (!result.rows[0]) throw httpError(404, 'Event nicht gefunden.');
+    if (!result.rows[0]) throw httpError(404, 'Dieses Event gibt es nicht mehr oder es gehört zu einer anderen Organisation. Lade die Liste neu.');
     res.json(result.rows[0]);
   } catch (error) {
     next(error);
@@ -549,7 +550,7 @@ adminRouter.get('/events/:id/report.pdf', async (req, res, next) => {
   try {
     await ensureEventAccess(req, req.params.id);
     const event = (await query('SELECT * FROM events WHERE id = $1 AND organization_id = $2', [req.params.id, req.admin.organizationId])).rows[0];
-    if (!event) throw httpError(404, 'Event nicht gefunden.');
+    if (!event) throw httpError(404, 'Dieses Event gibt es nicht mehr oder es gehört zu einer anderen Organisation. Lade die Liste neu.');
     const summaryResult = await query(
       `SELECT count(*)::int AS total,
               round(avg(rating)::numeric, 2) AS average_rating,
@@ -616,13 +617,20 @@ adminRouter.post('/events/:id/report-email', async (req, res, next) => {
     await ensureEventAccess(req, req.params.id);
     const targetUserId = req.body.userId || req.admin.sub;
     if (!hasRole(req.admin.role, 'event_manager') && targetUserId !== req.admin.sub) {
-      throw httpError(403, 'Reports duerfen nur an den eigenen Benutzer gesendet werden.');
+      throw httpError(403, 'Du kannst Reports nur an dich selbst schicken.');
     }
     const targetUser = (await query(
       'SELECT id FROM users WHERE id = $1 AND organization_id = $2',
       [targetUserId, req.admin.organizationId]
     )).rows[0];
-    if (!targetUser) throw httpError(404, 'Benutzer nicht gefunden.');
+    if (!targetUser) throw httpError(404, 'Dieses Benutzerkonto gibt es nicht mehr. Lade die Seite neu.');
+    const smtpEnabled = (await query(
+      'SELECT 1 FROM smtp_settings WHERE organization_id = $1 AND enabled = true',
+      [req.admin.organizationId]
+    )).rows.length > 0;
+    if (!smtpEnabled) {
+      throw httpError(400, 'Der E-Mail-Versand ist nicht eingerichtet oder ausgeschaltet. Richte ihn unter SMTP ein, dann verschickt qrating den Report.');
+    }
     const job = await enqueueJob({ query }, req.admin.organizationId, 'report.email', {
       eventId: req.params.id,
       userId: targetUserId
@@ -659,12 +667,12 @@ adminRouter.post('/events/:id/sync-image', requireRole('event_manager'), async (
        WHERE e.id = $1 AND e.organization_id = $2`,
       [req.params.id, req.admin.organizationId]
     )).rows[0];
-    if (!event) throw httpError(404, 'Pretix-Event nicht gefunden.');
+    if (!event) throw httpError(404, 'Dieses Event stammt aus keiner Pretix-Verbindung. Das Bild lässt sich nur für Pretix-Events neu laden.');
     const connection = {
       ...event,
       id: event.pretix_connection_id,
       organization_id: event.organization_id,
-      api_token: decryptSecret(event.api_token_encrypted)
+      api_token: openSecret(event.api_token_encrypted, 'Der gespeicherte Pretix-API-Token')
     };
     const service = new PretixService({ query });
     const image = await service.syncImageForEvent(connection, event, event.pretix_event_slug);
@@ -678,7 +686,7 @@ adminRouter.get('/events/:id/qr', async (req, res, next) => {
   try {
     await ensureEventAccess(req, req.params.id);
     const event = (await query('SELECT * FROM events WHERE id = $1 AND organization_id = $2', [req.params.id, req.admin.organizationId])).rows[0];
-    if (!event) throw httpError(404, 'Event nicht gefunden.');
+    if (!event) throw httpError(404, 'Dieses Event gibt es nicht mehr oder es gehört zu einer anderen Organisation. Lade die Liste neu.');
     const url = `${env.feedbackAppUrl}/e/${event.event_feedback_token}`;
     res.type('image/svg+xml').send(await QRCode.toString(url, { type: 'svg', margin: 1 }));
   } catch (error) {
@@ -690,7 +698,7 @@ adminRouter.get('/events/:id/qr-print', async (req, res, next) => {
   try {
     await ensureEventAccess(req, req.params.id);
     const event = (await query('SELECT * FROM events WHERE id = $1 AND organization_id = $2', [req.params.id, req.admin.organizationId])).rows[0];
-    if (!event) throw httpError(404, 'Event nicht gefunden.');
+    if (!event) throw httpError(404, 'Dieses Event gibt es nicht mehr oder es gehört zu einer anderen Organisation. Lade die Liste neu.');
     const url = `${env.feedbackAppUrl}/e/${event.event_feedback_token}`;
     const svg = await QRCode.toString(url, { type: 'svg', margin: 1 });
     res.type('html').send(`<!doctype html><html lang="de"><head><meta charset="utf-8"><title>QR ${event.name}</title><style>body{font-family:Arial,sans-serif;margin:0;padding:48px;text-align:center}.sheet{border:1px solid #ddd;padding:48px;max-width:640px;margin:auto}svg{width:320px;height:320px}h1{font-size:34px;margin:0 0 16px}p{font-size:18px;color:#555}</style></head><body><div class="sheet"><h1>${event.name}</h1>${svg}<p>Scannen, bewerten, fertig.</p><p>${url}</p></div><script>window.print()</script></body></html>`);
@@ -702,7 +710,7 @@ adminRouter.get('/events/:id/qr-print', async (req, res, next) => {
 adminRouter.get('/organizations/:id/qr', async (req, res, next) => {
   try {
     const org = (await query('SELECT * FROM organizations WHERE id = $1 AND id = $2', [req.params.id, req.admin.organizationId])).rows[0];
-    if (!org) throw httpError(404, 'Organisation nicht gefunden.');
+    if (!org) throw httpError(404, 'Diese Organisation gehört nicht zu deinem Konto. Lade die Seite neu.');
     const url = `${env.feedbackAppUrl}/f/${org.slug}`;
     res.type('image/svg+xml').send(await QRCode.toString(url, { type: 'svg', margin: 1 }));
   } catch (error) {
@@ -758,7 +766,7 @@ adminRouter.post('/forms/from-profile', async (req, res, next) => {
 
     if (req.body.profileId) {
       const profile = getQuestionProfile(req.body.profileId);
-      if (!profile) throw httpError(400, 'Fragenprofil nicht gefunden.');
+      if (!profile) throw httpError(400, 'Dieses Fragenprofil gibt es nicht. Wähle ein anderes aus.');
       sourceName = profile.name;
       sourceDescription = profile.summary;
       questions = profile.questions;
@@ -767,7 +775,7 @@ adminRouter.post('/forms/from-profile', async (req, res, next) => {
         'SELECT * FROM feedback_forms WHERE id = $1 AND organization_id = $2 AND is_template = true',
         [req.body.templateFormId, req.admin.organizationId]
       )).rows[0];
-      if (!source) throw httpError(400, 'Gespeichertes Fragenprofil nicht gefunden.');
+      if (!source) throw httpError(400, 'Dieses gespeicherte Fragenprofil gibt es nicht mehr. Lade die Seite neu und wähle ein anderes aus.');
       sourceName = source.name;
       sourceDescription = source.description || '';
       const existing = await query(
@@ -792,7 +800,7 @@ adminRouter.post('/forms/from-profile', async (req, res, next) => {
         options: item.options
       }));
     } else {
-      throw httpError(400, 'Bitte waehle ein Fragenprofil aus.');
+      throw httpError(400, 'Bitte wähle ein Fragenprofil aus.');
     }
 
     const created = await withTransaction(async (client) => {
@@ -823,7 +831,7 @@ adminRouter.get('/forms/:id', async (req, res, next) => {
       'SELECT * FROM feedback_forms WHERE id = $1 AND organization_id = $2',
       [req.params.id, req.admin.organizationId]
     )).rows[0];
-    if (!form) throw httpError(404, 'Formular nicht gefunden.');
+    if (!form) throw httpError(404, 'Dieses Formular gibt es nicht mehr. Lade die Liste neu.');
     const questions = await query(
       'SELECT * FROM feedback_questions WHERE feedback_form_id = $1 ORDER BY sort_order, created_at',
       [form.id]
@@ -869,7 +877,7 @@ adminRouter.patch('/forms/:id', async (req, res, next) => {
        RETURNING *`,
       [req.params.id, req.admin.organizationId, req.body.name, req.body.description, req.body.active]
     );
-    if (!result.rows[0]) throw httpError(404, 'Formular nicht gefunden.');
+    if (!result.rows[0]) throw httpError(404, 'Dieses Formular gibt es nicht mehr. Lade die Liste neu.');
     res.json(result.rows[0]);
   } catch (error) {
     next(error);
@@ -883,7 +891,7 @@ adminRouter.post('/forms/:id/save-profile', async (req, res, next) => {
       'SELECT * FROM feedback_forms WHERE id = $1 AND organization_id = $2',
       [req.params.id, req.admin.organizationId]
     )).rows[0];
-    if (!form) throw httpError(404, 'Formular nicht gefunden.');
+    if (!form) throw httpError(404, 'Dieses Formular gibt es nicht mehr. Lade die Liste neu.');
     const created = await withTransaction(async (client) => {
       const profile = (await client.query(
         `INSERT INTO feedback_forms (organization_id, event_id, name, description, is_template, active)
@@ -915,7 +923,7 @@ adminRouter.post('/forms/:id/questions', async (req, res, next) => {
       'SELECT id FROM feedback_forms WHERE id = $1 AND organization_id = $2',
       [req.params.id, req.admin.organizationId]
     )).rows[0];
-    if (!form) throw httpError(404, 'Formular nicht gefunden.');
+    if (!form) throw httpError(404, 'Dieses Formular gibt es nicht mehr. Lade die Liste neu.');
     const result = await query(
       `INSERT INTO feedback_questions (feedback_form_id, question_type, internal_name, label, help_text, placeholder, required, sort_order, options, visibility_rules)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
@@ -978,7 +986,7 @@ adminRouter.patch('/forms/:id/questions/:questionId', async (req, res, next) => 
         req.admin.organizationId
       ]
     );
-    if (!result.rows[0]) throw httpError(404, 'Frage nicht gefunden.');
+    if (!result.rows[0]) throw httpError(404, 'Diese Frage gibt es nicht mehr. Lade das Formular neu.');
     res.json(result.rows[0]);
   } catch (error) {
     next(error);
@@ -1008,7 +1016,7 @@ adminRouter.post('/forms/:id/duplicate', async (req, res, next) => {
       'SELECT * FROM feedback_forms WHERE id = $1 AND organization_id = $2',
       [req.params.id, req.admin.organizationId]
     )).rows[0];
-    if (!form) throw httpError(404, 'Formular nicht gefunden.');
+    if (!form) throw httpError(404, 'Dieses Formular gibt es nicht mehr. Lade die Liste neu.');
     const isTemplate = Boolean(req.body.isTemplate);
     const eventId = isTemplate ? null : (req.body.eventId || form.event_id);
     if (eventId) await ensureEventAccess(req, eventId);
@@ -1080,7 +1088,7 @@ adminRouter.patch('/text-templates/:id', async (req, res, next) => {
        WHERE id = $1 AND organization_id = $2 RETURNING *`,
       [req.params.id, req.admin.organizationId, req.body.value, req.body.style]
     );
-    if (!result.rows[0]) throw httpError(404, 'Text nicht gefunden.');
+    if (!result.rows[0]) throw httpError(404, 'Diesen Text gibt es nicht mehr. Lade die Seite neu.');
     res.json(result.rows[0]);
   } catch (error) {
     next(error);
@@ -1147,7 +1155,7 @@ adminRouter.patch('/qr-sources/:id', async (req, res, next) => {
        WHERE id = $1 AND organization_id = $2 RETURNING *`,
       [req.params.id, req.admin.organizationId, req.body.label, req.body.active]
     );
-    if (!result.rows[0]) throw httpError(404, 'QR-Quelle nicht gefunden.');
+    if (!result.rows[0]) throw httpError(404, 'Diese QR-Quelle gibt es nicht mehr. Lade die Seite neu.');
     res.json(result.rows[0]);
   } catch (error) {
     next(error);
@@ -1198,13 +1206,13 @@ adminRouter.get('/users', async (req, res, next) => {
 
 adminRouter.post('/users/invite', requireRole('owner'), async (req, res, next) => {
   try {
-    await ensurePlanFeature(req, 'teams', 'Team-Management ist im Business-Plan enthalten. Bitte upgrade oder setze einen Business-Override.');
+    await ensurePlanFeature(req, 'teams', 'Weitere Benutzer einladen gehört zum Tarif Business. Ein Plattform-Admin kann ihn unter Plan & Billing freischalten.');
     const email = String(req.body.email || '').trim().toLowerCase();
     const name = String(req.body.name || email.split('@')[0] || 'Neuer User').trim();
     const role = req.body.role || 'support';
     const allowedRoles = ['support', 'analyst', 'event_manager', 'admin', 'owner'];
-    if (!email.includes('@')) throw httpError(400, 'Eine gueltige E-Mail-Adresse ist erforderlich.');
-    if (!allowedRoles.includes(role)) throw httpError(400, 'Unbekannte Rolle.');
+    if (!email.includes('@')) throw httpError(400, 'Bitte gib eine gültige E-Mail-Adresse ein.');
+    if (!allowedRoles.includes(role)) throw httpError(400, 'Diese Rolle gibt es nicht. Wähle Support, Analyst, Event Manager, Admin oder Owner.');
     const token = randomToken(32);
     const passwordHash = await bcrypt.hash(randomToken(32), 12);
     const user = (await query(
@@ -1230,7 +1238,7 @@ adminRouter.post('/users/invite', requireRole('owner'), async (req, res, next) =
       to: email,
       subject: 'Einladung zu qrating',
       text: `Du wurdest zu qrating eingeladen.\n\nEinladung abschliessen:\n${inviteUrl}\n\nDer Link ist 7 Tage gueltig.`
-    }).catch((error) => ({ skipped: true, error: error.message }));
+    }).catch((error) => ({ skipped: true, reason: 'send_failed', error: smtpFailure(error).message }));
     res.status(201).json({ user, inviteUrl, mail });
   } catch (error) {
     next(error);
@@ -1240,9 +1248,9 @@ adminRouter.post('/users/invite', requireRole('owner'), async (req, res, next) =
 adminRouter.patch('/users/:id', requireRole('owner'), async (req, res, next) => {
   try {
     const allowedRoles = ['support', 'analyst', 'event_manager', 'admin', 'owner'];
-    if (req.body.role && !allowedRoles.includes(req.body.role)) throw httpError(400, 'Unbekannte Rolle.');
+    if (req.body.role && !allowedRoles.includes(req.body.role)) throw httpError(400, 'Diese Rolle gibt es nicht. Wähle Support, Analyst, Event Manager, Admin oder Owner.');
     const allowedStatuses = ['invited', 'active', 'disabled'];
-    if (req.body.status && !allowedStatuses.includes(req.body.status)) throw httpError(400, 'Unbekannter Benutzerstatus.');
+    if (req.body.status && !allowedStatuses.includes(req.body.status)) throw httpError(400, 'Diesen Status gibt es nicht. Wähle Eingeladen, Aktiv oder Deaktiviert.');
     const result = await query(
       `UPDATE users
        SET name = COALESCE($3, name),
@@ -1253,7 +1261,7 @@ adminRouter.patch('/users/:id', requireRole('owner'), async (req, res, next) => 
        RETURNING id, name, email, role, status, invited_at, invite_expires_at, last_login_at, created_at`,
       [req.params.id, req.admin.organizationId, req.body.name, req.body.role, req.body.status]
     );
-    if (!result.rows[0]) throw httpError(404, 'Benutzer nicht gefunden.');
+    if (!result.rows[0]) throw httpError(404, 'Dieses Benutzerkonto gibt es nicht mehr. Lade die Seite neu.');
     res.json(result.rows[0]);
   } catch (error) {
     next(error);
@@ -1360,7 +1368,7 @@ adminRouter.post('/notification-channels', async (req, res, next) => {
   try {
     const userId = req.body.userId || req.admin.sub;
     if (!hasRole(req.admin.role, 'event_manager') && userId !== req.admin.sub) {
-      throw httpError(403, 'Du kannst nur eigene Benachrichtigungskanaele anlegen.');
+      throw httpError(403, 'Du kannst Benachrichtigungskanäle nur für dich selbst anlegen.');
     }
     const secretProvided = typeof req.body.secret === 'string' && req.body.secret.length > 0;
     const result = await query(
@@ -1412,7 +1420,7 @@ adminRouter.patch('/notification-channels/:id', async (req, res, next) => {
         req.admin.sub
       ]
     );
-    if (!result.rows[0]) throw httpError(404, 'Benachrichtigungskanal nicht gefunden.');
+    if (!result.rows[0]) throw httpError(404, 'Diesen Benachrichtigungskanal gibt es nicht mehr. Lade die Seite neu.');
     res.json(publicChannel(result.rows[0]));
   } catch (error) {
     next(error);
@@ -1441,7 +1449,7 @@ adminRouter.post('/notification-channels/:id/test', async (req, res, next) => {
       [req.params.id, req.admin.organizationId, hasRole(req.admin.role, 'event_manager'), req.admin.sub]
     );
     const channel = result.rows[0];
-    if (!channel) throw httpError(404, 'Benachrichtigungskanal nicht gefunden.');
+    if (!channel) throw httpError(404, 'Diesen Benachrichtigungskanal gibt es nicht mehr. Lade die Seite neu.');
     const service = new NotificationService({ query });
     await service.sendChannel(channel, {
       title: 'qrating Testbenachrichtigung',
@@ -1516,10 +1524,10 @@ adminRouter.patch('/low-rating-cases/:id', async (req, res, next) => {
       'SELECT * FROM low_rating_cases WHERE id = $1 AND organization_id = $2',
       [req.params.id, req.admin.organizationId]
     )).rows[0];
-    if (!current) throw httpError(404, 'Low-Rating-Fall nicht gefunden.');
+    if (!current) throw httpError(404, 'Diesen Fall gibt es nicht mehr. Lade die Liste neu.');
     await ensureEventAccess(req, current.event_id);
     const allowedStatuses = ['open', 'contact_planned', 'contacted', 'resolved', 'archived'];
-    if (req.body.status && !allowedStatuses.includes(req.body.status)) throw httpError(400, 'Unbekannter Status.');
+    if (req.body.status && !allowedStatuses.includes(req.body.status)) throw httpError(400, 'Diesen Status gibt es nicht. Wähle Offen, Rückruf geplant, Kontaktiert, Geklärt oder Archiviert.');
     const assignedUserId = hasRole(req.admin.role, 'event_manager')
       ? (req.body.assignedUserId ?? current.assigned_user_id)
       : current.assigned_user_id;
@@ -1665,7 +1673,7 @@ adminRouter.patch('/webhooks/:id', requireRole('admin'), async (req, res, next) 
         secretEncrypted
       ]
     );
-    if (!result.rows[0]) throw httpError(404, 'Webhook nicht gefunden.');
+    if (!result.rows[0]) throw httpError(404, 'Diesen Webhook gibt es nicht mehr. Lade die Seite neu.');
     res.json(result.rows[0]);
   } catch (error) {
     next(error);
@@ -1823,7 +1831,7 @@ adminRouter.patch('/pretix-connections/:id', requireRole('event_manager'), async
         tokenProvided ? encryptSecret(req.body.apiToken) : null
       ]
     );
-    if (!result.rows[0]) throw httpError(404, 'Pretix-Verbindung nicht gefunden.');
+    if (!result.rows[0]) throw httpError(404, 'Diese Pretix-Verbindung gibt es nicht mehr. Lade die Seite neu.');
     res.json(result.rows[0]);
   } catch (error) {
     next(error);
@@ -1833,7 +1841,7 @@ adminRouter.patch('/pretix-connections/:id', requireRole('event_manager'), async
 adminRouter.post('/pretix-connections/:id/test', async (req, res, next) => {
   try {
     const connection = (await query('SELECT * FROM pretix_connections WHERE id = $1 AND organization_id = $2', [req.params.id, req.admin.organizationId])).rows[0];
-    if (!connection) throw httpError(404, 'Pretix-Verbindung nicht gefunden.');
+    if (!connection) throw httpError(404, 'Diese Pretix-Verbindung gibt es nicht mehr. Lade die Seite neu.');
     const service = new PretixService({ query });
     res.json(await service.testConnection(connection));
   } catch (error) {
@@ -1844,7 +1852,7 @@ adminRouter.post('/pretix-connections/:id/test', async (req, res, next) => {
 adminRouter.post('/pretix-connections/:id/sync', async (req, res, next) => {
   try {
     const connection = (await query('SELECT * FROM pretix_connections WHERE id = $1 AND organization_id = $2', [req.params.id, req.admin.organizationId])).rows[0];
-    if (!connection) throw httpError(404, 'Pretix-Verbindung nicht gefunden.');
+    if (!connection) throw httpError(404, 'Diese Pretix-Verbindung gibt es nicht mehr. Lade die Seite neu.');
     const service = new PretixService({ query });
     res.json(await service.syncConnection(connection));
   } catch (error) {

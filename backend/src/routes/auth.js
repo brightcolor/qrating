@@ -4,7 +4,7 @@ import rateLimit from 'express-rate-limit';
 import QRCode from 'qrcode';
 import { query, withTransaction } from '../db/pool.js';
 import { signAdmin, requireAdmin } from '../middleware/auth.js';
-import { httpError } from '../middleware/errors.js';
+import { describeWait, httpError } from '../middleware/errors.js';
 import { env } from '../config/env.js';
 import { decryptSecret, encryptSecret, hashValue, randomToken, slugify } from '../utils/crypto.js';
 import { SmtpService } from '../services/smtpService.js';
@@ -19,7 +19,7 @@ const authLimiter = rateLimit({
   max: env.nodeEnv === 'test' ? 1000 : 20,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Zu viele Anmeldeversuche. Bitte versuche es spaeter erneut.' }
+  message: { error: `Zu viele Anmeldeversuche von diesem Anschluss. Bitte warte ${describeWait(15 * 60 * 1000)} und versuche es dann erneut.` }
 });
 
 const passwordResetLimiter = rateLimit({
@@ -27,7 +27,7 @@ const passwordResetLimiter = rateLimit({
   max: env.nodeEnv === 'test' ? 1000 : 5,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Zu viele Reset-Anfragen. Bitte versuche es spaeter erneut.' }
+  message: { error: `Zu viele Anfragen zum Zurücksetzen des Passworts. Bitte warte ${describeWait(60 * 60 * 1000)} und versuche es dann erneut.` }
 });
 
 function publicUser(user) {
@@ -96,7 +96,7 @@ authRouter.post('/setup/first-admin', authLimiter, async (req, res, next) => {
     const organizationSlug = slugify(req.body.organizationSlug || organizationName || env.organizationSlug);
 
     if (!name) throw httpError(400, 'Bitte gib deinen Namen ein.');
-    if (!email || !email.includes('@')) throw httpError(400, 'Bitte gib eine gueltige E-Mail-Adresse ein.');
+    if (!email || !email.includes('@')) throw httpError(400, 'Bitte gib eine gültige E-Mail-Adresse ein.');
     if (password.length < 10) throw httpError(400, 'Das Passwort muss mindestens 10 Zeichen lang sein.');
     if (!organizationName) throw httpError(400, 'Bitte gib einen Organisationsnamen ein.');
 
@@ -161,10 +161,10 @@ authRouter.post('/login', authLimiter, async (req, res, next) => {
     const result = await query('SELECT * FROM users WHERE email = $1', [String(email || '').toLowerCase()]);
     const user = result.rows[0];
     if (!user || !(await bcrypt.compare(password || '', user.password_hash))) {
-      throw httpError(401, 'E-Mail oder Passwort ist falsch.');
+      throw httpError(401, 'E-Mail oder Passwort ist falsch. Prüfe beides oder setze dein Passwort zurück.');
     }
-    if (user.status === 'disabled') throw httpError(403, 'Dieser Benutzer ist deaktiviert.');
-    if (user.status === 'invited') throw httpError(403, 'Bitte schliesse zuerst die Einladung ab.');
+    if (user.status === 'disabled') throw httpError(403, 'Dieses Konto ist deaktiviert. Ein Admin deiner Organisation kann es wieder aktivieren.');
+    if (user.status === 'invited') throw httpError(403, 'Dieses Konto ist noch nicht aktiviert. Öffne den Link aus deiner Einladungs-E-Mail und lege dort ein Passwort fest.');
     if (user.two_factor_enabled) {
       const challengeToken = randomToken(32);
       await query(
@@ -200,7 +200,7 @@ authRouter.post('/login/2fa', authLimiter, async (req, res, next) => {
     )).rows[0];
     if (!user) throw httpError(401, 'Die 2FA-Anmeldung ist abgelaufen. Bitte melde dich erneut an.');
     const secondFactor = verifyUserSecondFactor(user, code);
-    if (!secondFactor.ok) throw httpError(401, 'Der 2FA-Code ist ungueltig.');
+    if (!secondFactor.ok) throw httpError(401, 'Der Code stimmt nicht. Gib den aktuellen Code aus deiner Authenticator-App oder einen Recovery-Code ein.');
     const signedInUser = await completeLogin(res, user, secondFactor);
     await writeAudit({ query }, {
       organizationId: user.organization_id,
@@ -229,7 +229,7 @@ authRouter.post('/accept-invite', authLimiter, async (req, res, next) => {
          AND status = 'invited'`,
       [tokenHash]
     )).rows[0];
-    if (!user) throw httpError(400, 'Einladung ist ungueltig oder abgelaufen.');
+    if (!user) throw httpError(400, 'Dieser Einladungslink ist ungültig oder abgelaufen. Bitte einen Admin deiner Organisation, dich erneut einzuladen.');
     const passwordHash = await bcrypt.hash(password, 12);
     const updated = (await query(
       `UPDATE users
@@ -290,7 +290,7 @@ authRouter.post('/password-reset/confirm', authLimiter, async (req, res, next) =
          AND status <> 'disabled'`,
       [hashValue(String(req.body.token || ''))]
     )).rows[0];
-    if (!user) throw httpError(400, 'Reset-Link ist ungueltig oder abgelaufen.');
+    if (!user) throw httpError(400, 'Dieser Link zum Zurücksetzen ist ungültig oder abgelaufen. Fordere auf der Anmeldeseite einen neuen an.');
     const passwordHash = await bcrypt.hash(password, 12);
     const updated = (await query(
       `UPDATE users
@@ -336,7 +336,7 @@ authRouter.get('/me', requireAdmin, async (req, res, next) => {
 authRouter.post('/2fa/setup', requireAdmin, async (req, res, next) => {
   try {
     const user = (await query('SELECT * FROM users WHERE id = $1', [req.admin.sub])).rows[0];
-    if (!user) throw httpError(404, 'Benutzer nicht gefunden.');
+    if (!user) throw httpError(404, 'Dein Benutzerkonto wurde nicht gefunden. Bitte melde dich erneut an.');
     if (user.two_factor_enabled) throw httpError(409, '2FA ist bereits aktiv.');
     const secret = generateTotpSecret();
     const provisioningUri = buildOtpAuthUrl({ account: user.email, secret });
@@ -372,7 +372,7 @@ authRouter.post('/2fa/confirm', requireAdmin, async (req, res, next) => {
     const user = (await query('SELECT * FROM users WHERE id = $1', [req.admin.sub])).rows[0];
     if (!user?.two_factor_secret_encrypted) throw httpError(400, 'Bitte starte zuerst die 2FA-Einrichtung.');
     const secret = decryptSecret(user.two_factor_secret_encrypted);
-    if (!verifyTotp(secret, req.body.code)) throw httpError(400, 'Der 2FA-Code ist ungueltig.');
+    if (!verifyTotp(secret, req.body.code)) throw httpError(400, 'Der Code stimmt nicht. Gib den aktuellen Code aus deiner Authenticator-App oder einen Recovery-Code ein.');
     const recoveryCodes = generateRecoveryCodes();
     await query(
       `UPDATE users
@@ -399,13 +399,13 @@ authRouter.post('/2fa/confirm', requireAdmin, async (req, res, next) => {
 authRouter.post('/2fa/disable', requireAdmin, authLimiter, async (req, res, next) => {
   try {
     const user = (await query('SELECT * FROM users WHERE id = $1', [req.admin.sub])).rows[0];
-    if (!user) throw httpError(404, 'Benutzer nicht gefunden.');
+    if (!user) throw httpError(404, 'Dein Benutzerkonto wurde nicht gefunden. Bitte melde dich erneut an.');
     if (!(await bcrypt.compare(String(req.body.password || ''), user.password_hash))) {
-      throw httpError(401, 'Passwort ist falsch.');
+      throw httpError(401, 'Das Passwort stimmt nicht.');
     }
     if (user.two_factor_enabled) {
       const secondFactor = verifyUserSecondFactor(user, req.body.code);
-      if (!secondFactor.ok) throw httpError(401, 'Der 2FA-Code ist ungueltig.');
+      if (!secondFactor.ok) throw httpError(401, 'Der Code stimmt nicht. Gib den aktuellen Code aus deiner Authenticator-App oder einen Recovery-Code ein.');
     }
     await query(
       `UPDATE users

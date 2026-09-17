@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
+import { sendError } from './errors.js';
 
 export function signAdmin(user) {
   return jwt.sign(
@@ -11,13 +12,13 @@ export function signAdmin(user) {
 
 export function requireAdmin(req, res, next) {
   const token = req.cookies?.qrating_admin;
-  if (!token) return res.status(401).json({ error: 'Nicht angemeldet.' });
+  if (!token) return sendError(req, res, 401, 'Du bist nicht angemeldet. Bitte melde dich an.');
 
   try {
     req.admin = jwt.verify(token, env.sessionSecret);
     next();
   } catch {
-    res.status(401).json({ error: 'Sitzung abgelaufen.' });
+    sendError(req, res, 401, 'Deine Sitzung ist abgelaufen. Bitte melde dich erneut an.');
   }
 }
 
@@ -35,9 +36,9 @@ export function hasRole(userRole, minimumRole) {
 
 export function requireRole(minimumRole) {
   return (req, res, next) => {
-    if (!req.admin) return res.status(401).json({ error: 'Nicht angemeldet.' });
+    if (!req.admin) return sendError(req, res, 401, 'Du bist nicht angemeldet. Bitte melde dich an.');
     if (!hasRole(req.admin.role, minimumRole)) {
-      return res.status(403).json({ error: 'Keine Berechtigung fuer diese Aktion.' });
+      return sendError(req, res, 403, 'Für diese Aktion fehlt dir die Berechtigung. Ein Admin deiner Organisation kann deine Rolle anpassen.');
     }
     next();
   };

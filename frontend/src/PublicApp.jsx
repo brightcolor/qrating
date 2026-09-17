@@ -35,12 +35,23 @@ function PublicFeedback({ mode, identifier, source }) {
   const [startedAt] = useState(() => new Date().toISOString());
 
   if (loading) return <PublicShell><p className="p-8 text-center">Lade Feedbackformular ...</p></PublicShell>;
-  if (error || data?.status !== 'ok') {
-    const texts = data?.texts || {};
+  // Closed or unknown events answer with their status and texts; everything else is a loading problem.
+  const closed = error?.body?.status ? error.body : data && data.status !== 'ok' ? data : null;
+  if (error && !closed) {
     return <PublicShell>
       <div className="mx-auto flex min-h-dvh max-w-md flex-col justify-center p-6 text-center">
-        <h1 className="text-2xl font-semibold">{texts.no_event_headline || texts.expired_headline || 'Gerade ist kein Event zur Bewertung geoeffnet.'}</h1>
-        <p className="mt-3 text-neutral-600">{texts.no_event_text || texts.expired_text || 'Schau gerne spaeter nochmal vorbei.'}</p>
+        <h1 className="text-2xl font-semibold">Die Bewertung ließ sich gerade nicht laden.</h1>
+        <p className="mt-3 text-neutral-600">{error.message}</p>
+        <button type="button" onClick={() => window.location.reload()} className="focus-ring mx-auto mt-6 rounded-md bg-neutral-950 px-5 py-3 font-semibold text-white">Seite neu laden</button>
+      </div>
+    </PublicShell>;
+  }
+  if (closed) {
+    const notice = closedNotice(closed);
+    return <PublicShell>
+      <div className="mx-auto flex min-h-dvh max-w-md flex-col justify-center p-6 text-center">
+        <h1 className="text-2xl font-semibold">{notice.headline}</h1>
+        <p className="mt-3 text-neutral-600">{notice.text}</p>
       </div>
     </PublicShell>;
   }
@@ -53,7 +64,7 @@ function PublicFeedback({ mode, identifier, source }) {
     e.preventDefault();
     setSubmitError('');
     if (!rating) {
-      setSubmitError('Bitte waehle noch eine Bewertung aus.');
+      setSubmitError('Bitte wähle noch eine Bewertung aus, bevor du das Feedback sendest.');
       return;
     }
     try {
@@ -151,6 +162,34 @@ function PublicFeedback({ mode, identifier, source }) {
       </form>
     </main>
   </PublicShell>;
+}
+
+// Headline and text for guest pages without an open feedback round.
+function closedNotice(closed) {
+  const texts = closed.texts || {};
+  if (closed.status === 'organization_not_found' || closed.status === 'event_not_found') {
+    return {
+      headline: texts.not_found_headline || 'Diese Bewertungsseite gibt es nicht.',
+      text: texts.not_found_text || 'Prüfe den QR-Code oder den Link.'
+    };
+  }
+  const opensAt = closed.feedback?.opensAt ? new Date(closed.feedback.opensAt) : null;
+  if (closed.status === 'closed' && opensAt && opensAt > new Date()) {
+    return {
+      headline: texts.not_started_headline || 'Die Bewertung ist noch nicht geöffnet.',
+      text: (texts.not_started_text || 'Sie startet am {datum}.').replaceAll('{datum}', formatDate(opensAt))
+    };
+  }
+  if (closed.status === 'closed') {
+    return {
+      headline: texts.expired_headline || 'Die Feedbackrunde ist beendet.',
+      text: texts.expired_text || 'Für dieses Event ist die Bewertungszeit abgelaufen.'
+    };
+  }
+  return {
+    headline: texts.no_event_headline || 'Gerade ist kein Event zur Bewertung geöffnet.',
+    text: texts.no_event_text || 'Schau gerne später noch einmal vorbei.'
+  };
 }
 
 function PublicShell({ children }) {

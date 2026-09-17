@@ -1,4 +1,5 @@
 import { env } from '../config/env.js';
+import { httpError } from '../middleware/errors.js';
 
 export const defaultPlanDefinitions = [
   {
@@ -175,7 +176,7 @@ export async function getPublicPricingPlans(db) {
 
 export async function updateBillingPlans(db, userId, incomingPlans = []) {
   const user = (await db.query('SELECT id, email FROM users WHERE id = $1', [userId])).rows[0] || {};
-  if (!canOverrideBilling(user)) throw Object.assign(new Error('Keine Berechtigung fuer Plan-Konfiguration.'), { status: 403 });
+  if (!canOverrideBilling(user)) throw httpError(403, 'Tarife dürfen nur Plattform-Admins ändern. Ihre E-Mail-Adressen stehen in BILLING_ADMIN_EMAILS.');
   const allowed = new Set(defaultPlanDefinitions.map((plan) => plan.id));
   const normalized = incomingPlans
     .map((plan) => normalizePlan({
@@ -186,7 +187,7 @@ export async function updateBillingPlans(db, userId, incomingPlans = []) {
       public_visible: plan.publicVisible ?? plan.public_visible
     }))
     .filter((plan) => allowed.has(plan.id));
-  if (normalized.length !== allowed.size) throw Object.assign(new Error('Free, Pro und Business muessen konfiguriert sein.'), { status: 400 });
+  if (normalized.length !== allowed.size) throw httpError(400, 'Bitte fülle die Tarife Free, Pro und Business vollständig aus und speichere erneut.');
   for (const plan of normalized) {
     await db.query(
       `INSERT INTO billing_plans (
@@ -274,9 +275,9 @@ export async function getBillingOverview(db, organizationId, userId) {
 }
 
 export async function applyBillingOverride(db, organizationId, userId, { plan, expiresAt = null, reason = '' }) {
-  if (!['free', 'pro', 'business'].includes(plan)) throw Object.assign(new Error('Unbekannter Override-Tarif.'), { status: 400 });
+  if (!['free', 'pro', 'business'].includes(plan)) throw httpError(400, 'Diesen Tarif gibt es nicht. Wähle Free, Pro oder Business.');
   const user = (await db.query('SELECT id, email FROM users WHERE id = $1', [userId])).rows[0] || {};
-  if (!canOverrideBilling(user)) throw Object.assign(new Error('Keine Berechtigung fuer Billing-Overrides.'), { status: 403 });
+  if (!canOverrideBilling(user)) throw httpError(403, 'Tarife freischalten dürfen nur Plattform-Admins. Ihre E-Mail-Adressen stehen in BILLING_ADMIN_EMAILS.');
   const result = await db.query(
     `UPDATE organizations
      SET billing_override_plan = $2,

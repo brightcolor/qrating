@@ -267,4 +267,38 @@ describe('backend flows against PostgreSQL', () => {
     expect(site.body.content.faqHeadline).toBe('Eure Fragen');
     expect(site.body.content.pricing[0].text).toBe('Basics fuer den Einstieg.');
   });
+
+  it('answers failed requests with messages people can act on', async () => {
+    const wrongPassword = await request('POST', '/admin/login', {
+      body: { email: 'owner@example.test', password: 'falsches-passwort' }
+    });
+    expect(wrongPassword.status).toBe(401);
+    expect(wrongPassword.body.error).toBe('E-Mail oder Passwort ist falsch. Prüfe beides oder setze dein Passwort zurück.');
+
+    const event = await demoEvent();
+    const noRating = await request('POST', `/public/events/${event.event_feedback_token}/feedback`, { body: { rating: 0 } });
+    expect(noRating.status).toBe(400);
+    expect(noRating.body.error).toBe('Bitte wähle eine Bewertung von 1 bis 5 Sternen.');
+
+    const brokenBody = await fetch(`${baseUrl}/admin/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{"email":'
+    });
+    expect(brokenBody.status).toBe(400);
+    expect((await brokenBody.json()).error).toBe('Die gesendeten Daten ließen sich nicht lesen. Lade die Seite neu und versuche es erneut.');
+
+    const foreignOrigin = await fetch(`${baseUrl}/public/site`, { headers: { origin: 'https://fremde-seite.example' } });
+    expect(foreignOrigin.status).toBe(403);
+    expect((await foreignOrigin.json()).error).toContain('Die Adresse https://fremde-seite.example ist für qrating nicht freigegeben.');
+
+    const browserLink = await fetch(`${baseUrl}/admin/events/${event.id}/export.csv`, { headers: { accept: 'text/html' } });
+    expect(browserLink.status).toBe(401);
+    expect(browserLink.headers.get('content-type')).toContain('text/html');
+    expect(await browserLink.text()).toContain('Du bist nicht angemeldet. Bitte melde dich an.');
+
+    const unknownRoute = await request('GET', '/public/gibt-es-nicht');
+    expect(unknownRoute.status).toBe(404);
+    expect(unknownRoute.body.error).toContain('Diese Funktion gibt es auf dem Server nicht.');
+  });
 });

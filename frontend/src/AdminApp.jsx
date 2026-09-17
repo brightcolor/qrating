@@ -30,9 +30,6 @@ import { FormBuilder } from './admin/FormBuilder.jsx';
 
 const SecurityCenter = React.lazy(() => import('./admin/SecurityCenter.jsx').then((module) => ({ default: module.SecurityCenter })));
 
-const positiveTags = ['Tolle Stimmung', 'Gute Musik', 'Schoene Location', 'Nettes Team', 'Guter Sound', 'Gerne wieder'];
-const improvementTags = ['Einlass', 'Wartezeiten', 'Sound', 'Getraenke', 'Preise', 'Toiletten', 'Zu voll'];
-
 function useAsync(fn, deps = []) {
   const [state, setState] = useState({ loading: true, data: null, error: null });
   useEffect(() => {
@@ -46,174 +43,6 @@ function useAsync(fn, deps = []) {
     };
   }, deps);
   return state;
-}
-
-function PublicFeedback({ mode, identifier, source }) {
-  const path = mode === 'event' ? `/public/e/${identifier}` : `/public/f/${identifier}${source ? `/${source}` : ''}`;
-  const { loading, data, error } = useAsync(() => api(path), [path]);
-  const [rating, setRating] = useState(0);
-  const [done, setDone] = useState(false);
-  const [form, setForm] = useState({ newsletterOptin: false, answers: {}, positiveTags: [], improvementTags: [] });
-  const [submitError, setSubmitError] = useState('');
-  const [startedAt] = useState(() => new Date().toISOString());
-
-  if (loading) return <PublicShell><p className="p-8 text-center">Lade Feedbackformular ...</p></PublicShell>;
-  if (error || data?.status !== 'ok') {
-    const texts = data?.texts || {};
-    return <PublicShell>
-      <div className="mx-auto flex min-h-dvh max-w-md flex-col justify-center p-6 text-center">
-        <h1 className="text-2xl font-semibold">{texts.no_event_headline || texts.expired_headline || 'Gerade ist kein Event zur Bewertung geoeffnet.'}</h1>
-        <p className="mt-3 text-neutral-600">{texts.no_event_text || texts.expired_text || 'Schau gerne spaeter nochmal vorbei.'}</p>
-      </div>
-    </PublicShell>;
-  }
-
-  const event = data.event;
-  const texts = data.texts;
-  const color = event.organization.primaryColor || '#2563eb';
-
-  async function submit(e) {
-    e.preventDefault();
-    setSubmitError('');
-    if (!rating) {
-      setSubmitError('Bitte waehle noch eine Bewertung aus.');
-      return;
-    }
-    try {
-      const answers = { ...form.answers, positive_tags: form.positiveTags, improvement_tags: form.improvementTags };
-      await api(`/public/events/${event.token}/feedback`, {
-        method: 'POST',
-        body: JSON.stringify({
-          rating,
-          commentPositive: form.commentPositive || '',
-          commentImprovement: form.commentImprovement || '',
-          generalComment: form.generalComment || '',
-          newsletterOptin: form.newsletterOptin,
-          newsletterEmail: form.newsletterEmail || '',
-          contactRequested: Boolean(form.contactPhone),
-          contactPhone: form.contactPhone || '',
-          contactNote: form.contactNote || '',
-          testimonialAllowed: form.testimonialAllowed || false,
-          sourceType: source || mode,
-          honeypot: form.website || '',
-          startedAt,
-          answers
-        })
-      });
-      setDone(true);
-    } catch (err) {
-      setSubmitError(err.message);
-    }
-  }
-
-  if (done) {
-    return <PublicShell>
-      <div className="mx-auto flex min-h-dvh max-w-xl flex-col justify-center px-5 py-12 text-center">
-        <h1 className="text-3xl font-semibold">{texts.thank_headline}</h1>
-        <p className="mt-3 text-lg text-neutral-700">{texts.thank_text}</p>
-        {event.organization.logoUrl && <img className="mx-auto mt-8 h-12 object-contain" src={assetUrl(event.organization.logoUrl)} alt={event.organization.name} />}
-      </div>
-    </PublicShell>;
-  }
-
-  return <PublicShell>
-    <main className="mx-auto min-h-dvh max-w-2xl bg-white shadow-sm sm:my-6 sm:min-h-0 sm:rounded-lg">
-      <header className="relative min-h-[34dvh] max-h-[390px] overflow-hidden bg-neutral-900 sm:min-h-56 sm:rounded-t-lg">
-        {event.imageUrl && <img className="absolute inset-0 h-full w-full object-cover" src={assetUrl(event.imageUrl)} alt={event.imageAlt} />}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/25 to-black/10" />
-        <div className="relative flex min-h-[34dvh] flex-col justify-end p-4 text-white sm:min-h-56 sm:p-5">
-          <p className="text-sm opacity-90">{formatDate(event.dateFrom)}{event.location ? ` Â· ${event.location}` : ''}</p>
-          <h1 className="mt-2 text-2xl font-semibold leading-tight sm:text-3xl">{texts.headline}</h1>
-          <p className="mt-2 max-w-lg text-sm text-white/90 sm:text-base">{texts.subtitle}</p>
-        </div>
-      </header>
-      <form onSubmit={submit} className="space-y-6 p-4 pb-28 sm:space-y-7 sm:p-5">
-        <input className="hidden" tabIndex="-1" autoComplete="off" name="website" value={form.website || ''} onChange={(e) => setForm({ ...form, website: e.target.value })} />
-        <section>
-          <label className="block text-base font-semibold">{texts.rating_label}</label>
-          <div className="mt-3 grid grid-cols-5 gap-1 sm:flex sm:gap-2" role="radiogroup" aria-label={texts.rating_label}>
-            {[1, 2, 3, 4, 5].map((value) => (
-              <button key={value} type="button" aria-label={`${value} Sterne`} onClick={() => setRating(value)}
-                className="focus-ring flex min-h-14 items-center justify-center rounded-md p-2 text-4xl transition hover:scale-105"
-                style={{ color: value <= rating ? color : '#d4d4d4' }}>
-                â˜…
-              </button>
-            ))}
-          </div>
-        </section>
-        <TagPicker title="Was hat fuer dich gepasst?" tags={positiveTags} value={form.positiveTags} onChange={(next) => setForm({ ...form, positiveTags: next })} />
-        <Textarea label={texts.positive_label} placeholder={texts.positive_placeholder} value={form.commentPositive || ''} onChange={(value) => setForm({ ...form, commentPositive: value })} />
-        <TagPicker title="Wo duerfen wir besser werden?" tags={improvementTags} value={form.improvementTags} onChange={(next) => setForm({ ...form, improvementTags: next })} />
-        <Textarea label={texts.improvement_label} placeholder={texts.improvement_placeholder} value={form.commentImprovement || ''} onChange={(value) => setForm({ ...form, commentImprovement: value })} />
-        {rating > 0 && rating <= 2 && <section className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-          <h2 className="text-base font-semibold text-amber-950">{texts.low_rating_contact_headline || 'Das tut uns leid.'}</h2>
-          <p className="mt-2 text-sm leading-6 text-amber-900">{texts.low_rating_contact_text || 'Wenn du magst, hinterlass uns deine Handynummer. Wir melden uns sehr zeitnah und klaeren persoenlich, was passiert ist.'}</p>
-          <label className="mt-4 block">
-            <span className="text-sm font-medium text-amber-950">{texts.low_rating_phone_label || 'Handynummer fuer Rueckruf'}</span>
-            <input className="focus-ring mt-2 w-full rounded-md border border-amber-300 px-4 py-3 text-base" inputMode="tel" autoComplete="tel" placeholder={texts.low_rating_phone_placeholder || '+49 ...'} value={form.contactPhone || ''} onChange={(e) => setForm({ ...form, contactPhone: e.target.value })} />
-          </label>
-          <label className="mt-3 block">
-            <span className="text-sm font-medium text-amber-950">{texts.low_rating_note_label || 'Worum ging es kurz?'}</span>
-            <textarea className="focus-ring mt-2 min-h-20 w-full rounded-md border border-amber-300 px-4 py-3 text-base" placeholder={texts.low_rating_note_placeholder || 'Ein Satz reicht. Wir melden uns dann mit mehr Ruhe bei dir.'} value={form.contactNote || ''} onChange={(e) => setForm({ ...form, contactNote: e.target.value })} />
-          </label>
-        </section>}
-        {event.questions?.filter((q) => !['positive_tags', 'improvement_tags'].includes(q.internal_name)).map((question) => (
-          <Question key={question.id} question={question} value={form.answers[question.internal_name]} onChange={(value) => setForm({ ...form, answers: { ...form.answers, [question.internal_name]: value } })} />
-        ))}
-        <label className="flex gap-3 rounded-md bg-neutral-50 p-4">
-          <input type="checkbox" className="mt-1 h-5 w-5" checked={form.newsletterOptin} onChange={(e) => setForm({ ...form, newsletterOptin: e.target.checked })} />
-          <span><span className="font-medium">{texts.newsletter_label}</span><span className="mt-1 block text-sm text-neutral-600">{texts.newsletter_help}</span></span>
-        </label>
-        {form.newsletterOptin && <input className="focus-ring w-full rounded-md border border-neutral-300 px-4 py-3 text-base" type="email" placeholder="deine@email.de" value={form.newsletterEmail || ''} onChange={(e) => setForm({ ...form, newsletterEmail: e.target.value })} />}
-        <p className="text-sm text-neutral-500">{event.organization.privacyText || texts.privacy_short}</p>
-        {submitError && <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{submitError}</p>}
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-neutral-200 bg-white/95 p-3 backdrop-blur sm:static sm:border-0 sm:bg-transparent sm:p-0">
-          <button className="focus-ring w-full rounded-md px-5 py-4 text-lg font-semibold text-white" style={{ backgroundColor: color }}>{texts.submit}</button>
-        </div>
-      </form>
-    </main>
-  </PublicShell>;
-}
-
-function PublicShell({ children }) {
-  return <div className="min-h-screen bg-[#f7f7f4]">{children}</div>;
-}
-
-function TagPicker({ title, tags, value, onChange }) {
-  const selected = new Set(value || []);
-  return <section>
-    <h2 className="text-base font-semibold">{title}</h2>
-    <div className="mt-3 flex flex-wrap gap-2">
-      {tags.map((tag) => (
-        <button key={tag} type="button" onClick={() => {
-          const next = new Set(selected);
-          next.has(tag) ? next.delete(tag) : next.add(tag);
-          onChange([...next]);
-        }} className={`focus-ring min-h-11 rounded-md border px-3 py-2 text-sm ${selected.has(tag) ? 'border-neutral-950 bg-neutral-950 text-white' : 'border-neutral-300 bg-white text-neutral-800'}`}>
-          {tag}
-        </button>
-      ))}
-    </div>
-  </section>;
-}
-
-function Textarea({ label, placeholder, value, onChange }) {
-  return <label className="block">
-    <span className="font-medium">{label}</span>
-        <textarea className="focus-ring mt-2 min-h-24 w-full rounded-md border border-neutral-300 px-4 py-3 text-base" placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} />
-  </label>;
-}
-
-function Question({ question, value, onChange }) {
-  const options = question.options || [];
-  if (question.question_type === 'checkboxes') return <TagPicker title={question.label} tags={options} value={value || []} onChange={onChange} />;
-  if (question.question_type === 'multiple_choice') {
-    return <label className="block"><span className="font-medium">{question.label}</span><select className="mt-2 w-full rounded-md border px-4 py-3" value={value || ''} onChange={(e) => onChange(e.target.value)}><option value="">Bitte waehlen</option>{options.map((option) => <option key={option}>{option}</option>)}</select></label>;
-  }
-  if (question.question_type === 'yes_no') {
-    return <TagPicker title={question.label} tags={['Ja', 'Nein']} value={value ? [value] : []} onChange={(next) => onChange(next.at(-1) || '')} />;
-  }
-  return <Textarea label={question.label} placeholder={question.placeholder || ''} value={value || ''} onChange={onChange} />;
 }
 
 function AdminApp() {
@@ -293,12 +122,13 @@ function AuthGate({ onLogin }) {
   useEffect(() => {
     if (data?.me) onLogin();
   }, [data?.me, onLogin]);
-  if (loading) return <AuthShell title="qrating Admin"><p className="text-sm text-neutral-600">Pruefe Installation ...</p></AuthShell>;
+  if (loading) return <AuthShell title="qrating Admin"><p className="text-sm text-neutral-600">Prüfe Installation …</p></AuthShell>;
   if (error) return <AuthShell title="qrating Admin">
-    <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error.message}</p>
-    <p className="mt-4 text-sm leading-6 text-neutral-600">Das Backend ist nicht erreichbar. Pruefe, ob `docker compose up --build` laeuft und der Healthcheck unter `/api/health` antwortet.</p>
+    <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error.message}</p>
+    {(!error.status || error.status >= 502) && <p className="mt-4 text-sm leading-6 text-neutral-600">Für den Betrieb: Prüfe, ob die Container laufen (<code>docker compose ps</code>) und <code>/api/health</code> antwortet.</p>}
+    <button type="button" className="button-secondary mt-4" onClick={() => window.location.reload()}>Seite neu laden</button>
   </AuthShell>;
-  if (data?.me) return <AuthShell title="qrating Admin"><p className="text-sm text-neutral-600">Sitzung wird geoeffnet ...</p></AuthShell>;
+  if (data?.me) return <AuthShell title="qrating Admin"><p className="text-sm text-neutral-600">Sitzung wird geöffnet …</p></AuthShell>;
   if (data?.setup?.setupRequired) return <FirstAdminSetup setup={data.setup} onLogin={onLogin} />;
   return <Login onLogin={onLogin} />;
 }
@@ -349,11 +179,15 @@ function Login({ onLogin }) {
   async function submit(e) {
     e.preventDefault();
     setError('');
+    if (!email.trim() || !password) {
+      setError('Bitte gib deine E-Mail-Adresse und dein Passwort ein.');
+      return;
+    }
     try {
       const data = await api('/admin/login', { method: 'POST', body: JSON.stringify({ email, password }) });
       if (data.twoFactorRequired) {
         setTwoFactor(data);
-        setMessage('Bitte bestaetige den zweiten Faktor.');
+        setMessage('Bitte bestätige die Anmeldung mit dem Code aus deiner Authenticator-App.');
         return;
       }
       onLogin(data.user);
@@ -377,22 +211,26 @@ function Login({ onLogin }) {
   async function requestReset() {
     setMessage('');
     setError('');
+    if (!email.trim()) {
+      setError('Gib zuerst deine E-Mail-Adresse ein, dann schicken wir dir einen Link zum Zurücksetzen.');
+      return;
+    }
     try {
       const result = await api('/admin/password-reset/request', { method: 'POST', body: JSON.stringify({ email }) });
-      setMessage(result.resetUrl ? `Reset-Link: ${result.resetUrl}` : 'Wenn die E-Mail existiert, wurde ein Reset-Link verschickt.');
+      setMessage(result.resetUrl ? `Link zum Zurücksetzen: ${result.resetUrl}` : 'Wenn ein Konto mit dieser E-Mail-Adresse existiert, ist jetzt ein Link zum Zurücksetzen unterwegs.');
     } catch (err) {
       setError(err.message);
     }
   }
   if (twoFactor) return <div className="flex min-h-screen items-center justify-center bg-neutral-100 p-4">
     <form onSubmit={submitTwoFactor} className="w-full max-w-sm rounded-lg bg-white p-6 shadow-sm">
-      <h1 className="text-2xl font-semibold">2FA bestaetigen</h1>
+      <h1 className="text-2xl font-semibold">2FA bestätigen</h1>
       <p className="mt-3 text-sm text-neutral-600">Gib den Code aus deiner Authenticator-App oder einen Recovery-Code ein.</p>
       <label className="mt-6 block text-sm font-medium">Code<input className="mt-2 w-full rounded-md border px-3 py-2" value={twoFactorCode} onChange={(e) => setTwoFactorCode(e.target.value)} autoFocus /></label>
       {error && <p className="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-      {message && <p className="mt-4 rounded-md bg-blue-50 p-3 text-sm text-blue-800">{message}</p>}
+      <Notice message={message} />
       <button className="mt-6 w-full rounded-md bg-neutral-950 px-4 py-3 font-semibold text-white">Einloggen</button>
-      <button type="button" onClick={() => setTwoFactor(null)} className="mt-3 w-full text-sm text-neutral-600 hover:text-neutral-950">Zurueck zum Login</button>
+      <button type="button" onClick={() => setTwoFactor(null)} className="mt-3 w-full text-sm text-neutral-600 hover:text-neutral-950">Zurück zur Anmeldung</button>
     </form>
   </div>;
   return <div className="flex min-h-screen items-center justify-center bg-neutral-100 p-4">
@@ -401,9 +239,9 @@ function Login({ onLogin }) {
       <label className="mt-6 block text-sm font-medium">E-Mail<input className="mt-2 w-full rounded-md border px-3 py-2" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
       <label className="mt-4 block text-sm font-medium">Passwort<input type="password" className="mt-2 w-full rounded-md border px-3 py-2" value={password} onChange={(e) => setPassword(e.target.value)} /></label>
       {error && <p className="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-      {message && <p className="mt-4 rounded-md bg-blue-50 p-3 text-sm text-blue-800">{message}</p>}
+      <Notice message={message} />
       <button className="mt-6 w-full rounded-md bg-neutral-950 px-4 py-3 font-semibold text-white">Einloggen</button>
-      <button type="button" onClick={requestReset} className="mt-3 w-full text-sm text-neutral-600 hover:text-neutral-950">Passwort zuruecksetzen</button>
+      <button type="button" onClick={requestReset} className="mt-3 w-full text-sm text-neutral-600 hover:text-neutral-950">Passwort zurücksetzen</button>
     </form>
   </div>;
 }
@@ -415,6 +253,14 @@ function AcceptInvite({ token, onLogin }) {
   async function submit(e) {
     e.preventDefault();
     setError('');
+    if (!token) {
+      setError('Der Einladungslink ist unvollständig. Öffne ihn direkt aus der Einladungs-E-Mail.');
+      return;
+    }
+    if (password.length < 10) {
+      setError('Das Passwort muss mindestens 10 Zeichen lang sein.');
+      return;
+    }
     try {
       const data = await api('/admin/accept-invite', { method: 'POST', body: JSON.stringify({ token, name, password }) });
       onLogin(data.user);
@@ -422,7 +268,7 @@ function AcceptInvite({ token, onLogin }) {
       setError(err.message);
     }
   }
-  return <AuthShell title="Einladung abschliessen">
+  return <AuthShell title="Einladung abschließen">
     <form onSubmit={submit} className="space-y-4">
       <input className="input" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
       <input className="input" type="password" placeholder="Neues Passwort (mind. 10 Zeichen)" value={password} onChange={(e) => setPassword(e.target.value)} />
@@ -438,6 +284,14 @@ function ResetPassword({ token, onLogin }) {
   async function submit(e) {
     e.preventDefault();
     setError('');
+    if (!token) {
+      setError('Der Link zum Zurücksetzen ist unvollständig. Öffne ihn direkt aus der E-Mail.');
+      return;
+    }
+    if (password.length < 10) {
+      setError('Das Passwort muss mindestens 10 Zeichen lang sein.');
+      return;
+    }
     try {
       const data = await api('/admin/password-reset/confirm', { method: 'POST', body: JSON.stringify({ token, password }) });
       onLogin(data.user);
@@ -537,9 +391,9 @@ function EventCard({ event }) {
   async function syncImage() {
     try {
       await api(`/admin/events/${event.id}/sync-image`, { method: 'POST', body: '{}' });
-      setMessage('Bild-Sync wurde ausgefuehrt. Liste aktualisieren, um das neue Bild zu sehen.');
+      setMessage('Das Bild wurde neu geladen. Aktualisiere die Liste, um es zu sehen.');
     } catch (err) {
-      setMessage(err.message);
+      setMessage(errorNotice(err));
     }
   }
   return <article className="rounded-lg bg-white p-5 shadow-sm">
@@ -550,8 +404,8 @@ function EventCard({ event }) {
         </div>
         <div>
           <div className="flex items-center gap-2"><h2 className="font-semibold">{event.name}</h2><span className="rounded bg-neutral-100 px-2 py-1 text-xs">{event.source}</span></div>
-          <p className="mt-1 text-sm text-neutral-600">{formatDate(event.date_from)} Â· {event.location || 'Keine Location'}</p>
-          <p className="mt-1 text-sm text-neutral-500">Bildquelle: {event.image_source || 'Fallback'} {event.detected_image_settings_key ? `Â· Key: ${event.detected_image_settings_key}` : ''}</p>
+          <p className="mt-1 text-sm text-neutral-600">{formatDate(event.date_from)} · {event.location || 'Keine Location'}</p>
+          <p className="mt-1 text-sm text-neutral-500">Bildquelle: {event.image_source || 'Fallback'} {event.detected_image_settings_key ? `· Key: ${event.detected_image_settings_key}` : ''}</p>
         </div>
       </div>
       <div className="flex flex-wrap gap-2">
@@ -563,12 +417,12 @@ function EventCard({ event }) {
         <a className="button-blue" href={eventUrl} target="_blank"><ExternalLink size={16} /> Feedback</a>
       </div>
     </div>
-    {message && <p className="mt-3 rounded-md bg-blue-50 p-3 text-sm text-blue-800">{message}</p>}
+    <Notice message={message} className="mt-3" />
   </article>;
 }
 
 function Analytics() {
-  const { data: events, loading } = useAsync(() => api('/admin/events'), []);
+  const { data: events, loading, error: eventsError } = useAsync(() => api('/admin/events'), []);
   const [eventId, setEventId] = useState('');
   const [message, setMessage] = useState('');
   useEffect(() => {
@@ -579,9 +433,9 @@ function Analytics() {
     if (!eventId) return;
     try {
       await api(`/admin/events/${eventId}/report-email`, { method: 'POST', body: '{}' });
-      setMessage('PDF-Report wurde als Hintergrundjob fuer deine E-Mail vorgemerkt.');
+      setMessage('Der PDF-Report wird erstellt und an deine E-Mail-Adresse geschickt.');
     } catch (err) {
-      setMessage(err.message);
+      setMessage(errorNotice(err));
     }
   }
   return <div>
@@ -594,8 +448,9 @@ function Analytics() {
         </select>
         <button onClick={sendReport} className="button-secondary"><Mail size={16} /> Report per E-Mail</button>
       </div>
-      {message && <p className="mt-3 rounded-md bg-blue-50 p-3 text-sm text-blue-800">{message}</p>}
+      <Notice message={message} className="mt-3" />
     </Panel>
+    {eventsError && <ErrorBox error={eventsError} />}
     {error && <ErrorBox error={error} />}
     {data && <div className="mt-6 grid gap-6">
       <div className="grid gap-4 md:grid-cols-4">
@@ -630,7 +485,7 @@ function LowRatingWorkflow() {
       setMessage('Fall aktualisiert.');
       setReload(reload + 1);
     } catch (err) {
-      setMessage(err.message);
+      setMessage(errorNotice(err));
     }
   }
 
@@ -640,14 +495,14 @@ function LowRatingWorkflow() {
       setRevealed({ ...revealed, [item.id]: result });
       setMessage('Kontaktdaten wurden aus dem PII-Vault geladen und im Audit-Log erfasst.');
     } catch (err) {
-      setMessage(err.message);
+      setMessage(errorNotice(err));
     }
   }
 
   return <div>
     <Header title="Low-Rating Workflow" />
     <p className="mt-2 max-w-3xl text-sm text-neutral-600">Niedrige Bewertungen werden hier als Klaerungsfaelle gesammelt. Telefonnummern werden verschluesselt gespeichert und nur berechtigten Event-Verantwortlichen angezeigt.</p>
-    {message && <p className="mt-4 rounded-md bg-blue-50 p-3 text-sm text-blue-800">{message}</p>}
+    <Notice message={message} />
     {error && <ErrorBox error={error} />}
     <div className="mt-6 grid gap-4">
       {loading && <Panel>Lade Low-Rating-Faelle ...</Panel>}
@@ -733,9 +588,14 @@ function WebsiteContent() {
 
   async function save(e) {
     e.preventDefault();
-    const result = await api('/admin/site-content', { method: 'PATCH', body: JSON.stringify({ content: form }) });
-    setForm(result.content);
-    setMessage('Website-Inhalte gespeichert.');
+    setMessage('');
+    try {
+      const result = await api('/admin/site-content', { method: 'PATCH', body: JSON.stringify({ content: form }) });
+      setForm(result.content);
+      setMessage('Website-Inhalte gespeichert.');
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
   }
 
   return <div>
@@ -789,7 +649,7 @@ function WebsiteContent() {
 
       <div className="flex flex-wrap items-center gap-3">
         <button className="button-primary"><Globe2 size={16} /> Website speichern</button>
-        {message && <span className="rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-800">{message}</span>}
+        <Notice message={message} className="" />
       </div>
     </form>}
   </div>;
@@ -827,18 +687,28 @@ function Billing() {
 
   async function saveOverride(e) {
     e.preventDefault();
-    const result = await api('/admin/billing/override', { method: 'PATCH', body: JSON.stringify(override) });
-    setMessage(`Override auf ${result.billing.effectivePlan} gespeichert.`);
-    setReload(reload + 1);
+    setMessage('');
+    try {
+      const result = await api('/admin/billing/override', { method: 'PATCH', body: JSON.stringify(override) });
+      setMessage(`Tarif ${result.billing.effectivePlan} freigeschaltet.`);
+      setReload(reload + 1);
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
   }
 
   async function savePlans(e) {
     e.preventDefault();
-    const plans = planDrafts.map(draftToPlan);
-    const result = await api('/admin/billing/plans', { method: 'PATCH', body: JSON.stringify({ plans }) });
-    setMessage('Tarife, Features und Limits gespeichert. Die oeffentliche Website nutzt die neue Matrix sofort.');
-    setPlanDrafts(result.plans.map(planToDraft));
-    setReload(reload + 1);
+    setMessage('');
+    try {
+      const plans = planDrafts.map(draftToPlan);
+      const result = await api('/admin/billing/plans', { method: 'PATCH', body: JSON.stringify({ plans }) });
+      setMessage('Tarife, Leistungen und Limits gespeichert. Die öffentliche Website zeigt sie ab sofort.');
+      setPlanDrafts(result.plans.map(planToDraft));
+      setReload(reload + 1);
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
   }
 
   if (loading) return <p>Lade Plan ...</p>;
@@ -851,7 +721,7 @@ function Billing() {
       <Stat title="Status" value={billing.status || 'free'} />
       <Stat title="Quelle" value={billing.effectiveSource || 'intern'} />
     </div>
-    {message && <p className="mt-4 rounded-md bg-blue-50 p-3 text-sm text-blue-800">{message}</p>}
+    <Notice message={message} />
     <div className="mt-6 grid gap-4 lg:grid-cols-3">
       {data.plans.map((plan) => <PlanCard key={plan.id} plan={plan} billing={billing} />)}
     </div>
@@ -1019,18 +889,30 @@ function BrandingSettings() {
 
   async function saveBranding(e) {
     e.preventDefault();
-    const saved = await api('/admin/branding', {
-      method: 'PATCH',
-      body: JSON.stringify({
-        ...form,
-        wallboardSettings: { dark_mode: form.wallboardDarkMode, refresh_seconds: form.wallboardRefreshSeconds }
-      })
-    });
-    await api('/admin/anti-spam-settings', {
-      method: 'PATCH',
-      body: JSON.stringify({ minSeconds: form.minSeconds, honeypotEnabled: form.honeypotEnabled })
-    });
-    setMessage(`Branding fuer ${saved.name} gespeichert.`);
+    setMessage('');
+    let saved;
+    try {
+      saved = await api('/admin/branding', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          ...form,
+          wallboardSettings: { dark_mode: form.wallboardDarkMode, refresh_seconds: form.wallboardRefreshSeconds }
+        })
+      });
+    } catch (err) {
+      setMessage(errorNotice(err));
+      return;
+    }
+    try {
+      await api('/admin/anti-spam-settings', {
+        method: 'PATCH',
+        body: JSON.stringify({ minSeconds: form.minSeconds, honeypotEnabled: form.honeypotEnabled })
+      });
+    } catch (err) {
+      setMessage(errorNotice({ message: `Branding gespeichert, die Einstellungen zum Spam-Schutz aber nicht: ${err.message}` }));
+      return;
+    }
+    setMessage(`Branding für ${saved.name} gespeichert.`);
   }
 
   return <div>
@@ -1058,7 +940,7 @@ function BrandingSettings() {
         <label className="block"><span className="text-sm font-medium">Wallboard Refresh (Sek.)</span><input className="input mt-1" type="number" min="5" value={form.wallboardRefreshSeconds} onChange={(e) => setForm({ ...form, wallboardRefreshSeconds: Number(e.target.value) })} /></label>
         <button className="button-primary md:col-span-2">Branding speichern</button>
       </form>
-      {message && <p className="mt-4 rounded-md bg-blue-50 p-3 text-sm text-blue-800">{message}</p>}
+      <Notice message={message} />
     </Panel>}
   </div>;
 }
@@ -1082,6 +964,7 @@ function Texts() {
   const [language, setLanguage] = useState('de');
   const { data, loading, error } = useAsync(() => api(`/admin/text-templates?language=${language}`), [reload, language]);
   const [drafts, setDrafts] = useState({});
+  const [message, setMessage] = useState('');
   useEffect(() => {
     if (data?.defaults) {
       const saved = Object.fromEntries((data.templates || []).filter((item) => !item.event_id).map((item) => [item.key, item.value]));
@@ -1089,14 +972,21 @@ function Texts() {
     }
   }, [data]);
   async function save(key) {
-    await api('/admin/text-templates', { method: 'POST', body: JSON.stringify({ key, value: drafts[key], language, scope: 'public' }) });
-    setReload(reload + 1);
+    setMessage('');
+    try {
+      await api('/admin/text-templates', { method: 'POST', body: JSON.stringify({ key, value: drafts[key], language, scope: 'public' }) });
+      setMessage(`Text „${key}“ gespeichert.`);
+      setReload(reload + 1);
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
   }
   return <div>
     <Header title="Texte & Sprache" />
     <Panel>
       <label className="block max-w-xs"><span className="text-sm font-medium">Sprache</span><select className="input mt-1" value={language} onChange={(e) => setLanguage(e.target.value)}><option value="de">Deutsch</option><option value="en">English</option></select></label>
     </Panel>
+    <Notice message={message} />
     {loading && <p>Lade Texte ...</p>}
     {error && <ErrorBox error={error} />}
     {data && <Panel title="Oeffentliche Standardtexte">
@@ -1104,7 +994,7 @@ function Texts() {
         {Object.keys(data.defaults).map((key) => <label key={key} className="block">
           <span className="text-sm font-medium">{key}</span>
           <textarea className="input mt-1 min-h-20" value={drafts[key] || ''} onChange={(e) => setDrafts({ ...drafts, [key]: e.target.value })} />
-          <button onClick={() => save(key)} className="button-secondary mt-2">Speichern</button>
+          <button type="button" onClick={() => save(key)} className="button-secondary mt-2">Speichern</button>
         </label>)}
       </div>
     </Panel>}
@@ -1113,20 +1003,28 @@ function Texts() {
 
 function QrAndWallboard() {
   const { data: dashboard } = useAsync(() => api('/admin/dashboard'), []);
-  const { data: events } = useAsync(() => api('/admin/events'), []);
+  const { data: events, error: eventsError } = useAsync(() => api('/admin/events'), []);
   const [selectedEvent, setSelectedEvent] = useState('');
   const [source, setSource] = useState({ sourceSlug: 'ausgang', label: 'Ausgang', type: 'dynamic_organization' });
+  const [message, setMessage] = useState('');
   useEffect(() => {
     if (!selectedEvent && events?.[0]) setSelectedEvent(events[0].id);
   }, [events, selectedEvent]);
   const { data: qrAnalytics } = useAsync(() => selectedEvent ? api(`/admin/events/${selectedEvent}/qr-analytics`) : Promise.resolve(null), [selectedEvent]);
   async function createSource(e) {
     e.preventDefault();
-    await api('/admin/qr-sources', { method: 'POST', body: JSON.stringify(source) });
-    setSource({ sourceSlug: '', label: '', type: 'dynamic_organization' });
+    setMessage('');
+    try {
+      await api('/admin/qr-sources', { method: 'POST', body: JSON.stringify(source) });
+      setMessage(`QR-Quelle „${source.label}“ angelegt.`);
+      setSource({ sourceSlug: '', label: '', type: 'dynamic_organization' });
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
   }
   return <div>
     <Header title="QR & Wallboard" />
+    {eventsError && <ErrorBox error={eventsError} />}
     <div className="mt-6 grid gap-6 lg:grid-cols-2">
       <Panel title="QR-Quellen">
         <form onSubmit={createSource} className="grid gap-2 md:grid-cols-3">
@@ -1134,6 +1032,7 @@ function QrAndWallboard() {
           <input className="input" placeholder="Label" value={source.label} onChange={(e) => setSource({ ...source, label: e.target.value })} required />
           <button className="button-primary">Anlegen</button>
         </form>
+        <Notice message={message} className="mt-3" />
         {dashboard?.organization && <p className="mt-4 break-all text-sm text-neutral-600">Beispiel: {dashboard.feedbackAppUrl}/f/{dashboard.organization.slug}/bar</p>}
       </Panel>
       <Panel title="Druckvorlagen">
@@ -1143,8 +1042,8 @@ function QrAndWallboard() {
     <Panel title="QR-Quellen-Auswertung">
       <select className="input max-w-md" value={selectedEvent} onChange={(e) => setSelectedEvent(e.target.value)}>{events?.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}</select>
       <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-        {qrAnalytics?.bySource?.map((row) => <div key={row.source_slug} className="rounded-md border border-neutral-200 p-3 text-sm"><strong>{row.label}</strong><p>Scans: {row.scans_count || 0} Â· Feedbacks: {row.feedback_count || 0}</p><p>Ã˜ {row.average_rating || '-'} Â· Newsletter {row.newsletter_optins || 0} Â· Low {row.low_ratings || 0}</p></div>)}
-        {qrAnalytics?.bySource?.length === 0 && <p className="text-sm text-neutral-500">Noch keine QR-Quellen-Daten fuer dieses Event.</p>}
+        {qrAnalytics?.bySource?.map((row) => <div key={row.source_slug} className="rounded-md border border-neutral-200 p-3 text-sm"><strong>{row.label}</strong><p>Scans: {row.scans_count || 0} · Feedbacks: {row.feedback_count || 0}</p><p>Ø {row.average_rating || '-'} · Newsletter {row.newsletter_optins || 0} · Low {row.low_ratings || 0}</p></div>)}
+        {qrAnalytics?.bySource?.length === 0 && <p className="text-sm text-neutral-500">Noch keine QR-Quellen-Daten für dieses Event.</p>}
       </div>
     </Panel>
     <Wallboard events={events || []} />
@@ -1164,9 +1063,10 @@ function Wallboard({ events }) {
     const timer = setInterval(() => setReload((value) => value + 1), refreshSeconds * 1000);
     return () => clearInterval(timer);
   }, [refreshSeconds]);
-  const { data } = useAsync(() => eventId ? api(`/admin/events/${eventId}/analytics`) : Promise.resolve(null), [eventId, reload]);
+  const { data, error } = useAsync(() => eventId ? api(`/admin/events/${eventId}/analytics`) : Promise.resolve(null), [eventId, reload]);
   return <Panel title="Wallboard-Modus">
     <select className="input max-w-md" value={eventId} onChange={(e) => setEventId(e.target.value)}>{events.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}</select>
+    {error && <ErrorBox error={error} />}
     {data && <div className={`mt-6 rounded-lg p-5 ${dark ? 'bg-neutral-950 text-white' : 'bg-neutral-50 text-neutral-950'}`}>
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-2xl font-semibold">{events.find((event) => event.id === eventId)?.name || 'Wallboard'}</h2>
@@ -1189,23 +1089,39 @@ function WallStat({ title, value, dark }) {
 
 function Pretix() {
   const [reload, setReload] = useState(0);
-  const { data, loading } = useAsync(() => api('/admin/pretix-connections'), [reload]);
+  const { data, loading, error } = useAsync(() => api('/admin/pretix-connections'), [reload]);
   const [form, setForm] = useState({ baseUrl: '', organizerSlug: '', apiToken: '', importEventImages: true, cacheEventImages: true });
   const [message, setMessage] = useState('');
   async function create(e) {
     e.preventDefault();
-    await api('/admin/pretix-connections', { method: 'POST', body: JSON.stringify(form) });
-    setForm({ baseUrl: '', organizerSlug: '', apiToken: '', importEventImages: true, cacheEventImages: true });
-    setReload(reload + 1);
-  }
-  async function action(id, endpoint) {
-    setMessage('Arbeite ...');
+    setMessage('');
     try {
-      const result = await api(`/admin/pretix-connections/${id}/${endpoint}`, { method: 'POST', body: '{}' });
-      setMessage(endpoint === 'sync' ? `${result.imported} Events, ${result.images} Bilder synchronisiert.` : `${result.eventsFound} Events gefunden.`);
+      await api('/admin/pretix-connections', { method: 'POST', body: JSON.stringify(form) });
+      setMessage('Pretix-Verbindung gespeichert. Mit „Testen“ prüfst du den Zugang.');
+      setForm({ baseUrl: '', organizerSlug: '', apiToken: '', importEventImages: true, cacheEventImages: true });
       setReload(reload + 1);
     } catch (err) {
-      setMessage(err.message);
+      setMessage(errorNotice(err));
+    }
+  }
+  async function toggleSync(connection) {
+    setMessage('');
+    try {
+      await api(`/admin/pretix-connections/${connection.id}`, { method: 'PATCH', body: JSON.stringify({ syncEnabled: !connection.sync_enabled }) });
+      setMessage(connection.sync_enabled ? 'Auto-Sync pausiert.' : 'Auto-Sync aktiviert.');
+      setReload(reload + 1);
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
+  }
+  async function action(id, endpoint) {
+    setMessage(endpoint === 'sync' ? 'Synchronisiere mit Pretix …' : 'Prüfe die Verbindung …');
+    try {
+      const result = await api(`/admin/pretix-connections/${id}/${endpoint}`, { method: 'POST', body: '{}' });
+      setMessage(endpoint === 'sync' ? `${result.imported} Events und ${result.images} Bilder synchronisiert.` : `Verbindung funktioniert, ${result.eventsFound} Events gefunden.`);
+      setReload(reload + 1);
+    } catch (err) {
+      setMessage(errorNotice(err));
     }
   }
   return <div>
@@ -1220,17 +1136,18 @@ function Pretix() {
         <button className="button-primary md:col-span-2">Speichern</button>
       </form>
     </Panel>
-    {message && <p className="mt-4 rounded-md bg-blue-50 p-3 text-blue-800">{message}</p>}
+    <Notice message={message} />
     <section className="mt-6 space-y-3">
       {loading && <p>Lade Verbindungen ...</p>}
+      {error && <ErrorBox error={error} />}
       {data?.map((connection) => <div key={connection.id} className="rounded-lg bg-white p-5 shadow-sm">
         <h2 className="font-semibold">{connection.base_url} / {connection.pretix_organizer_slug}</h2>
-        <p className="mt-1 text-sm text-neutral-600">Letzter Sync: {connection.last_sync_status || 'Noch nicht synchronisiert'} Â· Naechster Sync: {connection.next_sync_at ? formatDate(connection.next_sync_at) : '-'}</p>
-        <p className="mt-1 text-sm text-neutral-500">Intervall: {connection.sync_interval_minutes} Min. Â· Auto-Sync: {connection.sync_enabled ? 'aktiv' : 'inaktiv'} Â· Cache: {connection.cache_event_images ? 'aktiv' : 'inaktiv'}</p>
+        <p className="mt-1 text-sm text-neutral-600">Letzter Sync: {connection.last_sync_status || 'Noch nicht synchronisiert'} · Naechster Sync: {connection.next_sync_at ? formatDate(connection.next_sync_at) : '-'}</p>
+        <p className="mt-1 text-sm text-neutral-500">Intervall: {connection.sync_interval_minutes} Min. · Auto-Sync: {connection.sync_enabled ? 'aktiv' : 'inaktiv'} · Cache: {connection.cache_event_images ? 'aktiv' : 'inaktiv'}</p>
         <div className="mt-4 flex flex-wrap gap-2">
           <button onClick={() => action(connection.id, 'test')} className="button-secondary">Testen</button>
           <button onClick={() => action(connection.id, 'sync')} className="button-blue">Jetzt synchronisieren</button>
-          <button onClick={async () => { await api(`/admin/pretix-connections/${connection.id}`, { method: 'PATCH', body: JSON.stringify({ syncEnabled: !connection.sync_enabled }) }); setReload(reload + 1); }} className="button-secondary">{connection.sync_enabled ? 'Auto-Sync pausieren' : 'Auto-Sync aktivieren'}</button>
+          <button onClick={() => toggleSync(connection)} className="button-secondary">{connection.sync_enabled ? 'Auto-Sync pausieren' : 'Auto-Sync aktivieren'}</button>
         </div>
       </div>)}
     </section>
@@ -1243,7 +1160,7 @@ function Notifications() {
   const [reload, setReload] = useState(0);
   const { data: users } = useAsync(() => api('/admin/users'), [reload]);
   const { data: events } = useAsync(() => api('/admin/events'), []);
-  const { data: channels, loading } = useAsync(() => api('/admin/notification-channels'), [reload]);
+  const { data: channels, loading, error: channelsError } = useAsync(() => api('/admin/notification-channels'), [reload]);
   const [selectedEvent, setSelectedEvent] = useState('');
   const [assignments, setAssignments] = useState([]);
   const [message, setMessage] = useState('');
@@ -1269,7 +1186,7 @@ function Notifications() {
     if (!selectedEvent) return;
     api(`/admin/events/${selectedEvent}/assignments`)
       .then(setAssignments)
-      .catch((error) => setMessage(error.message));
+      .catch((error) => setMessage(errorNotice(error)));
   }, [selectedEvent, reload]);
 
   async function createChannel(e) {
@@ -1279,37 +1196,58 @@ function Notifications() {
     try {
       config = form.configText ? JSON.parse(form.configText) : {};
     } catch {
-      setMessage('Config muss gueltiges JSON sein.');
+      setMessage(errorNotice({ message: 'Das Feld „Config JSON“ enthält kein gültiges JSON. Beispiel: {"chatId":"123456"}' }));
       return;
     }
-    await api('/admin/notification-channels', {
-      method: 'POST',
-      body: JSON.stringify({
-        userId: form.userId,
-        channelType: form.channelType,
-        label: form.label,
-        minRating: form.minRating,
-        secret: form.secret,
-        config
-      })
-    });
-    setForm({ ...form, secret: '' });
-    setReload(reload + 1);
+    try {
+      await api('/admin/notification-channels', {
+        method: 'POST',
+        body: JSON.stringify({
+          userId: form.userId,
+          channelType: form.channelType,
+          label: form.label,
+          minRating: form.minRating,
+          secret: form.secret,
+          config
+        })
+      });
+      setMessage('Kanal gespeichert. Mit „Test“ prüfst du die Zustellung.');
+      setForm({ ...form, secret: '' });
+      setReload(reload + 1);
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
   }
 
   async function saveAssignments() {
-    await api(`/admin/events/${selectedEvent}/assignments`, {
-      method: 'PUT',
-      body: JSON.stringify({
-        assignments: assignments.map((assignment) => ({
-          userId: assignment.user_id,
-          assigned: assignment.assigned,
-          notifyLowRating: assignment.notify_low_rating
-        }))
-      })
-    });
-    setMessage('Event-Zuweisungen gespeichert.');
-    setReload(reload + 1);
+    setMessage('');
+    try {
+      await api(`/admin/events/${selectedEvent}/assignments`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          assignments: assignments.map((assignment) => ({
+            userId: assignment.user_id,
+            assigned: assignment.assigned,
+            notifyLowRating: assignment.notify_low_rating
+          }))
+        })
+      });
+      setMessage('Event-Zuweisungen gespeichert.');
+      setReload(reload + 1);
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
+  }
+
+  async function deleteChannel(channel) {
+    setMessage('');
+    try {
+      await api(`/admin/notification-channels/${channel.id}`, { method: 'DELETE' });
+      setMessage(`Kanal „${channel.label}“ entfernt.`);
+      setReload(reload + 1);
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
   }
 
   async function testChannel(id) {
@@ -1318,7 +1256,7 @@ function Notifications() {
       setMessage('Testbenachrichtigung gesendet.');
       setReload(reload + 1);
     } catch (err) {
-      setMessage(err.message);
+      setMessage(errorNotice(err));
     }
   }
 
@@ -1328,7 +1266,7 @@ function Notifications() {
       setMessage('Rolle aktualisiert.');
       setReload(reload + 1);
     } catch (err) {
-      setMessage(err.message);
+      setMessage(errorNotice(err));
     }
   }
 
@@ -1338,7 +1276,7 @@ function Notifications() {
       setMessage('Benutzerstatus aktualisiert.');
       setReload(reload + 1);
     } catch (err) {
-      setMessage(err.message);
+      setMessage(errorNotice(err));
     }
   }
 
@@ -1346,11 +1284,18 @@ function Notifications() {
     e.preventDefault();
     try {
       const result = await api('/admin/users/invite', { method: 'POST', body: JSON.stringify(invite) });
-      setMessage(result.inviteUrl ? `Einladung erstellt: ${result.inviteUrl}` : 'Einladung erstellt.');
+      const mail = result.mail || {};
+      if (mail.error) {
+        setMessage(errorNotice({ message: `Einladung erstellt, die E-Mail ließ sich aber nicht senden. ${mail.error} Schicke der Person diesen Link: ${result.inviteUrl}` }));
+      } else if (mail.skipped) {
+        setMessage(`Einladung erstellt. Der E-Mail-Versand ist ausgeschaltet, schicke der Person diesen Link: ${result.inviteUrl}`);
+      } else {
+        setMessage(`Einladung an ${invite.email} verschickt. Der Link gilt 7 Tage: ${result.inviteUrl}`);
+      }
       setInvite({ name: '', email: '', role: 'support' });
       setReload(reload + 1);
     } catch (err) {
-      setMessage(err.message);
+      setMessage(errorNotice(err));
     }
   }
 
@@ -1397,11 +1342,11 @@ function Notifications() {
         <button onClick={saveAssignments} className="button-primary mt-4">Zuweisungen speichern</button>
       </Panel>
     </div>
-    {message && <p className="mt-4 rounded-md bg-blue-50 p-3 text-sm text-blue-800">{message}</p>}
+    <Notice message={message} />
     <Panel title="Rollen & Rechte">
       <div className="grid gap-3">
         {users?.map((user) => <div key={user.id} className="grid gap-2 rounded-md border border-neutral-200 p-3 md:grid-cols-[1fr_180px_180px]">
-          <div><strong>{user.name}</strong><p className="text-sm text-neutral-500">{user.email} Â· {user.status || 'active'} Â· letzter Login: {user.last_login_at ? formatDate(user.last_login_at) : '-'}</p></div>
+          <div><strong>{user.name}</strong><p className="text-sm text-neutral-500">{user.email} · {user.status || 'active'} · letzter Login: {user.last_login_at ? formatDate(user.last_login_at) : '-'}</p></div>
           <select className="input" value={user.role} onChange={(e) => changeRole(user, e.target.value)}>
             <option value="support">Support</option>
             <option value="analyst">Analyst</option>
@@ -1418,12 +1363,13 @@ function Notifications() {
       </div>
     </Panel>
     <Panel title="Aktive Kanaele">
-      {loading && <p>Lade Kanaele ...</p>}
+      {loading && <p>Lade Kanäle ...</p>}
+      {channelsError && <ErrorBox error={channelsError} />}
       <div className="grid gap-3">
         {channels?.map((channel) => <div key={channel.id} className="grid gap-2 rounded-md border border-neutral-200 p-3 md:grid-cols-[1fr_auto_auto]">
-          <div><strong>{channel.label}</strong><p className="text-sm text-neutral-500">{channel.channel_type} Â· {channel.user_name} Â· Secret: {channel.has_secret ? 'ja' : 'nein'} Â· Status: {channel.last_status || '-'}</p>{channel.last_error && <p className="text-sm text-red-700">{channel.last_error}</p>}</div>
+          <div><strong>{channel.label}</strong><p className="text-sm text-neutral-500">{channel.channel_type} · {channel.user_name} · Secret: {channel.has_secret ? 'ja' : 'nein'} · Status: {channel.last_status || '-'}</p>{channel.last_error && <p className="text-sm text-red-700">{channel.last_error}</p>}</div>
           <button onClick={() => testChannel(channel.id)} className="button-secondary"><Send size={16} /> Test</button>
-          <button onClick={async () => { await api(`/admin/notification-channels/${channel.id}`, { method: 'DELETE' }); setReload(reload + 1); }} className="button-secondary"><Trash2 size={16} /> Entfernen</button>
+          <button onClick={() => deleteChannel(channel)} className="button-secondary"><Trash2 size={16} /> Entfernen</button>
         </div>)}
       </div>
     </Panel>
@@ -1465,12 +1411,12 @@ function Operations() {
       setMessage('Aufbewahrungsjob wurde eingeplant.');
       setReload(reload + 1);
     } catch (err) {
-      setMessage(err.message);
+      setMessage(errorNotice(err));
     }
   }
   return <div>
     <Header title="Monitoring & Betrieb" action={<button onClick={() => setReload(reload + 1)} className="button-secondary"><RefreshCw size={16} /> Aktualisieren</button>} />
-    {message && <p className="mt-4 rounded-md bg-blue-50 p-3 text-sm text-blue-800">{message}</p>}
+    <Notice message={message} />
     {error && <ErrorBox error={error} />}
     {loading && <p className="mt-4">Lade Betriebsstatus ...</p>}
     {data && <div className="mt-6 grid gap-6">
@@ -1488,17 +1434,17 @@ function Operations() {
       </Panel>
       <Panel title="Letzte relevante Jobs">
         <div className="space-y-2">
-          {data.recentJobs.map((job) => <div key={job.id} className="rounded-md border border-neutral-200 p-3 text-sm"><strong>{job.job_type}</strong> Â· {job.status} Â· Versuch {job.attempts}/{job.max_attempts}<p className="text-neutral-500">{job.last_error || `geplant: ${formatDate(job.run_after)}`}</p></div>)}
+          {data.recentJobs.map((job) => <div key={job.id} className="rounded-md border border-neutral-200 p-3 text-sm"><strong>{job.job_type}</strong> · {job.status} · Versuch {job.attempts}/{job.max_attempts}<p className="text-neutral-500">{job.last_error || `geplant: ${formatDate(job.run_after)}`}</p></div>)}
           {!data.recentJobs.length && <p className="text-sm text-neutral-500">Keine offenen oder fehlgeschlagenen Jobs.</p>}
         </div>
       </Panel>
       <Panel title="Pretix Sync">
         <div className="space-y-2">
-          {data.pretix.map((connection) => <div key={connection.id} className="rounded-md bg-neutral-50 p-3 text-sm"><strong>{connection.pretix_organizer_slug}</strong><p>Auto-Sync: {connection.sync_enabled ? 'aktiv' : 'inaktiv'} Â· letzter Erfolg: {connection.last_successful_sync_at ? formatDate(connection.last_successful_sync_at) : '-'}</p>{connection.last_sync_error && <p className="text-red-700">{connection.last_sync_error}</p>}</div>)}
+          {data.pretix.map((connection) => <div key={connection.id} className="rounded-md bg-neutral-50 p-3 text-sm"><strong>{connection.pretix_organizer_slug}</strong><p>Auto-Sync: {connection.sync_enabled ? 'aktiv' : 'inaktiv'} · letzter Erfolg: {connection.last_successful_sync_at ? formatDate(connection.last_successful_sync_at) : '-'}</p>{connection.last_sync_error && <p className="text-red-700">{connection.last_sync_error}</p>}</div>)}
         </div>
       </Panel>
       <Panel title="Webhooks">
-        <div className="space-y-2">{data.webhooks.map((hook) => <div key={hook.id} className="rounded-md bg-neutral-50 p-3 text-sm"><strong>Webhook endpoint</strong><p>Status: {hook.last_status || '-'} Â· {hook.last_called_at ? formatDate(hook.last_called_at) : 'noch nicht aufgerufen'}</p>{hook.last_error && <p className="text-red-700">{hook.last_error}</p>}</div>)}</div>
+        <div className="space-y-2">{data.webhooks.map((hook) => <div key={hook.id} className="rounded-md bg-neutral-50 p-3 text-sm"><strong>Webhook endpoint</strong><p>Status: {hook.last_status || '-'} · {hook.last_called_at ? formatDate(hook.last_called_at) : 'noch nicht aufgerufen'}</p>{hook.last_error && <p className="text-red-700">{hook.last_error}</p>}</div>)}</div>
       </Panel>
     </div>}
   </div>;
@@ -1541,19 +1487,23 @@ function SmtpSettings() {
 
   async function save(e) {
     e.preventDefault();
-    setMessage('Speichere SMTP-Einstellungen ...');
-    const saved = await api('/admin/smtp-settings', { method: 'PUT', body: JSON.stringify(form) });
-    setForm({ ...form, password: '' });
-    setMessage(`Gespeichert. Passwort hinterlegt: ${saved.has_password ? 'ja' : 'nein'}`);
+    setMessage('Speichere SMTP-Einstellungen …');
+    try {
+      const saved = await api('/admin/smtp-settings', { method: 'PUT', body: JSON.stringify(form) });
+      setForm({ ...form, password: '' });
+      setMessage(`SMTP-Einstellungen gespeichert. Passwort hinterlegt: ${saved.has_password ? 'ja' : 'nein'}.`);
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
   }
 
   async function test() {
-    setMessage('Sende Testmail ...');
+    setMessage('Sende Testmail …');
     try {
       const result = await api('/admin/smtp-settings/test', { method: 'POST', body: JSON.stringify({ to: form.notificationEmail || form.fromEmail }) });
       setMessage(`Testmail gesendet an ${result.to}.`);
     } catch (err) {
-      setMessage(err.message);
+      setMessage(errorNotice(err));
     }
   }
 
@@ -1579,8 +1529,8 @@ function SmtpSettings() {
           <button type="button" onClick={test} className="button-secondary"><Send size={16} /> Testmail senden</button>
         </div>
       </form>
-      {message && <p className="mt-4 rounded-md bg-blue-50 p-3 text-sm text-blue-800">{message}</p>}
-      {data?.last_test_at && <p className="mt-3 text-sm text-neutral-500">Letzter Test: {formatDate(data.last_test_at)} Â· {data.last_test_status || '-'}</p>}
+      <Notice message={message} />
+      {data?.last_test_at && <p className="mt-3 text-sm text-neutral-500">Letzter Test: {formatDate(data.last_test_at)} · {data.last_test_status || '-'}</p>}
       {data?.last_test_error && <p className="mt-2 text-sm text-red-700">{data.last_test_error}</p>}
     </Panel>
   </div>;
@@ -1588,13 +1538,20 @@ function SmtpSettings() {
 
 function Webhooks() {
   const [reload, setReload] = useState(0);
-  const { data, loading } = useAsync(() => api('/admin/webhooks'), [reload]);
+  const { data, loading, error } = useAsync(() => api('/admin/webhooks'), [reload]);
   const [form, setForm] = useState({ url: '', secret: '', events: 'feedback.created,feedback.low_rating,newsletter.optin' });
+  const [message, setMessage] = useState('');
   async function create(e) {
     e.preventDefault();
-    await api('/admin/webhooks', { method: 'POST', body: JSON.stringify({ ...form, events: form.events.split(',').map((item) => item.trim()).filter(Boolean) }) });
-    setForm({ url: '', secret: '', events: 'feedback.created,feedback.low_rating,newsletter.optin' });
-    setReload(reload + 1);
+    setMessage('');
+    try {
+      await api('/admin/webhooks', { method: 'POST', body: JSON.stringify({ ...form, events: form.events.split(',').map((item) => item.trim()).filter(Boolean) }) });
+      setMessage('Webhook gespeichert. qrating ruft ihn beim nächsten passenden Ereignis auf.');
+      setForm({ url: '', secret: '', events: 'feedback.created,feedback.low_rating,newsletter.optin' });
+      setReload(reload + 1);
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
   }
   return <div>
     <Header title="Webhooks" />
@@ -1605,9 +1562,11 @@ function Webhooks() {
         <input className="input md:col-span-2" value={form.events} onChange={(e) => setForm({ ...form, events: e.target.value })} />
         <button className="button-primary md:col-span-2">Webhook speichern</button>
       </form>
+      <Notice message={message} />
     </Panel>
     <div className="mt-6 space-y-3">
       {loading && <p>Lade Webhooks ...</p>}
+      {error && <ErrorBox error={error} />}
       {data?.map((hook) => <Panel key={hook.id}><div className="flex flex-col justify-between gap-2 md:flex-row"><div><h2 className="font-semibold">{hook.url}</h2><p className="text-sm text-neutral-500">{hook.events?.join?.(', ') || JSON.stringify(hook.events)}</p></div><span className="text-sm text-neutral-500">Letzter Status: {hook.last_status || '-'}</span></div>{hook.last_error && <p className="mt-2 text-sm text-red-700">{hook.last_error}</p>}</Panel>)}
     </div>
   </div>;
@@ -1626,7 +1585,19 @@ function Stat({ title, value }) {
 }
 
 function ErrorBox({ error }) {
-  return <p className="rounded-md bg-red-50 p-3 text-red-700">{error.message}</p>;
+  return <p role="alert" className="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-700">{error?.message || String(error)}</p>;
+}
+
+// Messages are plain strings (information) or { tone: 'error', text } from errorNotice().
+function errorNotice(error) {
+  return { tone: 'error', text: error?.message || String(error) };
+}
+
+function Notice({ message, className = 'mt-4' }) {
+  if (!message) return null;
+  const isError = typeof message === 'object' && message.tone === 'error';
+  const text = typeof message === 'object' ? message.text : message;
+  return <p role={isError ? 'alert' : 'status'} className={`${className} rounded-md p-3 text-sm ${isError ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-800'}`}>{text}</p>;
 }
 
 function fillRatings(rows) {

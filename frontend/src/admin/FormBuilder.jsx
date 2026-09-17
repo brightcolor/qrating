@@ -34,7 +34,19 @@ function Panel({ title, children, action, className = '' }) {
 }
 
 function ErrorBox({ error }) {
-  return <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error.message || String(error)}</div>;
+  return <div role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error.message || String(error)}</div>;
+}
+
+// Messages are plain strings (information) or { tone: 'error', text } from errorNotice().
+function errorNotice(error) {
+  return { tone: 'error', text: error?.message || String(error) };
+}
+
+function Notice({ message, className = '' }) {
+  if (!message) return null;
+  const isError = typeof message === 'object' && message.tone === 'error';
+  const text = typeof message === 'object' ? message.text : message;
+  return <p role={isError ? 'alert' : 'status'} className={`${className} rounded-md p-3 text-sm ${isError ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>{text}</p>;
 }
 
 export function FormBuilder() {
@@ -82,16 +94,25 @@ function ProfileLauncher({ events, profiles, onCreated }) {
   const builtIn = profiles?.builtIn || [];
   const saved = profiles?.saved || [];
   const [draft, setDraft] = useState({ profileId: '', templateFormId: '', eventId: '', name: '' });
+  const [message, setMessage] = useState('');
   const selected = builtIn.find((item) => item.id === draft.profileId) || saved.find((item) => item.id === draft.templateFormId);
 
   async function createFromProfile() {
-    if (!draft.profileId && !draft.templateFormId) return;
-    const created = await api('/admin/forms/from-profile', {
-      method: 'POST',
-      body: JSON.stringify({ ...draft, name: draft.name || selected?.name || 'New feedback form', isTemplate: !draft.eventId })
-    });
-    setDraft({ profileId: '', templateFormId: '', eventId: '', name: '' });
-    onCreated(created);
+    setMessage('');
+    if (!draft.profileId && !draft.templateFormId) {
+      setMessage(errorNotice({ message: 'Bitte wähle zuerst ein Fragenprofil aus.' }));
+      return;
+    }
+    try {
+      const created = await api('/admin/forms/from-profile', {
+        method: 'POST',
+        body: JSON.stringify({ ...draft, name: draft.name || selected?.name || 'New feedback form', isTemplate: !draft.eventId })
+      });
+      setDraft({ profileId: '', templateFormId: '', eventId: '', name: '' });
+      onCreated(created);
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
   }
 
   return <Panel title="Question profiles" action={<Sparkles className="text-blue-600" size={20} />}>
@@ -106,6 +127,7 @@ function ProfileLauncher({ events, profiles, onCreated }) {
         {events.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}
       </select>
       <button type="button" onClick={createFromProfile} className="button-blue w-full" disabled={!selected}><Sparkles size={16} /> Use selected profile</button>
+      <Notice message={message} />
     </div>
   </Panel>;
 }
@@ -124,10 +146,16 @@ function ProfileCard({ profile, active, onPick }) {
 function CreateBlankForm({ events, onCreated }) {
   const [name, setName] = useState('New feedback form');
   const [eventId, setEventId] = useState('');
+  const [message, setMessage] = useState('');
   async function submit(e) {
     e.preventDefault();
-    const form = await api('/admin/forms', { method: 'POST', body: JSON.stringify({ name, eventId: eventId || null, isTemplate: !eventId }) });
-    onCreated(form);
+    setMessage('');
+    try {
+      const form = await api('/admin/forms', { method: 'POST', body: JSON.stringify({ name, eventId: eventId || null, isTemplate: !eventId }) });
+      onCreated(form);
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
   }
   return <form onSubmit={submit} className="space-y-2">
     <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
@@ -136,6 +164,7 @@ function CreateBlankForm({ events, onCreated }) {
       {events.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}
     </select>
     <button className="button-primary w-full"><Plus size={16} /> Start blank</button>
+    <Notice message={message} />
   </form>;
 }
 
@@ -152,19 +181,29 @@ function FormEditor({ formId, form, onChanged }) {
     onChanged();
   }
   async function remove(questionId) {
-    await api(`/admin/forms/${formId}/questions/${questionId}`, { method: 'DELETE' });
-    refresh();
+    setMessage('');
+    try {
+      await api(`/admin/forms/${formId}/questions/${questionId}`, { method: 'DELETE' });
+      refresh();
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
   }
   async function saveProfile() {
-    const saved = await api(`/admin/forms/${formId}/save-profile`, { method: 'POST', body: JSON.stringify({ name: profileName }) });
-    setMessage(`Saved as "${saved.name}".`);
-    onChanged();
+    setMessage('');
+    try {
+      const saved = await api(`/admin/forms/${formId}/save-profile`, { method: 'POST', body: JSON.stringify({ name: profileName }) });
+      setMessage(`Als Fragenprofil „${saved.name}“ gespeichert.`);
+      onChanged();
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
   }
 
   const activeQuestions = data.questions.filter((question) => question.active);
   return <div className="space-y-6">
     <Panel title={data.form.name} action={<span className="rounded-full bg-neutral-100 px-3 py-1 text-sm">{activeQuestions.length} active questions</span>}>
-      {message && <p className="mb-4 rounded-md bg-green-50 p-3 text-sm text-green-700">{message}</p>}
+      <Notice message={message} className="mb-4" />
       <div className="grid gap-3 md:grid-cols-[1fr_auto]">
         <input className="input" value={profileName} onChange={(e) => setProfileName(e.target.value)} />
         <button onClick={saveProfile} className="button-secondary"><Save size={16} /> Save as profile</button>
@@ -183,15 +222,25 @@ function FormEditor({ formId, form, onChanged }) {
 
 function QuestionCreate({ formId, nextOrder, onCreated }) {
   const [draft, setDraft] = useState({ label: '', internalName: '', questionType: 'text_long', helpText: '', placeholder: '', options: '', required: false });
+  const [message, setMessage] = useState('');
   const selectedType = typeCards.find((type) => type.value === draft.questionType);
   async function submit(e) {
     e.preventDefault();
-    await api(`/admin/forms/${formId}/questions`, {
-      method: 'POST',
-      body: JSON.stringify({ ...draft, internalName: draft.internalName || makeKey(draft.label), sortOrder: nextOrder, options: linesToOptions(draft.options) })
-    });
-    setDraft({ label: '', internalName: '', questionType: 'text_long', helpText: '', placeholder: '', options: '', required: false });
-    onCreated();
+    setMessage('');
+    if (['checkboxes', 'multiple_choice'].includes(draft.questionType) && !linesToOptions(draft.options).length) {
+      setMessage(errorNotice({ message: 'Für diesen Fragetyp brauchst du mindestens eine Antwortmöglichkeit, eine pro Zeile.' }));
+      return;
+    }
+    try {
+      await api(`/admin/forms/${formId}/questions`, {
+        method: 'POST',
+        body: JSON.stringify({ ...draft, internalName: draft.internalName || makeKey(draft.label), sortOrder: nextOrder, options: linesToOptions(draft.options) })
+      });
+      setDraft({ label: '', internalName: '', questionType: 'text_long', helpText: '', placeholder: '', options: '', required: false });
+      onCreated();
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
   }
   return <form onSubmit={submit} className="mt-5 space-y-4 rounded-lg bg-neutral-50 p-4">
     <div>
@@ -209,6 +258,7 @@ function QuestionCreate({ formId, nextOrder, onCreated }) {
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={draft.required} onChange={(e) => setDraft({ ...draft, required: e.target.checked })} /> Make it required</label>
       <button className="button-blue"><Plus size={16} /> Add {selectedType?.label || 'question'}</button>
     </div>
+    <Notice message={message} />
   </form>;
 }
 
@@ -234,22 +284,34 @@ function QuestionRow({ formId, question, onSaved, onDelete }) {
     sortOrder: question.sort_order,
     options: optionsToLines(question.options)
   });
+  const [message, setMessage] = useState('');
   const type = typeCards.find((item) => item.value === draft.questionType) || typeCards[0];
   const Icon = type.icon;
 
   async function save(nextDraft = draft) {
-    await api(`/admin/forms/${formId}/questions/${question.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ ...nextDraft, options: linesToOptions(nextDraft.options) })
-    });
-    onSaved();
+    setMessage('');
+    try {
+      await api(`/admin/forms/${formId}/questions/${question.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ ...nextDraft, options: linesToOptions(nextDraft.options) })
+      });
+      setMessage('Frage gespeichert.');
+      onSaved();
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
   }
   async function duplicate() {
-    await api(`/admin/forms/${formId}/questions`, {
-      method: 'POST',
-      body: JSON.stringify({ ...draft, label: `${draft.label} copy`, internalName: `${draft.internalName}_copy`, sortOrder: Number(draft.sortOrder || 0) + 1, options: linesToOptions(draft.options) })
-    });
-    onSaved();
+    setMessage('');
+    try {
+      await api(`/admin/forms/${formId}/questions`, {
+        method: 'POST',
+        body: JSON.stringify({ ...draft, label: `${draft.label} copy`, internalName: `${draft.internalName}_copy`, sortOrder: Number(draft.sortOrder || 0) + 1, options: linesToOptions(draft.options) })
+      });
+      onSaved();
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
   }
 
   return <div className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
@@ -267,6 +329,7 @@ function QuestionRow({ formId, question, onSaved, onDelete }) {
         <button onClick={onDelete} className="button-secondary" title="Delete"><Trash2 size={16} /></button>
       </div>
     </div>
+    <Notice message={message} className="mt-3" />
     {open && <div className="mt-4 grid gap-3">
       <input className="input" value={draft.label} onChange={(e) => setDraft({ ...draft, label: e.target.value })} />
       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">{typeCards.map((item) => <TypeCard key={item.value} type={item} active={draft.questionType === item.value} onPick={() => setDraft({ ...draft, questionType: item.value })} />)}</div>

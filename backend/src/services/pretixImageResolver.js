@@ -4,6 +4,18 @@ import path from 'path';
 import fs from 'fs/promises';
 import crypto from 'crypto';
 import { env } from '../config/env.js';
+import { httpError } from '../middleware/errors.js';
+import { fetchService, serviceUnreachable } from '../utils/serviceErrors.js';
+
+const pretixSettingsReasons = {
+  401: ['hat den API-Token abgelehnt', 'Trage in der Verbindung einen gültigen Token ein.'],
+  403: ['erlaubt dem API-Token keinen Zugriff auf die Event-Einstellungen', 'Prüfe die Rechte des Tokens in Pretix.'],
+  404: ['kennt dieses Event nicht', 'Prüfe, ob das Event in Pretix noch existiert.']
+};
+
+function formatMegabytes(bytes) {
+  return `${(bytes / 1024 / 1024).toLocaleString('de-DE', { maximumFractionDigits: 1 })} MB`;
+}
 
 export const defaultImageKeys = [
   'header_image',
@@ -93,14 +105,33 @@ function isPrivateIp(ip) {
   return ip === '::1' || ip.startsWith('fc') || ip.startsWith('fd') || ip.startsWith('fe80');
 }
 
+function parseUrl(value, message) {
+  try {
+    return new URL(value);
+  } catch {
+    throw httpError(400, message);
+  }
+}
+
 export async function assertSafeImageUrl(imageUrl, pretixBaseUrl, allowedHosts = []) {
-  const url = new URL(imageUrl);
-  if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Ungültiges Bild-Protokoll.');
-  const pretixHost = new URL(pretixBaseUrl).hostname;
+  const url = parseUrl(imageUrl, 'Die Adresse des Eventbilds ist ungültig.');
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    throw httpError(400, 'Das Eventbild hat keine Web-Adresse. Erlaubt sind Bilder unter http:// oder https://.');
+  }
+  const pretixHost = parseUrl(pretixBaseUrl, 'Die Pretix-Adresse der Verbindung ist ungültig. Sie muss mit https:// beginnen.').hostname;
   const hosts = new Set([pretixHost, ...allowedHosts]);
-  if (!hosts.has(url.hostname)) throw new Error('Bild-Host ist nicht erlaubt.');
-  const records = await dns.lookup(url.hostname, { all: true });
-  if (records.some((record) => isPrivateIp(record.address))) throw new Error('Private IPs sind für Bildimporte gesperrt.');
+  if (!hosts.has(url.hostname)) {
+    throw httpError(400, `Das Eventbild liegt auf ${url.hostname}. Bilder von diesem Server sind für den Import nicht erlaubt; erlaubt sind der Pretix-Server und die eingetragenen Bild-Hosts der Verbindung.`);
+  }
+  let records;
+  try {
+    records = await dns.lookup(url.hostname, { all: true });
+  } catch (error) {
+    throw serviceUnreachable('Der Bildserver', error);
+  }
+  if (records.some((record) => isPrivateIp(record.address))) {
+    throw httpError(400, 'Das Eventbild liegt auf einem Server im internen Netz. Solche Bilder lädt qrating aus Sicherheitsgründen nicht.');
+  }
 }
 
 export class PretixImageResolver {
@@ -114,11 +145,16 @@ export class PretixImageResolver {
     const organizer = connection.pretix_organizer_slug;
     const headers = { Authorization: `Token ${connection.api_token}` };
     const explainUrl = `${base}/api/v1/organizers/${organizer}/events/${eventSlug}/settings/?explain=true`;
-    let response = await this.fetchImpl(explainUrl, { headers });
-    if (!response.ok && response.status === 400) {
-      response = await this.fetchImpl(`${base}/api/v1/organizers/${organizer}/events/${eventSlug}/settings/`, { headers });
+    // Older Pretix versions reject ?explain=true with HTTP 400.
+    let response = await fetchService('Pretix', this.fetchImpl, explainUrl, { headers }, {
+      overrides: pretixSettingsReasons,
+      allowStatus: (status) => status === 400
+    });
+    if (!response.ok) {
+      response = await fetchService('Pretix', this.fetchImpl, `${base}/api/v1/organizers/${organizer}/events/${eventSlug}/settings/`, { headers }, {
+        overrides: pretixSettingsReasons
+      });
     }
-    if (!response.ok) throw new Error(`Pretix Settings konnten nicht geladen werden (${response.status}).`);
     return response.json();
   }
 
@@ -141,12 +177,15 @@ export class PretixImageResolver {
   async cacheImageIfEnabled(imageUrl, event, connection = {}) {
     if (!connection.cache_event_images) return null;
     await assertSafeImageUrl(imageUrl, connection.base_url, connection.allowed_image_hosts || []);
-    const response = await this.fetchImpl(imageUrl);
-    if (!response.ok) throw new Error(`Bilddownload fehlgeschlagen (${response.status}).`);
+    const response = await fetchService('Der Bildserver', this.fetchImpl, imageUrl);
     const mime = response.headers.get('content-type')?.split(';')[0];
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(mime)) throw new Error('Bild-MIME-Type ist nicht erlaubt.');
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(mime)) {
+      throw httpError(400, `Das Eventbild hat das Format ${mime || 'unbekannt'}. qrating übernimmt JPEG, PNG und WebP.`);
+    }
     const bytes = Buffer.from(await response.arrayBuffer());
-    if (bytes.length > env.imageCacheMaxBytes) throw new Error('Bilddatei ist zu groß.');
+    if (bytes.length > env.imageCacheMaxBytes) {
+      throw httpError(400, `Das Eventbild ist ${formatMegabytes(bytes.length)} groß. Erlaubt sind höchstens ${formatMegabytes(env.imageCacheMaxBytes)}.`);
+    }
     const ext = mime === 'image/png' ? 'png' : mime === 'image/webp' ? 'webp' : 'jpg';
     const filename = `${event.id}-${crypto.createHash('sha256').update(bytes).digest('hex').slice(0, 16)}.${ext}`;
     const target = path.join(process.cwd(), '..', 'storage', 'event-images', filename);

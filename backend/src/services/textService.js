@@ -23,7 +23,11 @@ export const defaultTextsByLanguage = {
     no_event_headline: 'Gerade ist kein Event zur Bewertung geöffnet.',
     no_event_text: 'Schau gerne später nochmal vorbei.',
     expired_headline: 'Die Feedbackrunde ist beendet.',
-    expired_text: 'Danke für dein Interesse. Für dieses Event ist die Bewertungszeit leider bereits abgelaufen.'
+    expired_text: 'Danke für dein Interesse. Für dieses Event ist die Bewertungszeit leider bereits abgelaufen.',
+    not_found_headline: 'Diese Bewertungsseite gibt es nicht.',
+    not_found_text: 'Prüfe den QR-Code oder den Link. Vielleicht wurde er inzwischen durch einen neuen ersetzt.',
+    not_started_headline: 'Die Bewertung ist noch nicht geöffnet.',
+    not_started_text: 'Sie startet am {datum}. Schau dann gerne wieder vorbei.'
   },
   en: {
     headline: 'How was your night at {event_name}?',
@@ -49,7 +53,11 @@ export const defaultTextsByLanguage = {
     no_event_headline: 'No event is open for feedback right now.',
     no_event_text: 'Please check back later.',
     expired_headline: 'This feedback round has ended.',
-    expired_text: 'Thanks for your interest. Feedback for this event is already closed.'
+    expired_text: 'Thanks for your interest. Feedback for this event is already closed.',
+    not_found_headline: 'This feedback page does not exist.',
+    not_found_text: 'Please check the QR code or the link. It may have been replaced by a new one.',
+    not_started_headline: 'Feedback is not open yet.',
+    not_started_text: 'It opens on {datum}. Please come back then.'
   }
 };
 

@@ -1,5 +1,6 @@
 import { env } from '../config/env.js';
 import crypto from 'crypto';
+import { httpError } from '../middleware/errors.js';
 
 function originOf(value) {
   try {
@@ -23,7 +24,10 @@ export function allowedOrigins() {
 export function corsOrigin(origin, callback) {
   if (!origin) return callback(null, true);
   if (allowedOrigins().has(origin)) return callback(null, true);
-  return callback(new Error('CORS origin is not allowed.'), false);
+  return callback(httpError(
+    403,
+    `Die Adresse ${origin} ist für qrating nicht freigegeben. Öffne qrating über die eingerichtete Adresse oder ergänze diese in CORS_ALLOWED_ORIGINS.`
+  ), false);
 }
 
 export function adminCookieOptions() {
