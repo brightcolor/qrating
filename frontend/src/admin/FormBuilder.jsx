@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { buildSteps, questionType } from '../guest/flow.js';
+import { eventLabel } from './eventLabel.js';
 import { linesToOptions, makeKey, optionsToLines, profileIcons, promptIdeas, typeCards } from './formBuilderUtils.js';
 
 function useAsync(fn, deps = []) {
@@ -126,7 +127,7 @@ function ProfileLauncher({ events, profiles, onCreated }) {
       <input className="input" placeholder="Name des Formulars" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
       <select className="input" value={draft.eventId} onChange={(e) => setDraft({ ...draft, eventId: e.target.value })}>
         <option value="">Als wiederverwendbare Vorlage speichern</option>
-        {events.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}
+        {events.map((event) => <option key={event.id} value={event.id}>{eventLabel(event)}</option>)}
       </select>
       <button type="button" onClick={createFromProfile} className="button-blue w-full" disabled={!selected}><Sparkles size={16} /> Vorlage verwenden</button>
       <Notice message={message} />
@@ -166,7 +167,7 @@ function CreateBlankForm({ events, onCreated }) {
     <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
     <select className="input" value={eventId} onChange={(e) => setEventId(e.target.value)}>
       <option value="">Wiederverwendbare Vorlage</option>
-      {events.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}
+      {events.map((event) => <option key={event.id} value={event.id}>{eventLabel(event)}</option>)}
     </select>
     <button className="button-primary w-full"><Plus size={16} /> Leer beginnen</button>
     <Notice message={message} />

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { CheckCircle2, Eye, EyeOff, RefreshCw, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react';
 import { api } from '../lib/api.js';
+import { eventLabel } from './eventLabel.js';
 
 function useAsync(fn, deps = []) {
   const [state, setState] = useState({ loading: true, data: null, error: null });
@@ -230,7 +231,7 @@ export function SecurityCenter() {
               <h3 className="font-semibold">Low-Rating Kontakte</h3>
               <div className="mt-3 space-y-2">
                 {pii.lowRatingCases.map((item) => <div key={item.id} className="rounded-md border border-neutral-200 p-3 text-sm">
-                  <strong>{item.event_name}</strong>
+                  <strong>{eventLabel(item)}</strong>
                   <p className="text-neutral-500">{item.rating} Sterne - {item.status}</p>
                   {revealed[item.id] && <p className="mt-2 rounded bg-neutral-50 p-2">Telefon: {revealed[item.id].contactPhone || '-'}<br />Hinweis: {revealed[item.id].contactNote || '-'}</p>}
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -244,7 +245,7 @@ export function SecurityCenter() {
               <h3 className="font-semibold">Newsletter Opt-ins</h3>
               <div className="mt-3 space-y-2">
                 {pii.newsletterOptins.map((item) => <div key={item.id} className="rounded-md border border-neutral-200 p-3 text-sm">
-                  <strong>{item.event_name || 'Ohne Event'}</strong>
+                  <strong>{item.event_name ? eventLabel(item) : 'Ohne Event'}</strong>
                   <p className="text-neutral-500">{item.email_domain || 'keine Domain'} - {item.legacy_plaintext ? 'Legacy-Klartext vorhanden' : 'verschlüsselt'}</p>
                   {revealed[`newsletter-${item.id}`] && <p className="mt-2 rounded bg-neutral-50 p-2">{revealed[`newsletter-${item.id}`].email}</p>}
                   <div className="mt-3 flex flex-wrap gap-2">

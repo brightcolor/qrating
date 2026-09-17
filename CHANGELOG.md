@@ -4,6 +4,13 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.18.5] - 2026-09-17
+
+### Changed
+
+- Every event list in the admin area shows the event date next to the name, so events of a series stay apart: analytics, report by email, QR analytics, print templates, event assignments, form templates, and the lists in the Security Center.
+- Version bumped to `0.18.5`.
+
 ## [0.18.4] - 2026-09-17
 
 ### Added

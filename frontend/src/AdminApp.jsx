@@ -28,6 +28,7 @@ import './styles/index.css';
 import { API_BASE, api, assetUrl } from './lib/api.js';
 import { FormBuilder } from './admin/FormBuilder.jsx';
 import { groupTextKeys, textLabels } from './admin/textCatalog.js';
+import { eventLabel, formatDate } from './admin/eventLabel.js';
 
 const SecurityCenter = React.lazy(() => import('./admin/SecurityCenter.jsx').then((module) => ({ default: module.SecurityCenter })));
 
@@ -456,7 +457,7 @@ function Analytics() {
       <div className="flex flex-wrap gap-3">
         <select className="input max-w-md" value={eventId} onChange={(e) => setEventId(e.target.value)}>
           {loading && <option>Lade Events ...</option>}
-          {events?.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}
+          {events?.map((event) => <option key={event.id} value={event.id}>{eventLabel(event)}</option>)}
         </select>
         <button onClick={sendReport} className="button-secondary"><Mail size={16} /> Report per E-Mail</button>
       </div>
@@ -1070,11 +1071,11 @@ function QrAndWallboard() {
         {dashboard?.organization && <p className="mt-4 break-all text-sm text-neutral-600">Beispiel: {dashboard.feedbackAppUrl}/f/{dashboard.organization.slug}/bar</p>}
       </Panel>
       <Panel title="Druckvorlagen">
-        <div className="space-y-2">{events?.map((event) => <a key={event.id} className="button-secondary w-full justify-between" href={`${API_BASE}/admin/events/${event.id}/qr-print`} target="_blank"><span>{event.name}</span><QrCode size={16} /></a>)}</div>
+        <div className="space-y-2">{events?.map((event) => <a key={event.id} className="button-secondary w-full justify-between" href={`${API_BASE}/admin/events/${event.id}/qr-print`} target="_blank"><span>{eventLabel(event)}</span><QrCode size={16} /></a>)}</div>
       </Panel>
     </div>
     <Panel title="QR-Quellen-Auswertung">
-      <select className="input max-w-md" value={selectedEvent} onChange={(e) => setSelectedEvent(e.target.value)}>{events?.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}</select>
+      <select className="input max-w-md" value={selectedEvent} onChange={(e) => setSelectedEvent(e.target.value)}>{events?.map((event) => <option key={event.id} value={event.id}>{eventLabel(event)}</option>)}</select>
       <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
         {qrAnalytics?.bySource?.map((row) => <div key={row.source_slug} className="rounded-md border border-neutral-200 p-3 text-sm"><strong>{row.label}</strong><p>Scans: {row.scans_count || 0} · Feedbacks: {row.feedback_count || 0}</p><p>Ø {row.average_rating || '-'} · Newsletter {row.newsletter_optins || 0} · Low {row.low_ratings || 0}</p></div>)}
         {qrAnalytics?.bySource?.length === 0 && <p className="text-sm text-neutral-500">Noch keine QR-Quellen-Daten für dieses Event.</p>}
@@ -1099,7 +1100,7 @@ function Wallboard({ events }) {
   }, [refreshSeconds]);
   const { data, error } = useAsync(() => eventId ? api(`/admin/events/${eventId}/analytics`) : Promise.resolve(null), [eventId, reload]);
   return <Panel title="Wallboard-Modus">
-    <select className="input max-w-md" value={eventId} onChange={(e) => setEventId(e.target.value)}>{events.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}</select>
+    <select className="input max-w-md" value={eventId} onChange={(e) => setEventId(e.target.value)}>{events.map((event) => <option key={event.id} value={event.id}>{eventLabel(event)}</option>)}</select>
     {error && <ErrorBox error={error} />}
     {data && <div className={`mt-6 rounded-lg p-5 ${dark ? 'bg-neutral-950 text-white' : 'bg-neutral-50 text-neutral-950'}`}>
       <div className="flex items-center justify-between gap-3">
@@ -1364,7 +1365,7 @@ function Notifications() {
       </Panel>
       <Panel title="Event-Zuweisungen">
         <select className="input" value={selectedEvent} onChange={(e) => setSelectedEvent(e.target.value)}>
-          {events?.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}
+          {events?.map((event) => <option key={event.id} value={event.id}>{eventLabel(event)}</option>)}
         </select>
         <div className="mt-4 space-y-2">
           {assignments.map((assignment, index) => <div key={assignment.user_id} className="grid gap-2 rounded-md bg-neutral-50 p-3 md:grid-cols-[1fr_auto_auto]">
@@ -1637,11 +1638,6 @@ function Notice({ message, className = 'mt-4' }) {
 function fillRatings(rows) {
   const byRating = new Map((rows || []).map((row) => [Number(row.rating), row.count]));
   return [1, 2, 3, 4, 5].map((rating) => ({ rating, count: byRating.get(rating) || 0 }));
-}
-
-function formatDate(value) {
-  if (!value) return '';
-  return new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 }
 
 export default AdminApp;

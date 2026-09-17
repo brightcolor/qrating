@@ -141,7 +141,7 @@ securityRouter.get('/pii-vault', requireRole('event_manager'), async (req, res, 
         [req.admin.organizationId]
       ),
       query(
-        `SELECT lrc.id, lrc.rating, lrc.status, lrc.created_at, lrc.event_id, e.name AS event_name,
+        `SELECT lrc.id, lrc.rating, lrc.status, lrc.created_at, lrc.event_id, e.name AS event_name, e.date_from AS event_date_from,
                 lrc.contact_phone_encrypted IS NOT NULL AS contact_phone_available,
                 (lrc.contact_note_encrypted IS NOT NULL OR lrc.contact_note IS NOT NULL) AS contact_note_available
          FROM low_rating_cases lrc
@@ -153,7 +153,7 @@ securityRouter.get('/pii-vault', requireRole('event_manager'), async (req, res, 
         [req.admin.organizationId]
       ),
       query(
-        `SELECT no.id, no.event_id, no.email_hash, no.email_domain, no.consent_given_at, no.source, e.name AS event_name,
+        `SELECT no.id, no.event_id, no.email_hash, no.email_domain, no.consent_given_at, no.source, e.name AS event_name, e.date_from AS event_date_from,
                 no.email_encrypted IS NOT NULL AS encrypted,
                 no.email IS NOT NULL AS legacy_plaintext
          FROM newsletter_optins no
