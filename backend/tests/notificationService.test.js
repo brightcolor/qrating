@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { NotificationService, publicChannel } from '../src/services/notificationService.js';
+import { encodeHeaderText, NotificationService, publicChannel } from '../src/services/notificationService.js';
 import { encryptSecret } from '../src/utils/crypto.js';
 
 describe('NotificationService', () => {
@@ -60,9 +60,32 @@ describe('NotificationService', () => {
     expect(result[0].ok).toBe(true);
     expect(smtpService.sendMail).toHaveBeenCalledWith('org-1', expect.objectContaining({
       to: 'person@example.com',
-      text: expect.stringContaining('geschuetzten Low-Rating-Dashboard')
+      text: expect.stringContaining('geschützten Low-Rating-Dashboard')
     }));
     expect(smtpService.sendMail.mock.calls[0][1].text).not.toContain('+491234');
     expect(smtpService.sendMail.mock.calls[0][1].text).not.toContain('Bitte anrufen');
+  });
+
+  it('sends ntfy titles with umlauts as encoded words', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    const service = new NotificationService({ query: vi.fn() }, { fetchImpl });
+    const title = 'qrating: 1 Sterne für Sommerfest Lübeck – Open Air am Hafen mit Feuerwerk 🎆';
+    await service.sendChannel(
+      { channel_type: 'ntfy', config: { topicUrl: 'https://ntfy.example/qrating' } },
+      { title, text: 'Bitte prüfen.' }
+    );
+
+    const { title: header } = fetchImpl.mock.calls[0][1].headers;
+    const words = header.split(' ');
+    expect(header).toMatch(/^[\x20-\x7e]+$/);
+    expect(() => new Headers({ title: header })).not.toThrow();
+    expect(words.length).toBeGreaterThan(1);
+    expect(words.every((word) => word.length <= 75)).toBe(true);
+    const decoded = Buffer.concat(words.map((word) => Buffer.from(word.match(/^=\?UTF-8\?B\?(.*)\?=$/)[1], 'base64')));
+    expect(decoded.toString('utf8')).toBe(title);
+  });
+
+  it('keeps plain ASCII ntfy titles readable', () => {
+    expect(encodeHeaderText('qrating: 2 Sterne')).toBe('qrating: 2 Sterne');
   });
 });

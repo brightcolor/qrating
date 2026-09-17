@@ -123,7 +123,7 @@ export class JobWorker {
     const sent = await notification.smtpService.sendMail(event.organization_id, {
       to: user.email,
       subject: `qrating Report: ${event.name}`,
-      text: `Anbei der aktuelle qrating Report fuer ${event.name}.`,
+      text: `Anbei der aktuelle qrating Report für ${event.name}.`,
       attachments: [{ filename: 'qrating-report.pdf', content: pdf }]
     });
     if (sent?.skipped) {
@@ -194,7 +194,7 @@ export class JobWorker {
        SET contact_phone_encrypted = null,
            contact_note = null,
            contact_note_encrypted = null,
-           internal_note = COALESCE(internal_note, '') || CASE WHEN internal_note IS NULL OR internal_note = '' THEN '' ELSE E'\n' END || 'Telefon-/Kontaktangaben automatisch nach Aufbewahrungsfrist geloescht.',
+           internal_note = COALESCE(internal_note, '') || CASE WHEN internal_note IS NULL OR internal_note = '' THEN '' ELSE E'\n' END || 'Telefon-/Kontaktangaben automatisch nach Aufbewahrungsfrist gelöscht.',
            updated_at = now()
        WHERE organization_id = $1
          AND (

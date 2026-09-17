@@ -501,11 +501,11 @@ function LowRatingWorkflow() {
 
   return <div>
     <Header title="Low-Rating Workflow" />
-    <p className="mt-2 max-w-3xl text-sm text-neutral-600">Niedrige Bewertungen werden hier als Klaerungsfaelle gesammelt. Telefonnummern werden verschluesselt gespeichert und nur berechtigten Event-Verantwortlichen angezeigt.</p>
+    <p className="mt-2 max-w-3xl text-sm text-neutral-600">Niedrige Bewertungen werden hier als Klärungsfälle gesammelt. Telefonnummern werden verschlüsselt gespeichert und nur berechtigten Event-Verantwortlichen angezeigt.</p>
     <Notice message={message} />
     {error && <ErrorBox error={error} />}
     <div className="mt-6 grid gap-4">
-      {loading && <Panel>Lade Low-Rating-Faelle ...</Panel>}
+      {loading && <Panel>Lade Low-Rating-Fälle ...</Panel>}
       {data?.length === 0 && <Panel><p className="text-sm text-neutral-500">Aktuell gibt es keine offenen niedrigen Bewertungen.</p></Panel>}
       {data?.map((item) => <Panel key={item.id}>
         <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
@@ -516,7 +516,7 @@ function LowRatingWorkflow() {
               <span className="text-sm text-neutral-500">{formatDate(item.submitted_at)}</span>
             </div>
             <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
-              <Info label="Rueckrufnummer" value={revealed[item.id]?.contactPhone || (item.contactPhoneAvailable ? 'Im PII-Vault hinterlegt' : 'Nicht hinterlegt')} />
+              <Info label="Rückrufnummer" value={revealed[item.id]?.contactPhone || (item.contactPhoneAvailable ? 'Im PII-Vault hinterlegt' : 'Nicht hinterlegt')} />
               <Info label="Status" value={caseStatusLabel(item.status)} />
               <Info label="Kontakt-Hinweis" value={revealed[item.id]?.contactNote || (item.contactNoteAvailable ? 'Im PII-Vault hinterlegt' : 'Kein Hinweis')} />
               <Info label="Zugewiesen" value={item.assigned_user_name || 'Noch niemand'} />
@@ -532,9 +532,9 @@ function LowRatingWorkflow() {
               <span className="text-sm font-medium">Status</span>
               <select className="input mt-1" value={item.status} onChange={(e) => updateCase(item, { status: e.target.value })}>
                 <option value="open">Offen</option>
-                <option value="contact_planned">Rueckruf geplant</option>
+                <option value="contact_planned">Rückruf geplant</option>
                 <option value="contacted">Kontaktiert</option>
-                <option value="resolved">Geklaert</option>
+                <option value="resolved">Geklärt</option>
                 <option value="archived">Archiviert</option>
               </select>
             </label>
@@ -636,7 +636,7 @@ function WebsiteContent() {
       <EditableList title="Features" items={form.features || []} fields={[['title', 'Titel'], ['text', 'Text']]} onChange={(index, key, value) => updateList('features', index, key, value)} onAdd={() => addListItem('features')} onRemove={(index) => removeListItem('features', index)} />
       <EditableList title="Ablauf" items={form.steps || []} fields={[['title', 'Titel'], ['text', 'Text']]} onChange={(index, key, value) => updateList('steps', index, key, value)} onAdd={() => addListItem('steps')} onRemove={(index) => removeListItem('steps', index)} />
       <Panel title="Angebote / Pricing">
-        <p className="text-sm leading-6 text-neutral-600">Die oeffentliche Tarifmatrix kommt aus <strong>Plan & Billing</strong>. Dort werden Namen, Preise, Features und Limits zentral gepflegt, damit Landingpage, Upgrade-Buttons und Backend-Limits dieselbe Quelle nutzen.</p>
+        <p className="text-sm leading-6 text-neutral-600">Die öffentliche Tarifmatrix kommt aus <strong>Plan & Billing</strong>. Dort werden Namen, Preise, Features und Limits zentral gepflegt, damit Landingpage, Upgrade-Buttons und Backend-Limits dieselbe Quelle nutzen.</p>
       </Panel>
       <EditableList title="FAQ" items={form.faq || []} fields={[['question', 'Frage'], ['answer', 'Antwort']]} onChange={(index, key, value) => updateList('faq', index, key, value)} onAdd={() => addListItem('faq')} onRemove={(index) => removeListItem('faq', index)} />
 
@@ -669,7 +669,7 @@ function EditableList({ title, items, fields, onChange, onAdd, onRemove }) {
         </div>
         <button type="button" className="button-secondary mt-3" onClick={() => onRemove(index)}><Trash2 size={16} /> Entfernen</button>
       </div>)}
-      <button type="button" className="button-secondary" onClick={onAdd}><Plus size={16} /> Eintrag hinzufuegen</button>
+      <button type="button" className="button-secondary" onClick={onAdd}><Plus size={16} /> Eintrag hinzufügen</button>
     </div>
   </Panel>;
 }
@@ -728,16 +728,16 @@ function Billing() {
     {billing.canOverride && <Panel title="Kostenloser Plan-Override">
       <form onSubmit={saveOverride} className="grid gap-3 md:grid-cols-3">
         <label className="block"><span className="text-sm font-medium">Override-Plan</span><select className="input mt-1" value={override.plan} onChange={(e) => setOverride({ ...override, plan: e.target.value })}><option value="free">Free</option><option value="pro">Pro</option><option value="business">Business</option></select></label>
-        <label className="block"><span className="text-sm font-medium">Gueltig bis optional</span><input className="input mt-1" type="datetime-local" value={override.expiresAt} onChange={(e) => setOverride({ ...override, expiresAt: e.target.value })} /></label>
+        <label className="block"><span className="text-sm font-medium">Gültig bis optional</span><input className="input mt-1" type="datetime-local" value={override.expiresAt} onChange={(e) => setOverride({ ...override, expiresAt: e.target.value })} /></label>
         <label className="block"><span className="text-sm font-medium">Grund</span><input className="input mt-1" value={override.reason} onChange={(e) => setOverride({ ...override, reason: e.target.value })} placeholder="Demo, Partner, Kulanz ..." /></label>
         <button className="button-primary md:col-span-3"><ShieldCheck size={16} /> Override speichern</button>
       </form>
-      <p className="mt-3 text-sm text-neutral-500">Nur E-Mails aus `BILLING_ADMIN_EMAILS` duerfen Organisationen kostenlos auf Pro oder Business setzen.</p>
+      <p className="mt-3 text-sm text-neutral-500">Nur E-Mails aus `BILLING_ADMIN_EMAILS` dürfen Organisationen kostenlos auf Pro oder Business setzen.</p>
     </Panel>}
     <Panel title="Tarife, Features und Limits">
       {billing.canManagePlans
         ? <PlanEditor plans={planDrafts} setPlans={setPlanDrafts} onSubmit={savePlans} />
-        : <p className="text-sm leading-6 text-neutral-600">Die Tarifmatrix ist global. Nur Plattform-Admins aus `BILLING_ADMIN_EMAILS` koennen Preise, Features und technische Limits bearbeiten.</p>}
+        : <p className="text-sm leading-6 text-neutral-600">Die Tarifmatrix ist global. Nur Plattform-Admins aus `BILLING_ADMIN_EMAILS` können Preise, Features und technische Limits bearbeiten.</p>}
     </Panel>
   </div>;
 }
@@ -812,7 +812,7 @@ function PlanEditor({ plans, setPlans, onSubmit }) {
           <h3 className="text-lg font-semibold">{plan.name || 'Tarif'}</h3>
         </div>
         <div className="flex flex-wrap gap-3 text-sm">
-          <label className="flex items-center gap-2"><input type="checkbox" checked={plan.publicVisible} onChange={(e) => updatePlan(index, { publicVisible: e.target.checked })} /> oeffentlich</label>
+          <label className="flex items-center gap-2"><input type="checkbox" checked={plan.publicVisible} onChange={(e) => updatePlan(index, { publicVisible: e.target.checked })} /> öffentlich</label>
           <label className="flex items-center gap-2"><input type="checkbox" checked={plan.highlight} onChange={(e) => updatePlan(index, { highlight: e.target.checked })} /> hervorheben</label>
           <label className="flex items-center gap-2"><input type="checkbox" checked={plan.active} onChange={(e) => updatePlan(index, { active: e.target.checked })} /> aktiv</label>
         </div>
@@ -856,7 +856,7 @@ function PlanCard({ plan, billing }) {
     <ul className="mt-4 space-y-2 text-sm text-neutral-700">
       {plan.features.map((feature) => <li key={feature} className="flex gap-2"><Star size={15} className="mt-0.5 text-amber-500" fill="#f59e0b" /> <span>{feature}</span></li>)}
     </ul>
-    <p className="mt-5 rounded-md bg-neutral-50 p-3 text-sm text-neutral-600">Plaene werden intern vergeben. Fuer Freischaltungen nutze den Override oder die Organisationsverwaltung.</p>
+    <p className="mt-5 rounded-md bg-neutral-50 p-3 text-sm text-neutral-600">Pläne werden intern vergeben. Für Freischaltungen nutze den Override oder die Organisationsverwaltung.</p>
   </article>;
 }
 
@@ -919,10 +919,10 @@ function BrandingSettings() {
     <Header title="Branding & Datenschutz" />
     {loading && <p className="mt-4">Lade Branding ...</p>}
     {error && <ErrorBox error={error} />}
-    {form && <Panel title="Organisation und oeffentliche Besucheransicht">
+    {form && <Panel title="Organisation und öffentliche Besucheransicht">
       <form onSubmit={saveBranding} className="grid gap-4 md:grid-cols-2">
         <label className="block"><span className="text-sm font-medium">Organisationsname</span><input className="input mt-1" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
-        <label className="block"><span className="text-sm font-medium">Primaerfarbe</span><input className="input mt-1 h-12" type="color" value={form.primaryColor} onChange={(e) => setForm({ ...form, primaryColor: e.target.value })} /></label>
+        <label className="block"><span className="text-sm font-medium">Primärfarbe</span><input className="input mt-1 h-12" type="color" value={form.primaryColor} onChange={(e) => setForm({ ...form, primaryColor: e.target.value })} /></label>
         <label className="block md:col-span-2"><span className="text-sm font-medium">Logo-URL</span><input className="input mt-1" value={form.logoUrl} onChange={(e) => setForm({ ...form, logoUrl: e.target.value })} placeholder="/storage/logo.png oder https://..." /></label>
         <label className="block md:col-span-2"><span className="text-sm font-medium">Footer-Text</span><input className="input mt-1" value={form.footerText} onChange={(e) => setForm({ ...form, footerText: e.target.value })} /></label>
         <label className="block md:col-span-2"><span className="text-sm font-medium">Datenschutzhinweis</span><textarea className="input mt-1 min-h-24" value={form.privacyText} onChange={(e) => setForm({ ...form, privacyText: e.target.value })} /></label>
@@ -933,9 +933,9 @@ function BrandingSettings() {
         <label className="block"><span className="text-sm font-medium">Standardsprache</span><select className="input mt-1" value={form.defaultLanguage} onChange={(e) => setForm({ ...form, defaultLanguage: e.target.value })}><option value="de">Deutsch</option><option value="en">English</option></select></label>
         <label className="block"><span className="text-sm font-medium">Mindestzeit bis Absenden (Sek.)</span><input className="input mt-1" type="number" min="0" value={form.minSeconds} onChange={(e) => setForm({ ...form, minSeconds: Number(e.target.value) })} /></label>
         <label className="mt-6 flex items-center gap-2 rounded-md bg-neutral-50 p-3"><input type="checkbox" checked={form.honeypotEnabled} onChange={(e) => setForm({ ...form, honeypotEnabled: e.target.checked })} /> Honeypot aktivieren</label>
-        <label className="block"><span className="text-sm font-medium">Low-Rating-Kontaktdaten loeschen nach Tagen</span><input className="input mt-1" type="number" min="1" value={form.retentionLowRatingPhoneDays} onChange={(e) => setForm({ ...form, retentionLowRatingPhoneDays: Number(e.target.value) })} /></label>
-        <label className="block"><span className="text-sm font-medium">Feedback loeschen nach Tagen (leer = behalten)</span><input className="input mt-1" type="number" min="1" value={form.retentionFeedbackDays} onChange={(e) => setForm({ ...form, retentionFeedbackDays: e.target.value })} /></label>
-        <label className="block"><span className="text-sm font-medium">Newsletter-Opt-ins loeschen nach Tagen (leer = behalten)</span><input className="input mt-1" type="number" min="1" value={form.retentionNewsletterDays} onChange={(e) => setForm({ ...form, retentionNewsletterDays: e.target.value })} /></label>
+        <label className="block"><span className="text-sm font-medium">Low-Rating-Kontaktdaten löschen nach Tagen</span><input className="input mt-1" type="number" min="1" value={form.retentionLowRatingPhoneDays} onChange={(e) => setForm({ ...form, retentionLowRatingPhoneDays: Number(e.target.value) })} /></label>
+        <label className="block"><span className="text-sm font-medium">Feedback löschen nach Tagen (leer = behalten)</span><input className="input mt-1" type="number" min="1" value={form.retentionFeedbackDays} onChange={(e) => setForm({ ...form, retentionFeedbackDays: e.target.value })} /></label>
+        <label className="block"><span className="text-sm font-medium">Newsletter-Opt-ins löschen nach Tagen (leer = behalten)</span><input className="input mt-1" type="number" min="1" value={form.retentionNewsletterDays} onChange={(e) => setForm({ ...form, retentionNewsletterDays: e.target.value })} /></label>
         <label className="flex items-center gap-2 rounded-md bg-neutral-50 p-3"><input type="checkbox" checked={form.wallboardDarkMode} onChange={(e) => setForm({ ...form, wallboardDarkMode: e.target.checked })} /> Wallboard Dark Mode</label>
         <label className="block"><span className="text-sm font-medium">Wallboard Refresh (Sek.)</span><input className="input mt-1" type="number" min="5" value={form.wallboardRefreshSeconds} onChange={(e) => setForm({ ...form, wallboardRefreshSeconds: Number(e.target.value) })} /></label>
         <button className="button-primary md:col-span-2">Branding speichern</button>
@@ -952,9 +952,9 @@ function Info({ label, value }) {
 function caseStatusLabel(status) {
   return {
     open: 'Offen',
-    contact_planned: 'Rueckruf geplant',
+    contact_planned: 'Rückruf geplant',
     contacted: 'Kontaktiert',
-    resolved: 'Geklaert',
+    resolved: 'Geklärt',
     archived: 'Archiviert'
   }[status] || status;
 }
@@ -989,7 +989,7 @@ function Texts() {
     <Notice message={message} />
     {loading && <p>Lade Texte ...</p>}
     {error && <ErrorBox error={error} />}
-    {data && <Panel title="Oeffentliche Standardtexte">
+    {data && <Panel title="Öffentliche Standardtexte">
       <div className="grid gap-4">
         {Object.keys(data.defaults).map((key) => <label key={key} className="block">
           <span className="text-sm font-medium">{key}</span>
@@ -1142,7 +1142,7 @@ function Pretix() {
       {error && <ErrorBox error={error} />}
       {data?.map((connection) => <div key={connection.id} className="rounded-lg bg-white p-5 shadow-sm">
         <h2 className="font-semibold">{connection.base_url} / {connection.pretix_organizer_slug}</h2>
-        <p className="mt-1 text-sm text-neutral-600">Letzter Sync: {connection.last_sync_status || 'Noch nicht synchronisiert'} · Naechster Sync: {connection.next_sync_at ? formatDate(connection.next_sync_at) : '-'}</p>
+        <p className="mt-1 text-sm text-neutral-600">Letzter Sync: {connection.last_sync_status || 'Noch nicht synchronisiert'} · Nächster Sync: {connection.next_sync_at ? formatDate(connection.next_sync_at) : '-'}</p>
         <p className="mt-1 text-sm text-neutral-500">Intervall: {connection.sync_interval_minutes} Min. · Auto-Sync: {connection.sync_enabled ? 'aktiv' : 'inaktiv'} · Cache: {connection.cache_event_images ? 'aktiv' : 'inaktiv'}</p>
         <div className="mt-4 flex flex-wrap gap-2">
           <button onClick={() => action(connection.id, 'test')} className="button-secondary">Testen</button>
@@ -1316,12 +1316,12 @@ function Notifications() {
           <button className="button-primary">Einladung senden</button>
         </form>
       </Panel>
-      <Panel title="Persoenlichen Kanal anlegen">
+      <Panel title="Persönlichen Kanal anlegen">
         <form onSubmit={createChannel} className="grid gap-3 md:grid-cols-2">
           <label className="block"><span className="text-sm font-medium">User</span><select className="input mt-1" value={form.userId} onChange={(e) => setForm({ ...form, userId: e.target.value })}>{users?.map((user) => <option key={user.id} value={user.id}>{user.name} ({user.email})</option>)}</select></label>
           <label className="block"><span className="text-sm font-medium">Kanal</span><select className="input mt-1" value={form.channelType} onChange={(e) => setForm({ ...form, channelType: e.target.value, label: e.target.value })}>{notificationTypes.map((type) => <option key={type}>{type}</option>)}</select></label>
           <label className="block"><span className="text-sm font-medium">Label</span><input className="input mt-1" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} /></label>
-          <label className="block"><span className="text-sm font-medium">Ausloesen bis Bewertung</span><input className="input mt-1" type="number" min="1" max="5" value={form.minRating} onChange={(e) => setForm({ ...form, minRating: Number(e.target.value) })} /></label>
+          <label className="block"><span className="text-sm font-medium">Auslösen bis Bewertung</span><input className="input mt-1" type="number" min="1" max="5" value={form.minRating} onChange={(e) => setForm({ ...form, minRating: Number(e.target.value) })} /></label>
           <label className="block md:col-span-2"><span className="text-sm font-medium">Secret / Token / Webhook-URL</span><input className="input mt-1" type="password" value={form.secret} onChange={(e) => setForm({ ...form, secret: e.target.value })} placeholder={channelSecretPlaceholder(form.channelType)} /></label>
           <label className="block md:col-span-2"><span className="text-sm font-medium">Config JSON</span><textarea className="input mt-1 min-h-24" value={form.configText} onChange={(e) => setForm({ ...form, configText: e.target.value })} /></label>
           <p className="text-sm text-neutral-500 md:col-span-2">{channelHelp(form.channelType)}</p>
@@ -1362,7 +1362,7 @@ function Notifications() {
         </div>)}
       </div>
     </Panel>
-    <Panel title="Aktive Kanaele">
+    <Panel title="Aktive Kanäle">
       {loading && <p>Lade Kanäle ...</p>}
       {channelsError && <ErrorBox error={channelsError} />}
       <div className="grid gap-3">
@@ -1389,12 +1389,12 @@ function channelHelp(type) {
   const examples = {
     email: 'Config: {"to":"person@example.com"} oder leer, dann wird die User-E-Mail genutzt.',
     discord: 'Secret ist die Discord Webhook-URL. Config kann leer bleiben.',
-    slack: 'Secret ist die Slack Incoming Webhook-URL. Funktioniert auch fuer Mattermost-kompatible Webhooks.',
+    slack: 'Secret ist die Slack Incoming Webhook-URL. Funktioniert auch für Mattermost-kompatible Webhooks.',
     mattermost: 'Secret ist die Mattermost Incoming Webhook-URL.',
     teams: 'Secret ist die Microsoft Teams Incoming Webhook-URL.',
     telegram: 'Secret ist der Bot Token. Config: {"chatId":"123456"}',
     pushover: 'Secret ist der App Token. Config: {"userKey":"...", "priority":1}',
-    ntfy: 'Config: {"topicUrl":"https://ntfy.sh/mein-topic", "priority":"high"}. Secret optional fuer Bearer Auth.',
+    ntfy: 'Config: {"topicUrl":"https://ntfy.sh/mein-topic", "priority":"high"}. Secret optional für Bearer Auth.',
     gotify: 'Secret ist der App Token. Config: {"url":"https://gotify.example.com", "priority":5}',
     webhook: 'Secret ist die Ziel-URL. qrating sendet JSON mit title, text, event und feedback.'
   };
@@ -1516,14 +1516,14 @@ function SmtpSettings() {
         <label className="block"><span className="text-sm font-medium">SMTP-Host</span><input className="input mt-1" value={form.host} onChange={(e) => setForm({ ...form, host: e.target.value })} placeholder="smtp.example.com" required /></label>
         <label className="block"><span className="text-sm font-medium">Port</span><input className="input mt-1" type="number" value={form.port} onChange={(e) => setForm({ ...form, port: Number(e.target.value) })} required /></label>
         <label className="block"><span className="text-sm font-medium">Benutzername</span><input className="input mt-1" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} /></label>
-        <label className="block"><span className="text-sm font-medium">Passwort</span><input className="input mt-1" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder={data?.has_password ? 'Bleibt unveraendert, wenn leer' : ''} /></label>
+        <label className="block"><span className="text-sm font-medium">Passwort</span><input className="input mt-1" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder={data?.has_password ? 'Bleibt unverändert, wenn leer' : ''} /></label>
         <label className="block"><span className="text-sm font-medium">Absender-E-Mail</span><input className="input mt-1" type="email" value={form.fromEmail} onChange={(e) => setForm({ ...form, fromEmail: e.target.value })} required /></label>
         <label className="block"><span className="text-sm font-medium">Absendername</span><input className="input mt-1" value={form.fromName} onChange={(e) => setForm({ ...form, fromName: e.target.value })} /></label>
         <label className="block"><span className="text-sm font-medium">Reply-To</span><input className="input mt-1" type="email" value={form.replyTo} onChange={(e) => setForm({ ...form, replyTo: e.target.value })} /></label>
         <label className="block"><span className="text-sm font-medium">Admin-Benachrichtigung</span><input className="input mt-1" type="email" value={form.notificationEmail} onChange={(e) => setForm({ ...form, notificationEmail: e.target.value })} placeholder="team@example.com" /></label>
         <label className="flex items-center gap-2 rounded-md bg-neutral-50 p-3"><input type="checkbox" checked={form.secure} onChange={(e) => setForm({ ...form, secure: e.target.checked })} /> SSL/TLS direkt verwenden</label>
         <label className="flex items-center gap-2 rounded-md bg-neutral-50 p-3"><input type="checkbox" checked={form.enabled} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} /> SMTP aktivieren</label>
-        <p className="text-sm text-neutral-500 md:col-span-2">Low-Rating-Benachrichtigungen werden pro User unter Benachrichtigungen konfiguriert. Diese SMTP-Seite legt nur den Mailserver fuer E-Mail-Kanaele fest.</p>
+        <p className="text-sm text-neutral-500 md:col-span-2">Low-Rating-Benachrichtigungen werden pro User unter Benachrichtigungen konfiguriert. Diese SMTP-Seite legt nur den Mailserver für E-Mail-Kanäle fest.</p>
         <div className="flex flex-wrap gap-2 md:col-span-2">
           <button className="button-primary"><Mail size={16} /> Speichern</button>
           <button type="button" onClick={test} className="button-secondary"><Send size={16} /> Testmail senden</button>

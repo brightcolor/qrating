@@ -6,13 +6,13 @@ describe('SiteContentService', () => {
     const content = normalizeSiteContent({
       headline: 'Eigene SaaS Headline',
       imprint: 'Eigenes Impressum',
-      privacy: 'Eigene Datenschutzerklaerung',
+      privacy: 'Eigene Datenschutzerklärung',
       faq: [{ question: 'Bearbeitbar?', answer: 'Ja.' }]
     });
 
     expect(content.headline).toBe('Eigene SaaS Headline');
     expect(content.imprint).toBe('Eigenes Impressum');
-    expect(content.privacy).toBe('Eigene Datenschutzerklaerung');
+    expect(content.privacy).toBe('Eigene Datenschutzerklärung');
     expect(content.features.length).toBeGreaterThan(0);
     expect(content.faq).toEqual([{ question: 'Bearbeitbar?', answer: 'Ja.' }]);
   });

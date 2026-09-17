@@ -174,7 +174,7 @@ Install dir: ${INSTALL_DIR}
 WebUI URL: ${ADMIN_APP_URL}
 Feedback URL: ${FEEDBACK_APP_URL}
 Admin URL: ${ADMIN_APP_URL}/admin
-Ersteinrichtung: Admin-URL oeffnen und den ersten Owner-Account anlegen.
+Ersteinrichtung: Admin-URL öffnen und den ersten Owner-Account anlegen.
 EOF
 chmod 600 .qrating-quickstart-info
 

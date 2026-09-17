@@ -5,8 +5,8 @@ import { api, assetUrl } from './lib/api.js';
 // The website has its own bundle; main.jsx usually loads it directly.
 const SiteApp = React.lazy(() => import('./site/SiteApp.jsx'));
 
-const positiveTags = ['Tolle Stimmung', 'Gute Musik', 'Schoene Location', 'Nettes Team', 'Guter Sound', 'Gerne wieder'];
-const improvementTags = ['Einlass', 'Wartezeiten', 'Sound', 'Getraenke', 'Preise', 'Toiletten', 'Zu voll'];
+const positiveTags = ['Tolle Stimmung', 'Gute Musik', 'Schöne Location', 'Nettes Team', 'Guter Sound', 'Gerne wieder'];
+const improvementTags = ['Einlass', 'Wartezeiten', 'Sound', 'Getränke', 'Preise', 'Toiletten', 'Zu voll'];
 
 function useAsync(fn, deps = []) {
   const [state, setState] = useState({ loading: true, data: null, error: null });
@@ -129,15 +129,15 @@ function PublicFeedback({ mode, identifier, source }) {
             ))}
           </div>
         </section>
-        <TagPicker title="Was hat fuer dich gepasst?" tags={positiveTags} value={form.positiveTags} onChange={(next) => setForm({ ...form, positiveTags: next })} />
+        <TagPicker title="Was hat für dich gepasst?" tags={positiveTags} value={form.positiveTags} onChange={(next) => setForm({ ...form, positiveTags: next })} />
         <Textarea label={texts.positive_label} placeholder={texts.positive_placeholder} value={form.commentPositive || ''} onChange={(value) => setForm({ ...form, commentPositive: value })} />
-        <TagPicker title="Wo duerfen wir besser werden?" tags={improvementTags} value={form.improvementTags} onChange={(next) => setForm({ ...form, improvementTags: next })} />
+        <TagPicker title="Wo dürfen wir besser werden?" tags={improvementTags} value={form.improvementTags} onChange={(next) => setForm({ ...form, improvementTags: next })} />
         <Textarea label={texts.improvement_label} placeholder={texts.improvement_placeholder} value={form.commentImprovement || ''} onChange={(value) => setForm({ ...form, commentImprovement: value })} />
         {rating > 0 && rating <= 2 && <section className="rounded-lg border border-amber-200 bg-amber-50 p-4">
           <h2 className="text-base font-semibold text-amber-950">{texts.low_rating_contact_headline || 'Das tut uns leid.'}</h2>
-          <p className="mt-2 text-sm leading-6 text-amber-900">{texts.low_rating_contact_text || 'Wenn du magst, hinterlass uns deine Handynummer. Wir melden uns sehr zeitnah und klaeren persoenlich, was passiert ist.'}</p>
+          <p className="mt-2 text-sm leading-6 text-amber-900">{texts.low_rating_contact_text || 'Wenn du magst, hinterlass uns deine Handynummer. Wir melden uns sehr zeitnah und klären persönlich, was passiert ist.'}</p>
           <label className="mt-4 block">
-            <span className="text-sm font-medium text-amber-950">{texts.low_rating_phone_label || 'Handynummer fuer Rueckruf'}</span>
+            <span className="text-sm font-medium text-amber-950">{texts.low_rating_phone_label || 'Handynummer für Rückruf'}</span>
             <input className="focus-ring mt-2 w-full rounded-md border border-amber-300 px-4 py-3 text-base" inputMode="tel" autoComplete="tel" placeholder={texts.low_rating_phone_placeholder || '+49 ...'} value={form.contactPhone || ''} onChange={(e) => setForm({ ...form, contactPhone: e.target.value })} />
           </label>
           <label className="mt-3 block">
@@ -225,7 +225,7 @@ function Question({ question, value, onChange }) {
   const options = question.options || [];
   if (question.question_type === 'checkboxes') return <TagPicker title={question.label} tags={options} value={value || []} onChange={onChange} />;
   if (question.question_type === 'multiple_choice') {
-    return <label className="block"><span className="font-medium">{question.label}</span><select className="mt-2 w-full rounded-md border px-4 py-3" value={value || ''} onChange={(e) => onChange(e.target.value)}><option value="">Bitte waehlen</option>{options.map((option) => <option key={option}>{option}</option>)}</select></label>;
+    return <label className="block"><span className="font-medium">{question.label}</span><select className="mt-2 w-full rounded-md border px-4 py-3" value={value || ''} onChange={(e) => onChange(e.target.value)}><option value="">Bitte wählen</option>{options.map((option) => <option key={option}>{option}</option>)}</select></label>;
   }
   if (question.question_type === 'yes_no') {
     return <TagPicker title={question.label} tags={['Ja', 'Nein']} value={value ? [value] : []} onChange={(next) => onChange(next.at(-1) || '')} />;

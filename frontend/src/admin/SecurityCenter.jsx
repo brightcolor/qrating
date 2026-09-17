@@ -120,7 +120,7 @@ function TwoFactorSetup({ onRefresh }) {
   return <div className="space-y-4">
     <div className="rounded-md bg-neutral-50 p-4">
       <p className="font-medium">Status: {enabled ? 'aktiv' : 'nicht aktiv'}</p>
-      <p className="mt-1 text-sm text-neutral-600">2FA schuetzt Admin-Zugaenge auch dann, wenn ein Passwort kompromittiert wird.</p>
+      <p className="mt-1 text-sm text-neutral-600">2FA schützt Admin-Zugänge auch dann, wenn ein Passwort kompromittiert wird.</p>
     </div>
     <Notice message={message} />
     {!enabled && !setup && <button className="button-primary" onClick={startSetup}><ShieldCheck size={16} /> 2FA einrichten</button>}
@@ -129,7 +129,7 @@ function TwoFactorSetup({ onRefresh }) {
       <p className="text-sm text-neutral-600">Scanne den QR-Code mit deiner Authenticator-App oder trage diesen Secret manuell ein:</p>
       <code className="block rounded-md bg-neutral-100 p-3 text-sm">{setup.secret}</code>
       <input className="input" inputMode="numeric" placeholder="6-stelliger Code" value={code} onChange={(e) => setCode(e.target.value)} />
-      <button className="button-primary" onClick={confirmSetup}>Code bestaetigen</button>
+      <button className="button-primary" onClick={confirmSetup}>Code bestätigen</button>
     </div>}
     {recoveryCodes.length > 0 && <div className="rounded-md border border-amber-200 bg-amber-50 p-4">
       <p className="font-medium text-amber-950">Recovery-Codes nur jetzt sichtbar</p>
@@ -193,7 +193,7 @@ export function SecurityCenter() {
     <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
       <div>
         <h1 className="text-3xl font-semibold">Security Center</h1>
-        <p className="mt-2 max-w-3xl text-sm text-neutral-600">Produktionschecks, 2FA, PII-Vault und Audit-Log fuer sensible Datenzugriffe.</p>
+        <p className="mt-2 max-w-3xl text-sm text-neutral-600">Produktionschecks, 2FA, PII-Vault und Audit-Log für sensible Datenzugriffe.</p>
       </div>
       <button onClick={() => setReload(reload + 1)} className="button-secondary"><RefreshCw size={16} /> Aktualisieren</button>
     </div>
@@ -211,7 +211,7 @@ export function SecurityCenter() {
         <Panel title="Production Checks">
           <div className="grid gap-3">{data.checks.map((item) => <CheckRow key={item.id} item={item} />)}</div>
         </Panel>
-        <Panel title="2FA fuer deinen Account">
+        <Panel title="2FA für deinen Account">
           <TwoFactorSetup onRefresh={() => setReload(reload + 1)} />
         </Panel>
       </div>
@@ -235,7 +235,7 @@ export function SecurityCenter() {
                   {revealed[item.id] && <p className="mt-2 rounded bg-neutral-50 p-2">Telefon: {revealed[item.id].contactPhone || '-'}<br />Hinweis: {revealed[item.id].contactNote || '-'}</p>}
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button className="button-secondary" onClick={() => revealLowCase(item.id)}><Eye size={16} /> Anzeigen</button>
-                    <button className="button-secondary" onClick={() => deleteLowCaseContact(item.id)}><Trash2 size={16} /> Loeschen</button>
+                    <button className="button-secondary" onClick={() => deleteLowCaseContact(item.id)}><Trash2 size={16} /> Löschen</button>
                   </div>
                 </div>)}
               </div>
@@ -245,11 +245,11 @@ export function SecurityCenter() {
               <div className="mt-3 space-y-2">
                 {pii.newsletterOptins.map((item) => <div key={item.id} className="rounded-md border border-neutral-200 p-3 text-sm">
                   <strong>{item.event_name || 'Ohne Event'}</strong>
-                  <p className="text-neutral-500">{item.email_domain || 'keine Domain'} - {item.legacy_plaintext ? 'Legacy-Klartext vorhanden' : 'verschluesselt'}</p>
+                  <p className="text-neutral-500">{item.email_domain || 'keine Domain'} - {item.legacy_plaintext ? 'Legacy-Klartext vorhanden' : 'verschlüsselt'}</p>
                   {revealed[`newsletter-${item.id}`] && <p className="mt-2 rounded bg-neutral-50 p-2">{revealed[`newsletter-${item.id}`].email}</p>}
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button className="button-secondary" onClick={() => revealNewsletter(item.id)}><Eye size={16} /> Anzeigen</button>
-                    <button className="button-secondary" onClick={() => deleteNewsletter(item.id)}><Trash2 size={16} /> Loeschen</button>
+                    <button className="button-secondary" onClick={() => deleteNewsletter(item.id)}><Trash2 size={16} /> Löschen</button>
                   </div>
                 </div>)}
               </div>

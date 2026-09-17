@@ -4,6 +4,19 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.17.1] - 2026-09-17
+
+### Fixed
+
+- German texts use proper umlauts and ß throughout: admin area, guest page, emails, notifications, and the imprint and privacy placeholders.
+- PDF reports print umlauts, ß, the euro sign, and typographic quotes. Characters outside the PDF font fall back to their base letter.
+- ntfy notifications with umlauts or emoji in the title arrive intact; the title header is sent as RFC 2047 encoded words.
+
+### Changed
+
+- Migration `013` replaces the imprint and privacy placeholders of earlier releases with the current wording, as long as nobody edited them. Edited legal texts stay unchanged.
+- Version bumped to `0.17.1`.
+
 ## [0.17.0] - 2026-09-17
 
 ### Added

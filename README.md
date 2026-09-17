@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.17.0
+**Version:** 0.17.1
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -195,6 +195,7 @@ The product website (`/`, `/faq`, `/impressum`, `/datenschutz`) is a separate bu
 - fonts are bundled with Fontsource and load from the own domain
 - pages switch in place, animations follow `prefers-reduced-motion`
 - migration `012` switches website texts and plan descriptions that were never saved in the admin area to the current defaults
+- migration `013` replaces unedited imprint and privacy placeholders of earlier releases with the current placeholders, which use proper umlauts
 
 ## Error Messages
 
@@ -394,7 +395,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.17.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.17.1`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

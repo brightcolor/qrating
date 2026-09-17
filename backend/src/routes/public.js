@@ -336,7 +336,7 @@ publicRouter.post('/events/:eventToken/feedback', feedbackLimiter, async (req, r
             value.contactPhone ? encryptSecret(value.contactPhone) : null,
             value.contactNote ? encryptSecret(value.contactNote) : null,
             defaultTexts.low_rating_contact_text,
-            'Besucher hat freiwillig eine Rueckrufnummer zur Klaerung einer niedrigen Bewertung hinterlassen.'
+            'Besucher hat freiwillig eine Rückrufnummer zur Klärung einer niedrigen Bewertung hinterlassen.'
           ]
         );
       }

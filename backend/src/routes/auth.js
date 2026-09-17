@@ -117,7 +117,7 @@ authRouter.post('/setup/first-admin', authLimiter, async (req, res, next) => {
         )).rows[0]
         : (await client.query(
           `INSERT INTO organizations (name, slug, primary_color, privacy_text, ticketshop_url, website_url, instagram_url)
-           VALUES ($1, $2, '#2563eb', 'Feedback ist anonym moeglich. E-Mail-Adressen werden nur fuer den gewaehlten Zweck gespeichert.', 'https://tickets.example.com', 'https://example.com', 'https://instagram.com/example')
+           VALUES ($1, $2, '#2563eb', 'Feedback ist anonym möglich. E-Mail-Adressen werden nur für den gewählten Zweck gespeichert.', 'https://tickets.example.com', 'https://example.com', 'https://instagram.com/example')
            RETURNING *`,
           [organizationName, organizationSlug]
         )).rows[0];
@@ -269,8 +269,8 @@ authRouter.post('/password-reset/request', passwordResetLimiter, async (req, res
       const smtp = new SmtpService({ query });
       await smtp.sendMail(user.organization_id, {
         to: user.email,
-        subject: 'qrating Passwort zuruecksetzen',
-        text: `Du kannst dein qrating Passwort hier zuruecksetzen:\n\n${resetUrl}\n\nDer Link ist 2 Stunden gueltig.`
+        subject: 'qrating Passwort zurücksetzen',
+        text: `Du kannst dein qrating Passwort hier zurücksetzen:\n\n${resetUrl}\n\nDer Link ist 2 Stunden gültig.`
       }).catch(() => null);
     }
     res.json({ ok: true, resetUrl: env.nodeEnv === 'production' ? null : resetUrl });

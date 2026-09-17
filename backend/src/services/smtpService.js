@@ -59,13 +59,13 @@ export class SmtpService {
     if (!settings?.notification_email) return { skipped: true, reason: 'low_rating_alerts_disabled' };
     return this.sendMail(organizationId, {
       to: settings.notification_email,
-      subject: `qrating: niedrige Bewertung fuer ${payload.eventName}`,
+      subject: `qrating: niedrige Bewertung für ${payload.eventName}`,
       text: [
         `Event: ${payload.eventName}`,
         `Bewertung: ${payload.rating} Sterne`,
         `Zeitpunkt: ${payload.submittedAt}`,
         '',
-        'Oeffne das qrating Dashboard, um die Rueckmeldung einzuordnen.'
+        'Öffne das qrating Dashboard, um die Rückmeldung einzuordnen.'
       ].join('\n')
     });
   }
@@ -83,7 +83,7 @@ export class SmtpService {
         from: settings.from_name ? `"${settings.from_name}" <${settings.from_email}>` : settings.from_email,
         to: recipient,
         subject: 'qrating SMTP-Test',
-        text: 'Diese Nachricht bestaetigt, dass qrating den konfigurierten SMTP-Server verwenden kann.'
+        text: 'Diese Nachricht bestätigt, dass qrating den konfigurierten SMTP-Server verwenden kann.'
       });
       await this.db.query(
         `UPDATE smtp_settings

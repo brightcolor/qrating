@@ -1237,7 +1237,7 @@ adminRouter.post('/users/invite', requireRole('owner'), async (req, res, next) =
     const mail = await smtp.sendMail(req.admin.organizationId, {
       to: email,
       subject: 'Einladung zu qrating',
-      text: `Du wurdest zu qrating eingeladen.\n\nEinladung abschliessen:\n${inviteUrl}\n\nDer Link ist 7 Tage gueltig.`
+      text: `Du wurdest zu qrating eingeladen.\n\nEinladung abschließen:\n${inviteUrl}\n\nDer Link ist 7 Tage gültig.`
     }).catch((error) => ({ skipped: true, reason: 'send_failed', error: smtpFailure(error).message }));
     res.status(201).json({ user, inviteUrl, mail });
   } catch (error) {

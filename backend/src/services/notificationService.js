@@ -23,10 +23,10 @@ export function publicChannel(row) {
 
 function lowRatingMessage(event, feedback) {
   const contactPhone = feedback.low_rating_case?.contact_phone_encrypted
-    ? 'Rueckrufnummer: im geschuetzten Low-Rating-Dashboard hinterlegt.'
+    ? 'Rückrufnummer: im geschützten Low-Rating-Dashboard hinterlegt.'
     : null;
   const contactNote = feedback.low_rating_case?.contact_note_encrypted || feedback.low_rating_case?.contact_note
-    ? 'Kontakt-Hinweis: im geschuetzten Low-Rating-Dashboard hinterlegt.'
+    ? 'Kontakt-Hinweis: im geschützten Low-Rating-Dashboard hinterlegt.'
     : null;
   return [
     `qrating: niedrige Bewertung (${feedback.rating} Sterne)`,
@@ -36,12 +36,12 @@ function lowRatingMessage(event, feedback) {
     contactPhone,
     contactNote,
     '',
-    'Bitte zeitnah pruefen und empathisch nachfassen, falls eine Telefonnummer hinterlegt wurde.'
+    'Bitte zeitnah prüfen und empathisch nachfassen, falls eine Telefonnummer hinterlegt wurde.'
   ].filter(Boolean).join('\n');
 }
 
 function lowRatingTitle(event, feedback) {
-  return `qrating: ${feedback.rating} Sterne fuer ${event.name}`;
+  return `qrating: ${feedback.rating} Sterne für ${event.name}`;
 }
 
 function notificationEvent(event) {
@@ -179,7 +179,7 @@ export class NotificationService {
     if (type === 'ntfy') {
       requireSetting(config.topicUrl, 'Für ntfy fehlt die Topic-Adresse. Trage sie im Feld „Config JSON“ ein, zum Beispiel {"topicUrl":"https://ntfy.sh/mein-topic"}.');
       const headers = {
-        title: payload.title,
+        title: encodeHeaderText(payload.title),
         priority: String(config.priority || 'high')
       };
       if (secret) headers.authorization = `Bearer ${secret}`;
@@ -257,4 +257,22 @@ const channelServiceNames = {
 function requireSetting(value, message) {
   if (!value) throw httpError(400, message);
   return value;
+}
+
+// HTTP headers carry ASCII safely, so ntfy gets other titles as RFC 2047 encoded words.
+export function encodeHeaderText(value) {
+  const text = String(value ?? '');
+  if (/^[\x20-\x7e]*$/.test(text)) return text;
+  const words = [];
+  let word = '';
+  for (const char of text) {
+    // 45 bytes become 60 base64 characters, which keeps each encoded word within 75 characters.
+    if (word && Buffer.byteLength(word + char) > 45) {
+      words.push(word);
+      word = '';
+    }
+    word += char;
+  }
+  if (word) words.push(word);
+  return words.map((part) => `=?UTF-8?B?${Buffer.from(part, 'utf8').toString('base64')}?=`).join(' ');
 }

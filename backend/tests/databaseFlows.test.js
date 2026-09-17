@@ -97,8 +97,10 @@ describe('backend flows against PostgreSQL', () => {
       ctaLabel: 'Free anfragen'
     });
     expect(site.body.content.pricing[0].features).toContain('2 aktive Events, 1 Benutzer');
-    // Legal texts stay as the installation stored them.
-    expect(site.body.content.imprint).toContain('Angaben gemaess Impressumspflicht');
+    // The seeded legal placeholders show the current wording with umlauts.
+    expect(site.body.content.imprint).toContain('Angaben gemäß Impressumspflicht');
+    expect(site.body.content.imprint).toContain('Musterstraße 1');
+    expect(site.body.content.privacy).toMatch(/^Datenschutzerklärung\n/);
   });
 
   it('stores guest feedback with the answers of the event form', async () => {
@@ -266,6 +268,27 @@ describe('backend flows against PostgreSQL', () => {
     expect(site.body.content.headline).toBe('Ein QR-Code. Echtes Feedback nach jedem Event.');
     expect(site.body.content.faqHeadline).toBe('Eure Fragen');
     expect(site.body.content.pricing[0].text).toBe('Basics fuer den Einstieg.');
+  });
+
+  it('replaces only the legal placeholders of earlier releases', async () => {
+    const legacyImprint = 'Angaben gemaess Impressumspflicht\n\nqrating Betreiber\nMusterstrasse 1\n12345 Musterstadt\n\n'
+      + 'E-Mail: kontakt@qrating.de\n\nBitte passe dieses Impressum vor dem produktiven Betrieb im Adminbereich an.';
+    await query(
+      `UPDATE site_content
+       SET content = content || jsonb_build_object('imprint', $1::text, 'privacy', $2::text)
+       WHERE scope = 'default' AND language = 'de'`,
+      [legacyImprint, 'Datenschutz der Musterfirma, gemaess eigener Vorlage']
+    );
+
+    const migration = await readFile(
+      new URL('../../database/migrations/013_legal_placeholder_umlauts.sql', import.meta.url),
+      'utf8'
+    );
+    await query(migration);
+
+    const site = await request('GET', '/public/site');
+    expect(site.body.content.imprint).toContain('Angaben gemäß Impressumspflicht');
+    expect(site.body.content.privacy).toBe('Datenschutz der Musterfirma, gemaess eigener Vorlage');
   });
 
   it('answers failed requests with messages people can act on', async () => {
