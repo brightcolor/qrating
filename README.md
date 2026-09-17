@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.26.0
+**Version:** 0.27.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -325,14 +325,15 @@ Report delivery uses the background worker and SMTP settings.
 
 ## Newsletter Connection
 
-An organization can hand its newsletter opt-ins to a MailWizz installation. The connection lives in the admin area under **Newsletter** and holds the API address, the API key (encrypted at rest), the list UID, and the tag of the custom field that carries the event.
+An organization can hand its newsletter opt-ins to a MailWizz installation. The connection lives in the admin area under **Newsletter** and holds the API address, the API key (encrypted at rest), the list UID, and the tags of the two custom fields that carry the event and the way the entry came in.
 
 Every opt-in is handed over by the background worker, so a guest never waits for the newsletter system. The subscriber carries:
 
 - `EMAIL`: the address of the guest
-- the configured field tag, by default `VERANSTALTUNG`: the name of the event as Pretix wrote it; events created by hand use their own name
+- the configured event tag, by default `VERANSTALTUNG`: the name of the event as Pretix wrote it; events created by hand use their own name
+- the configured source tag, by default `QUELLE`, with a free value, by default `qrating`: the way the entry came in. An empty value leaves the field out.
 
-The field tag must exist as a custom field of that list in MailWizz, otherwise MailWizz stores the address without it. A known address is updated instead of created, so a second handover stays harmless.
+Both tags must exist as custom fields of that list in MailWizz, otherwise MailWizz stores the address without them. A known address is updated instead of created, so a second handover stays harmless.
 
 Opt-ins that arrived before the connection existed are still open. "Offene Anmeldungen übergeben" queues up to 500 of them. Every opt-in keeps the state of its handover, and a failed handover keeps the reason of MailWizz at the entry and at the connection.
 
@@ -453,7 +454,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.26.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.27.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

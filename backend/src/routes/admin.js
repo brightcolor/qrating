@@ -1713,6 +1713,15 @@ function newsletterConnectionForAdmin(row) {
   return { ...rest, has_api_key: Boolean(api_key_encrypted) };
 }
 
+// MailWizz names its custom fields with tags in capitals.
+function mailwizzFieldTag(value, fallback) {
+  const tag = String(value || fallback).trim().toUpperCase();
+  if (!/^[A-Z][A-Z0-9_]{0,49}$/.test(tag)) {
+    throw httpError(400, `Das Feldkürzel „${tag}“ passt nicht zu MailWizz. Erlaubt sind Großbuchstaben, Ziffern und Unterstriche, zum Beispiel ${fallback}.`);
+  }
+  return tag;
+}
+
 function newsletterInput(body, existing) {
   const apiUrl = String(body.apiUrl || '').trim().replace(/\/+$/, '');
   if (!/^https?:\/\/.+/.test(apiUrl)) {
@@ -1720,15 +1729,14 @@ function newsletterInput(body, existing) {
   }
   const listUid = String(body.listUid || '').trim();
   if (!listUid) throw httpError(400, 'Die Listen-UID fehlt. Du findest sie in MailWizz in der Liste unter „List UID“.');
-  const fieldTag = String(body.eventFieldTag || 'VERANSTALTUNG').trim().toUpperCase();
-  if (!/^[A-Z][A-Z0-9_]{0,49}$/.test(fieldTag)) {
-    throw httpError(400, 'Das Feldkürzel passt nicht zu MailWizz. Erlaubt sind Großbuchstaben, Ziffern und Unterstriche, zum Beispiel VERANSTALTUNG.');
-  }
+  const fieldTag = mailwizzFieldTag(body.eventFieldTag, 'VERANSTALTUNG');
+  const sourceTag = mailwizzFieldTag(body.sourceFieldTag, 'QUELLE');
+  const sourceValue = String(body.sourceFieldValue ?? 'qrating').trim().slice(0, 100);
   const apiKeyProvided = typeof body.apiKey === 'string' && body.apiKey.trim().length > 0;
   if (!apiKeyProvided && !existing?.api_key_encrypted) {
     throw httpError(400, 'Der API-Schlüssel fehlt. Lege ihn in MailWizz unter „API keys“ an und trage ihn hier ein.');
   }
-  return { apiUrl, listUid, fieldTag, apiKeyProvided, apiKey: apiKeyProvided ? body.apiKey.trim() : null };
+  return { apiUrl, listUid, fieldTag, sourceTag, sourceValue, apiKeyProvided, apiKey: apiKeyProvided ? body.apiKey.trim() : null };
 }
 
 adminRouter.get('/newsletter', requireRole('admin'), async (req, res, next) => {
@@ -1754,14 +1762,18 @@ adminRouter.put('/newsletter', requireRole('admin'), async (req, res, next) => {
     const existing = await newsletter.connectionFor(req.admin.organizationId, { onlyEnabled: false });
     const input = newsletterInput(req.body, existing);
     const result = await query(
-      `INSERT INTO newsletter_connections (organization_id, provider, api_url, api_key_encrypted, list_uid, event_field_tag, enabled)
-       VALUES ($1,'mailwizz',$2,$3,$4,$5,$6)
+      `INSERT INTO newsletter_connections (
+         organization_id, provider, api_url, api_key_encrypted, list_uid, event_field_tag, source_field_tag, source_field_value, enabled
+       )
+       VALUES ($1,'mailwizz',$2,$3,$4,$5,$6,$7,$8)
        ON CONFLICT (organization_id)
        DO UPDATE SET
          api_url = EXCLUDED.api_url,
-         api_key_encrypted = CASE WHEN $7::boolean THEN EXCLUDED.api_key_encrypted ELSE newsletter_connections.api_key_encrypted END,
+         api_key_encrypted = CASE WHEN $9::boolean THEN EXCLUDED.api_key_encrypted ELSE newsletter_connections.api_key_encrypted END,
          list_uid = EXCLUDED.list_uid,
          event_field_tag = EXCLUDED.event_field_tag,
+         source_field_tag = EXCLUDED.source_field_tag,
+         source_field_value = EXCLUDED.source_field_value,
          enabled = EXCLUDED.enabled,
          updated_at = now()
        RETURNING *`,
@@ -1771,6 +1783,8 @@ adminRouter.put('/newsletter', requireRole('admin'), async (req, res, next) => {
         input.apiKeyProvided ? encryptSecret(input.apiKey) : null,
         input.listUid,
         input.fieldTag,
+        input.sourceTag,
+        input.sourceValue,
         req.body.enabled === undefined ? true : Boolean(req.body.enabled),
         input.apiKeyProvided
       ]
@@ -1781,7 +1795,7 @@ adminRouter.put('/newsletter', requireRole('admin'), async (req, res, next) => {
       action: 'integration.newsletter.saved',
       entityType: 'newsletter_connection',
       entityId: result.rows[0].id,
-      metadata: { provider: 'mailwizz', listUid: input.listUid, eventFieldTag: input.fieldTag }
+      metadata: { provider: 'mailwizz', listUid: input.listUid, eventFieldTag: input.fieldTag, sourceFieldTag: input.sourceTag }
     });
     res.json(newsletterConnectionForAdmin(result.rows[0]));
   } catch (error) {

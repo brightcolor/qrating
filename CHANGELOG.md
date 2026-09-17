@@ -4,6 +4,13 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.27.0] - 2026-09-18
+
+### Added
+
+- A second custom field goes to MailWizz with every entry: the way it came in, by default the tag `QUELLE` with the value `qrating`. Tag and value are part of the connection, and an empty value leaves the field out.
+- Version bumped to `0.27.0`.
+
 ## [0.26.0] - 2026-09-18
 
 ### Added

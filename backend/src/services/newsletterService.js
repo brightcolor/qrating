@@ -107,7 +107,7 @@ export class NewsletterService {
     return result.rows[0] || null;
   }
 
-  // The fields of one subscriber: the address and the event of the entry.
+  // The fields of one subscriber: the address, the event of the entry and the way it came in.
   async fieldsFor(optin, connection) {
     const email = optin.email_encrypted ? decryptSecret(optin.email_encrypted) : optin.email;
     if (!email) return null;
@@ -117,6 +117,8 @@ export class NewsletterService {
     const fields = { EMAIL: email };
     const eventName = pretixEventName(event);
     if (eventName) fields[connection.event_field_tag] = eventName;
+    const source = String(connection.source_field_value ?? '').trim();
+    if (connection.source_field_tag && source) fields[connection.source_field_tag] = source;
     return fields;
   }
 

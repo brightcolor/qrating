@@ -121,7 +121,14 @@ describe('newsletter connection to MailWizz', () => {
     });
 
     expect(saved.status).toBe(200);
-    expect(saved.body).toMatchObject({ api_url: 'https://news.example.test/api', list_uid: 'list123', event_field_tag: 'VERANSTALTUNG', has_api_key: true });
+    expect(saved.body).toMatchObject({
+      api_url: 'https://news.example.test/api',
+      list_uid: 'list123',
+      event_field_tag: 'VERANSTALTUNG',
+      source_field_tag: 'QUELLE',
+      source_field_value: 'qrating',
+      has_api_key: true
+    });
     expect(JSON.stringify(saved.body)).not.toContain('geheimer-schluessel');
 
     const stored = (await query('SELECT api_key_encrypted FROM newsletter_connections')).rows[0];
@@ -160,7 +167,7 @@ describe('newsletter connection to MailWizz', () => {
     const result = await newsletter.syncOptin(job.payload.optinId);
 
     expect(result).toEqual({ status: 'created' });
-    expect(calls).toEqual([{ EMAIL: 'gast@example.com', VERANSTALTUNG: pretixName }]);
+    expect(calls).toEqual([{ EMAIL: 'gast@example.com', VERANSTALTUNG: pretixName, QUELLE: 'qrating' }]);
 
     const optin = (await query('SELECT * FROM newsletter_optins WHERE id = $1', [job.payload.optinId])).rows[0];
     expect(optin.sync_status).toBe('created');
@@ -193,6 +200,30 @@ describe('newsletter connection to MailWizz', () => {
     const after = (await query("SELECT count(*)::int AS total FROM background_jobs WHERE job_type = 'newsletter.sync'")).rows[0].total;
     expect(after).toBe(before);
     await query('UPDATE newsletter_connections SET enabled = true');
+  });
+
+  it('takes an own tag for the way and leaves the field out without a value', async () => {
+    const saved = await request('PUT', '/admin/newsletter', {
+      cookie: ownerCookie,
+      body: { apiUrl: 'https://news.example.test/api', listUid: 'list123', eventFieldTag: 'VERANSTALTUNG', sourceFieldTag: 'weg', sourceFieldValue: '  ' }
+    });
+    expect(saved.body).toMatchObject({ source_field_tag: 'WEG', source_field_value: '' });
+
+    const feedback = await submitFeedback('vierter@example.com');
+    expect(feedback.status).toBe(201);
+    const job = (await query("SELECT * FROM background_jobs WHERE job_type = 'newsletter.sync' ORDER BY created_at DESC")).rows[0];
+
+    const calls = [];
+    const newsletter = new NewsletterService({ query }, { createClient: () => recordingClient(calls) });
+    await newsletter.syncOptin(job.payload.optinId);
+
+    expect(calls).toEqual([{ EMAIL: 'vierter@example.com', VERANSTALTUNG: pretixName }]);
+
+    const back = await request('PUT', '/admin/newsletter', {
+      cookie: ownerCookie,
+      body: { apiUrl: 'https://news.example.test/api', listUid: 'list123', sourceFieldTag: 'QUELLE', sourceFieldValue: 'qrating' }
+    });
+    expect(back.body).toMatchObject({ source_field_tag: 'QUELLE', source_field_value: 'qrating' });
   });
 
   it('collects the entries that are still open', async () => {
