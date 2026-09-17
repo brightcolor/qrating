@@ -191,6 +191,81 @@ describe('backend flows against PostgreSQL', () => {
     expect(new Set(slugs).size).toBe(2);
   });
 
+  it('escapes the event name on the print page and allows only its own print script', async () => {
+    const created = await request('POST', '/admin/events', {
+      cookie: ownerCookie,
+      body: { name: '<img src=x onerror=alert(1)>', dateFrom: '2026-08-01T18:00:00.000Z' }
+    });
+    expect(created.status).toBe(201);
+
+    const response = await fetch(`${baseUrl}/admin/events/${created.body.id}/qr-print`, {
+      headers: { cookie: ownerCookie }
+    });
+    expect(response.status).toBe(200);
+    const page = await response.text();
+
+    expect(page).toContain('<h1>&lt;img src=x onerror=alert(1)&gt;</h1>');
+    expect(page).toContain('<title>QR &lt;img src=x onerror=alert(1)&gt;</title>');
+    expect(page).not.toContain('<img');
+    expect(page).not.toContain('onerror=alert(1)>');
+
+    // The print dialog runs from a nonce that only this response allows.
+    const nonce = /script-src 'nonce-([\w-]+)'/.exec(response.headers.get('content-security-policy'))?.[1];
+    expect(nonce).toBeTruthy();
+    expect(page).toContain(`<script nonce="${nonce}">`);
+    expect(page).toContain('>Drucken<');
+  });
+
+  it('sets, changes and removes the picture of an event', async () => {
+    const created = await request('POST', '/admin/events', {
+      cookie: ownerCookie,
+      body: { name: 'Bilderabend', dateFrom: '2027-08-01T18:00:00.000Z' }
+    });
+    expect(created.status).toBe(201);
+    const eventId = created.body.id;
+
+    const withImage = await request('PATCH', `/admin/events/${eventId}`, {
+      cookie: ownerCookie,
+      body: { imageUrl: 'https://example.test/bilderabend.jpg', imageAlt: 'Bühne im Hof' }
+    });
+    expect(withImage.status).toBe(200);
+    expect(withImage.body).toMatchObject({
+      image_url: 'https://example.test/bilderabend.jpg',
+      image_alt: 'Bühne im Hof',
+      image_source: 'manual'
+    });
+
+    const changed = await request('PATCH', `/admin/events/${eventId}`, {
+      cookie: ownerCookie,
+      body: { imageUrl: 'https://example.test/bilderabend-zwei.jpg' }
+    });
+    expect(changed.body).toMatchObject({
+      image_url: 'https://example.test/bilderabend-zwei.jpg',
+      image_alt: 'Bühne im Hof',
+      image_source: 'manual'
+    });
+
+    // Editing other fields leaves the picture untouched.
+    const renamed = await request('PATCH', `/admin/events/${eventId}`, {
+      cookie: ownerCookie,
+      body: { name: 'Bilderabend im Hof' }
+    });
+    expect(renamed.body).toMatchObject({
+      name: 'Bilderabend im Hof',
+      image_url: 'https://example.test/bilderabend-zwei.jpg',
+      image_source: 'manual'
+    });
+
+    const removed = await request('PATCH', `/admin/events/${eventId}`, {
+      cookie: ownerCookie,
+      body: { imageUrl: '' }
+    });
+    expect(removed.status).toBe(200);
+    expect(removed.body.image_url).toBeNull();
+    expect(removed.body.image_alt).toBeNull();
+    expect(removed.body.image_source).toBeNull();
+  });
+
   it('offers German form templates and creates an event form from one', async () => {
     const profiles = await request('GET', '/admin/forms/profiles', { cookie: ownerCookie });
     expect(profiles.status).toBe(200);
@@ -265,6 +340,33 @@ describe('backend flows against PostgreSQL', () => {
     expect(events.rows[0].image_sync_error).toBe('Kein Bild-Key in Pretix-Settings gefunden.');
     const status = await query('SELECT last_sync_status, last_sync_error FROM pretix_connections WHERE id = $1', [connection.id]);
     expect(status.rows[0]).toEqual({ last_sync_status: '2 Events synchronisiert, 0 Bilder erkannt', last_sync_error: null });
+  });
+
+  it('keeps a manually set picture when Pretix syncs the event again', async () => {
+    const event = (await query("SELECT * FROM events WHERE slug = 'sommernacht'")).rows[0];
+    const connection = (await query(
+      "SELECT * FROM pretix_connections WHERE pretix_organizer_slug = 'ohne-bild'"
+    )).rows[0];
+
+    const patched = await request('PATCH', `/admin/events/${event.id}`, {
+      cookie: ownerCookie,
+      body: { imageUrl: 'https://example.test/eigenes-bild.jpg', imageAlt: 'Eigenes Bild' }
+    });
+    expect(patched.status).toBe(200);
+    expect(patched.body.image_source).toBe('manual');
+
+    const fetchImpl = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({}) }));
+    const result = await new PretixService({ query }, fetchImpl)
+      .syncImageForEvent(connection, patched.body, 'sommernacht');
+
+    expect(result).toMatchObject({ skipped: 'manual_image_preferred' });
+    expect(fetchImpl).not.toHaveBeenCalled();
+    const after = (await query('SELECT image_url, image_alt, image_source FROM events WHERE id = $1', [event.id])).rows[0];
+    expect(after).toEqual({
+      image_url: 'https://example.test/eigenes-bild.jpg',
+      image_alt: 'Eigenes Bild',
+      image_source: 'manual'
+    });
   });
 
   it('removes demo forms that older releases duplicated on every start', async () => {

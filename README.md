@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.18.5
+**Version:** 0.19.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -25,6 +25,7 @@ This repository was built with AI-assisted, vibe-coded development. Treat it lik
 - Mobile-first guest feedback flow: one question per step, single answers move on by themselves, a ticket-style summary, and a stamp after sending
 - Rating, quick tags, free-text answers, recommendation score, newsletter opt-in, and friendly low-rating callback request
 - Pretix event sync with settings sync and robust event image detection
+- Event pictures kept by hand: picture URL and description per event in the admin area, marked as manual so a Pretix sync keeps them
 - Form builder with 13 German templates (party, festival, birthday, wedding, company party, conference, workshop, and more), saved custom templates, and a preview of the guest flow
 - Dashboard, CSV/XLSX exports, newsletter export, and multi-page PDF reports
 - Configurable SMTP for password resets, invitations, low-rating alerts, and report delivery
@@ -275,6 +276,8 @@ If that fails, it falls back to the settings endpoint without `explain=true`. Se
 
 Pretix keeps the shop header in `logo_image` and the social preview in `og_image`; qrating reads both, prefers the shop header, and accepts the other known keys of plugins and older installations. A connection can name its own key under "preferred image settings key".
 
+An event picture can also be set by hand in the admin area. The event card takes a picture URL and a picture description and stores them with the source `manual`. A Pretix sync then keeps that picture as long as the connection leaves "prefer Pretix images" switched off. Clearing the picture URL removes the picture, its description, and the source, so the next sync can fill the picture in from Pretix again.
+
 ## Notifications
 
 Low ratings can create a workflow case and notify only users who are allowed to access the affected event.
@@ -409,7 +412,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.18.5`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.19.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

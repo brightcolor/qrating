@@ -365,7 +365,7 @@ function Events() {
     <EventCreate onCreated={() => setReload(reload + 1)} />
     {loading && <p>Lade Events ...</p>}
     {error && <ErrorBox error={error} />}
-    <div className="mt-5 grid gap-4">{data?.map((event) => <EventCard key={event.id} event={event} />)}</div>
+    <div className="mt-5 grid gap-4">{data?.map((event) => <EventCard key={event.id} event={event} onChanged={() => setReload(reload + 1)} />)}</div>
   </div>;
 }
 
@@ -398,9 +398,11 @@ function EventCreate({ onCreated }) {
   </Panel>;
 }
 
-function EventCard({ event }) {
+function EventCard({ event, onChanged }) {
   const eventUrl = event.feedbackUrl || `/e/${event.event_feedback_token}`;
   const [message, setMessage] = useState('');
+  const [imageOpen, setImageOpen] = useState(false);
+  const [imageForm, setImageForm] = useState({ imageUrl: event.image_url || '', imageAlt: event.image_alt || '' });
   async function syncImage() {
     try {
       await api(`/admin/events/${event.id}/sync-image`, { method: 'POST', body: '{}' });
@@ -408,6 +410,21 @@ function EventCard({ event }) {
     } catch (err) {
       setMessage(errorNotice(err));
     }
+  }
+  async function saveImage(patch) {
+    try {
+      await api(`/admin/events/${event.id}`, { method: 'PATCH', body: JSON.stringify(patch) });
+      setImageForm({ imageUrl: patch.imageUrl || '', imageAlt: patch.imageAlt || '' });
+      setMessage(patch.imageUrl ? 'Das Bild wurde gespeichert.' : 'Das Bild wurde entfernt.');
+      setImageOpen(false);
+      onChanged?.();
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
+  }
+  function submitImage(e) {
+    e.preventDefault();
+    saveImage({ imageUrl: imageForm.imageUrl.trim(), imageAlt: imageForm.imageAlt.trim() });
   }
   return <article className="rounded-lg bg-white p-5 shadow-sm">
     <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -425,11 +442,27 @@ function EventCard({ event }) {
         <a className="button-secondary" href={`${API_BASE}/admin/events/${event.id}/export.csv`}><Download size={16} /> CSV</a>
         <a className="button-secondary" href={`${API_BASE}/admin/events/${event.id}/export.xlsx`}><Download size={16} /> XLSX</a>
         <a className="button-secondary" href={`${API_BASE}/admin/events/${event.id}/report.pdf`}><FileText size={16} /> PDF</a>
+        <button onClick={() => setImageOpen(!imageOpen)} className="button-secondary"><Image size={16} /> Bild bearbeiten</button>
         {event.source === 'pretix' && <button onClick={syncImage} className="button-secondary"><Image size={16} /> Bild neu laden</button>}
         <a className="button-secondary" href={`${API_BASE}/admin/events/${event.id}/qr-print`} target="_blank"><QrCode size={16} /> Druck</a>
         <a className="button-blue" href={eventUrl} target="_blank"><ExternalLink size={16} /> Feedback</a>
       </div>
     </div>
+    {imageOpen && <form onSubmit={submitImage} className="mt-4 grid gap-3 border-t border-neutral-100 pt-4 md:grid-cols-[2fr_2fr_auto]">
+      <label className="grid gap-1 text-sm text-neutral-600">
+        Bild-URL
+        <input className="input" placeholder="https://example.com/bild.jpg" value={imageForm.imageUrl} onChange={(e) => setImageForm({ ...imageForm, imageUrl: e.target.value })} />
+      </label>
+      <label className="grid gap-1 text-sm text-neutral-600">
+        Bildbeschreibung
+        <input className="input" placeholder="Was auf dem Bild zu sehen ist" value={imageForm.imageAlt} onChange={(e) => setImageForm({ ...imageForm, imageAlt: e.target.value })} />
+      </label>
+      <div className="flex items-end gap-2">
+        <button className="button-blue">Speichern</button>
+        {event.image_url && <button type="button" onClick={() => saveImage({ imageUrl: '' })} className="button-secondary"><Trash2 size={16} /> Entfernen</button>}
+      </div>
+      <p className="text-sm text-neutral-500 md:col-span-3">Ein hier gesetztes Bild bleibt beim nächsten Pretix-Abgleich erhalten. Eine leere Bild-URL entfernt das Bild wieder.</p>
+    </form>}
     <Notice message={message} className="mt-3" />
   </article>;
 }

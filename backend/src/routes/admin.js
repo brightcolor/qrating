@@ -4,13 +4,14 @@ import bcrypt from 'bcryptjs';
 import { query, withTransaction } from '../db/pool.js';
 import { canAccessEvent, hasRole, requireAdmin, requireRole } from '../middleware/auth.js';
 import { httpError } from '../middleware/errors.js';
+import { escapeHtml } from '../utils/html.js';
 import { env } from '../config/env.js';
 import { decryptSecret, encryptSecret, hashValue } from '../utils/crypto.js';
 import { randomToken, slugify } from '../utils/crypto.js';
 import { openSecret, smtpFailure } from '../utils/serviceErrors.js';
 import { EventResolver, calculateFeedbackWindow } from '../services/eventResolver.js';
 import { PretixService } from '../services/pretixService.js';
-import { normalizeEventInput } from '../db/bootstrap.js';
+import { normalizeEventInput, normalizeEventImageUpdate } from '../db/bootstrap.js';
 import { toCsv, toXlsx } from '../utils/export.js';
 import { defaultTexts, defaultTextsByLanguage } from '../services/textService.js';
 import { buildEventReportPdf } from '../utils/pdf.js';
@@ -329,6 +330,7 @@ adminRouter.put('/events/:id/assignments', async (req, res, next) => {
 adminRouter.patch('/events/:id', async (req, res, next) => {
   try {
     await ensureEventAccess(req, req.params.id);
+    const image = normalizeEventImageUpdate(req.body);
     const result = await query(
       `UPDATE events SET
         name = COALESCE($3, name),
@@ -340,6 +342,9 @@ adminRouter.patch('/events/:id', async (req, res, next) => {
         feedback_window_days = COALESCE($9, feedback_window_days),
         feedback_window_hours = $10,
         resolver_priority = COALESCE($11, resolver_priority),
+        image_url = CASE WHEN $12::text = 'keep' THEN image_url WHEN $12::text = 'clear' THEN null ELSE $13::text END,
+        image_alt = CASE WHEN $12::text = 'clear' THEN null WHEN $14::boolean THEN $15::text ELSE image_alt END,
+        image_source = CASE WHEN $12::text = 'keep' THEN image_source WHEN $12::text = 'clear' THEN null ELSE 'manual'::image_source END,
         updated_at = now()
        WHERE id = $1 AND organization_id = $2
        RETURNING *`,
@@ -354,7 +359,11 @@ adminRouter.patch('/events/:id', async (req, res, next) => {
         req.body.status,
         req.body.feedbackWindowDays,
         req.body.feedbackWindowHours ?? null,
-        req.body.resolverPriority
+        req.body.resolverPriority,
+        image.mode,
+        image.url,
+        image.altProvided,
+        image.alt
       ]
     );
     if (!result.rows[0]) throw httpError(404, 'Dieses Event gibt es nicht mehr oder es gehört zu einer anderen Organisation. Lade die Liste neu.');
@@ -701,7 +710,16 @@ adminRouter.get('/events/:id/qr-print', async (req, res, next) => {
     if (!event) throw httpError(404, 'Dieses Event gibt es nicht mehr oder es gehört zu einer anderen Organisation. Lade die Liste neu.');
     const url = `${env.feedbackAppUrl}/e/${event.event_feedback_token}`;
     const svg = await QRCode.toString(url, { type: 'svg', margin: 1 });
-    res.type('html').send(`<!doctype html><html lang="de"><head><meta charset="utf-8"><title>QR ${event.name}</title><style>body{font-family:Arial,sans-serif;margin:0;padding:48px;text-align:center}.sheet{border:1px solid #ddd;padding:48px;max-width:640px;margin:auto}svg{width:320px;height:320px}h1{font-size:34px;margin:0 0 16px}p{font-size:18px;color:#555}</style></head><body><div class="sheet"><h1>${event.name}</h1>${svg}<p>Scannen, bewerten, fertig.</p><p>${url}</p></div><script>window.print()</script></body></html>`);
+    // The print dialog needs a script, and helmet's script-src 'self' blocks inline code.
+    // This one response carries a stricter policy of its own that allows exactly this script.
+    const nonce = randomToken(16);
+    res.setHeader(
+      'content-security-policy',
+      `default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'self'`
+    );
+    // Event names come from admins and from the Pretix sync, so every value is escaped.
+    const name = escapeHtml(event.name);
+    res.type('html').send(`<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>QR ${name}</title><style>body{font-family:Arial,sans-serif;margin:0;padding:48px;text-align:center}.sheet{border:1px solid #ddd;padding:48px;max-width:640px;margin:auto}svg{width:320px;height:320px}h1{font-size:34px;margin:0 0 16px}p{font-size:18px;color:#555}.actions{margin:24px 0 0}button{font:inherit;font-size:16px;padding:10px 22px;border:1px solid #171717;border-radius:8px;background:#171717;color:#fff;cursor:pointer}@media print{.actions{display:none}.sheet{border:0;padding:0}}</style></head><body><div class="sheet"><h1>${name}</h1>${svg}<p>Scannen, bewerten, fertig.</p><p>${escapeHtml(url)}</p></div><p class="actions"><button type="button" id="print">Drucken</button></p><script nonce="${nonce}">document.getElementById('print').addEventListener('click',function(){window.print();});window.addEventListener('load',function(){window.print();});</script></body></html>`);
   } catch (error) {
     next(error);
   }

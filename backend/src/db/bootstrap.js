@@ -115,3 +115,16 @@ export function normalizeEventInput(body, organization) {
     image_alt: body.imageAlt || null
   };
 }
+
+// PATCH only touches the picture when the request carries imageUrl or imageAlt.
+// An empty imageUrl drops the picture, a filled one marks it as set by hand so the Pretix sync keeps its hands off.
+export function normalizeEventImageUpdate(body) {
+  const rawUrl = typeof body.imageUrl === 'string' ? body.imageUrl.trim() : body.imageUrl;
+  const rawAlt = typeof body.imageAlt === 'string' ? body.imageAlt.trim() : body.imageAlt;
+  return {
+    mode: body.imageUrl === undefined ? 'keep' : (rawUrl ? 'set' : 'clear'),
+    url: rawUrl || null,
+    altProvided: body.imageAlt !== undefined,
+    alt: rawAlt || null
+  };
+}

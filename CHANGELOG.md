@@ -4,6 +4,16 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.19.0] - 2026-09-17
+
+### Added
+
+- Event pictures can be maintained after an event was created: `PATCH /admin/events/:id` now accepts `imageUrl` and `imageAlt`, and every event card in the admin area carries a form for the picture URL and its description. A picture set this way is stored with the source `manual`, so the next Pretix sync leaves it alone as long as the connection does not prefer Pretix pictures. An empty picture URL clears the picture, its description, and the source again, which lets Pretix fill the picture in on the following sync.
+
+### Changed
+
+- Version bumped to `0.19.0`.
+
 ## [0.18.5] - 2026-09-17
 
 ### Changed
