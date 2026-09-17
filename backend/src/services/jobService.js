@@ -1,6 +1,7 @@
 import { NotificationService } from './notificationService.js';
 import { PretixService } from './pretixService.js';
 import { buildEventReportPdf } from '../utils/pdf.js';
+import { buildDownloadName } from '../utils/downloadName.js';
 import { env } from '../config/env.js';
 
 export async function enqueueJob(db, organizationId, jobType, payload, options = {}) {
@@ -124,7 +125,7 @@ export class JobWorker {
       to: user.email,
       subject: `qrating Report: ${event.name}`,
       text: `Anbei der aktuelle qrating Report für ${event.name}.`,
-      attachments: [{ filename: 'qrating-report.pdf', content: pdf }]
+      attachments: [{ filename: buildDownloadName({ event, kind: 'Bericht', extension: 'pdf' }).name, content: pdf }]
     });
     if (sent?.skipped) {
       throw new Error('Der Report wurde nicht verschickt: Der E-Mail-Versand ist nicht eingerichtet oder ausgeschaltet. Richte ihn unter SMTP ein.');

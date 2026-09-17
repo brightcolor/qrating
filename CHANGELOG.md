@@ -4,6 +4,14 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.25.0] - 2026-09-18
+
+### Changed
+
+- Downloads carry their event in the file name: event name, event date, what is inside and the moment of the download, for example `Hafenfest_2026-08-14_Feedback_geladen-2026-08-15-0930.csv`. Feedback export, table export, newsletter export and the report use the same pattern, and the report that arrives by e-mail is named the same way.
+- Both dates follow the timezone of the event. Browsers that read RFC 5987 get the name with umlauts, all others a written-out variant without them.
+- Version bumped to `0.25.0`.
+
 ## [0.24.0] - 2026-09-17
 
 ### Changed

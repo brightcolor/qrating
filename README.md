@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.24.0
+**Version:** 0.25.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -31,7 +31,7 @@ This repository was built with AI-assisted, vibe-coded development. Treat it lik
 - Pretix event sync with settings sync and robust event image detection
 - Event pictures kept by hand: picture URL and description per event in the admin area, marked as manual so a Pretix sync keeps them
 - Form builder with 13 German templates (party, festival, birthday, wedding, company party, conference, workshop, and more), saved custom templates, and a preview of the guest flow
-- Dashboard, CSV/XLSX exports, newsletter export, and multi-page PDF reports
+- Dashboard, CSV/XLSX exports, newsletter export, and multi-page PDF reports; every download is named after its event, the event date and the moment of the download
 - Configurable SMTP for password resets, invitations, low-rating alerts, and report delivery
 - Per-user notification channels scoped to assigned events
 - Supported alert channels: email, Discord, Slack, Mattermost, Microsoft Teams, Telegram, Pushover, ntfy, Gotify, and generic webhooks
@@ -437,7 +437,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.24.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.25.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

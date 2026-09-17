@@ -15,6 +15,7 @@ import { toCsv, toXlsx } from '../utils/export.js';
 import { defaultTexts, defaultTextsByLanguage } from '../services/textService.js';
 import { buildEventReportPdf } from '../utils/pdf.js';
 import { renderQrPrintSheet } from '../utils/printSheet.js';
+import { attachmentHeader } from '../utils/downloadName.js';
 import { SmtpService } from '../services/smtpService.js';
 import { NotificationService, publicChannel } from '../services/notificationService.js';
 import { enqueueJob } from '../services/jobService.js';
@@ -80,6 +81,13 @@ async function ensureEventAccess(req, eventId) {
   if (!(await canAccessEvent({ query }, req.admin, eventId))) {
     throw httpError(403, 'Du hast für dieses Event keine Berechtigung. Ein Event-Manager oder Admin kann dich dem Event zuweisen.');
   }
+}
+
+// Downloads carry the event in their file name, so every export loads it.
+async function loadEvent(req, eventId) {
+  const event = (await query('SELECT * FROM events WHERE id = $1 AND organization_id = $2', [eventId, req.admin.organizationId])).rows[0];
+  if (!event) throw httpError(404, 'Dieses Event gibt es nicht mehr oder es gehört zu einer anderen Organisation. Lade die Liste neu.');
+  return event;
 }
 
 async function currentPlanForRequest(req) {
@@ -273,8 +281,7 @@ adminRouter.post('/events', requireRole('event_manager'), async (req, res, next)
 adminRouter.get('/events/:id', async (req, res, next) => {
   try {
     await ensureEventAccess(req, req.params.id);
-    const event = (await query('SELECT * FROM events WHERE id = $1 AND organization_id = $2', [req.params.id, req.admin.organizationId])).rows[0];
-    if (!event) throw httpError(404, 'Dieses Event gibt es nicht mehr oder es gehört zu einer anderen Organisation. Lade die Liste neu.');
+    const event = await loadEvent(req, req.params.id);
     const forms = await query('SELECT * FROM feedback_forms WHERE event_id = $1 ORDER BY created_at', [event.id]);
     const questions = await query(
       `SELECT q.* FROM feedback_questions q
@@ -498,9 +505,10 @@ async function exportRows(eventId) {
 adminRouter.get('/events/:id/export.csv', async (req, res, next) => {
   try {
     await ensureEventAccess(req, req.params.id);
+    const event = await loadEvent(req, req.params.id);
     const rows = await exportRows(req.params.id);
     res.setHeader('content-type', 'text/csv; charset=utf-8');
-    res.setHeader('content-disposition', 'attachment; filename="qrating-feedback.csv"');
+    res.setHeader('content-disposition', attachmentHeader({ event, kind: 'Feedback', extension: 'csv' }));
     res.send(toCsv(rows));
   } catch (error) {
     next(error);
@@ -510,9 +518,10 @@ adminRouter.get('/events/:id/export.csv', async (req, res, next) => {
 adminRouter.get('/events/:id/export.xlsx', async (req, res, next) => {
   try {
     await ensureEventAccess(req, req.params.id);
+    const event = await loadEvent(req, req.params.id);
     const rows = await exportRows(req.params.id);
     res.setHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('content-disposition', 'attachment; filename="qrating-feedback.xlsx"');
+    res.setHeader('content-disposition', attachmentHeader({ event, kind: 'Feedback', extension: 'xlsx' }));
     res.send(toXlsx(rows));
   } catch (error) {
     next(error);
@@ -522,6 +531,7 @@ adminRouter.get('/events/:id/export.xlsx', async (req, res, next) => {
 adminRouter.get('/events/:id/newsletter.csv', requireRole('event_manager'), async (req, res, next) => {
   try {
     await ensureEventAccess(req, req.params.id);
+    const event = await loadEvent(req, req.params.id);
     const result = await query(
       `SELECT no.email, no.email_encrypted, no.email_hash, no.email_domain,
               no.consent_text, no.consent_given_at, e.name AS event_name
@@ -540,7 +550,7 @@ adminRouter.get('/events/:id/newsletter.csv', requireRole('event_manager'), asyn
       event_name: row.event_name
     }));
     res.setHeader('content-type', 'text/csv; charset=utf-8');
-    res.setHeader('content-disposition', 'attachment; filename="qrating-newsletter.csv"');
+    res.setHeader('content-disposition', attachmentHeader({ event, kind: 'Newsletter', extension: 'csv' }));
     await writeAudit({ query }, {
       organizationId: req.admin.organizationId,
       userId: req.admin.sub,
@@ -558,8 +568,7 @@ adminRouter.get('/events/:id/newsletter.csv', requireRole('event_manager'), asyn
 adminRouter.get('/events/:id/report.pdf', async (req, res, next) => {
   try {
     await ensureEventAccess(req, req.params.id);
-    const event = (await query('SELECT * FROM events WHERE id = $1 AND organization_id = $2', [req.params.id, req.admin.organizationId])).rows[0];
-    if (!event) throw httpError(404, 'Dieses Event gibt es nicht mehr oder es gehört zu einer anderen Organisation. Lade die Liste neu.');
+    const event = await loadEvent(req, req.params.id);
     const summaryResult = await query(
       `SELECT count(*)::int AS total,
               round(avg(rating)::numeric, 2) AS average_rating,
@@ -614,7 +623,7 @@ adminRouter.get('/events/:id/report.pdf', async (req, res, next) => {
       comments: comments.rows
     });
     res.setHeader('content-type', 'application/pdf');
-    res.setHeader('content-disposition', 'attachment; filename="qrating-report.pdf"');
+    res.setHeader('content-disposition', attachmentHeader({ event, kind: 'Bericht', extension: 'pdf' }));
     res.send(pdf);
   } catch (error) {
     next(error);
@@ -694,8 +703,7 @@ adminRouter.post('/events/:id/sync-image', requireRole('event_manager'), async (
 adminRouter.get('/events/:id/qr', async (req, res, next) => {
   try {
     await ensureEventAccess(req, req.params.id);
-    const event = (await query('SELECT * FROM events WHERE id = $1 AND organization_id = $2', [req.params.id, req.admin.organizationId])).rows[0];
-    if (!event) throw httpError(404, 'Dieses Event gibt es nicht mehr oder es gehört zu einer anderen Organisation. Lade die Liste neu.');
+    const event = await loadEvent(req, req.params.id);
     const url = `${env.feedbackAppUrl}/e/${event.event_feedback_token}`;
     res.type('image/svg+xml').send(await QRCode.toString(url, { type: 'svg', margin: 1 }));
   } catch (error) {
@@ -706,8 +714,7 @@ adminRouter.get('/events/:id/qr', async (req, res, next) => {
 adminRouter.get('/events/:id/qr-print', async (req, res, next) => {
   try {
     await ensureEventAccess(req, req.params.id);
-    const event = (await query('SELECT * FROM events WHERE id = $1 AND organization_id = $2', [req.params.id, req.admin.organizationId])).rows[0];
-    if (!event) throw httpError(404, 'Dieses Event gibt es nicht mehr oder es gehört zu einer anderen Organisation. Lade die Liste neu.');
+    const event = await loadEvent(req, req.params.id);
     const url = `${env.feedbackAppUrl}/e/${event.event_feedback_token}`;
     const svg = await QRCode.toString(url, { type: 'svg', margin: 1 });
     // The print dialog needs a script, and helmet's script-src 'self' blocks inline code.
