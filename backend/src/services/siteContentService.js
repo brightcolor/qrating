@@ -1,107 +1,93 @@
-import { getPublicPricingPlans } from './billingService.js';
+import { defaultPlanDefinitions, getPublicPricingPlans, normalizePlan, planToPricingItem } from './billingService.js';
+
+// Earlier releases shipped this placeholder as hero image; it no longer exists.
+const legacyHeroImageUrl = '/marketing-hero.png';
 
 export const defaultSiteContent = {
   brand: 'qrating',
-  eyebrow: 'QR-Feedback als SaaS',
-  headline: 'Ein QR-Code. Echtes Feedback nach jedem Event.',
-  subheadline: 'qrating sammelt Besucherfeedback mobil, schnell und ohne App. Veranstalter sehen Bewertungen, Kommentare, Opt-ins und Low-Rating-Faelle direkt im Adminbereich.',
-  heroImageUrl: '/marketing-hero.png',
-  primaryCtaLabel: 'Admin oeffnen',
-  primaryCtaUrl: '/admin',
-  secondaryCtaLabel: 'Feedback-Beispiel',
+  eyebrow: 'QR-Feedback für Events',
+  headline: 'Dein Publikum hat was zu sagen.',
+  subheadline: 'Ein QR-Code auf Bändchen, Ticket oder Tresen. Deine Gäste vergeben Sterne, tippen Stichworte an und sagen, was hängen blieb. Du erfährst es, solange der Abend noch nachklingt.',
+  heroImageUrl: '',
+  primaryCtaLabel: 'Zugang anfragen',
+  primaryCtaUrl: '#zugang',
+  secondaryCtaLabel: 'Gästeseite ansehen',
   secondaryCtaUrl: '/f/demo-events',
-  trustText: 'Self-hosting geeignet, SaaS-ready und ohne Pretix-Abhaengigkeit in der Besucheransicht.',
+  trustText: 'Für Konzerte, Clubnächte, Festivals und Firmenevents.',
   contactEmail: 'kontakt@qrating.de',
-  footerText: 'qrating hilft Veranstaltern, aus jedem Event konkrete Erkenntnisse zu gewinnen.',
+  footerText: 'QR-Feedback für Veranstalter.',
+  stepsHeadline: 'So kommt die Stimmung zu dir.',
+  featuresHeadline: 'Alles drin für die Zeit nach dem letzten Song.',
+  pricingHeadline: 'Such dir dein Bändchen aus.',
+  pricingNote: '',
+  faqHeadline: 'Noch Fragen?',
+  ctaHeadline: 'Mach dein nächstes Event noch besser.',
+  ctaText: 'Schreib uns kurz, wir richten deinen Zugang ein.',
   features: [
     {
-      title: 'Dynamische QR-Codes',
-      text: 'Ein wiederverwendbarer Organisations-QR-Code zeigt automatisch auf das aktuell bewertbare Event.'
+      title: 'Ein Code für alle Events',
+      text: 'Zeigt immer auf das Event, das gerade bewertet werden kann. Einmal drucken, jede Saison nutzen.'
     },
     {
-      title: 'Mobile Feedbackseite',
-      text: 'Gaeste bewerten mit grossen Buttons, Eventbild, Freitext und optionalem Newsletter-Opt-in in wenigen Sekunden.'
+      title: 'Gästeseite fürs Handy',
+      text: 'Große Tasten, Eventbild, deine Farben und dein Logo. Texte auf Deutsch und Englisch.'
     },
     {
-      title: 'Low-Rating-Workflow',
-      text: 'Kritische Bewertungen koennen sofort per E-Mail, Discord, ntfy, Gotify, Pushover und weiteren Kanaelen gemeldet werden.'
+      title: 'Alarm bei Enttäuschung',
+      text: 'Mail, Slack, Discord, Teams, Telegram, Pushover, ntfy, Gotify oder Webhook. Mit Rückruf-Fall und Status.'
     },
     {
-      title: 'Pretix-Sync',
-      text: 'Events und Eventbilder werden serverseitig aus Pretix synchronisiert, ohne dass Besucher Pretix direkt laden.'
+      title: 'Events aus Pretix',
+      text: 'Deine Events und Eventbilder kommen direkt aus dem Pretix-Shop und bleiben im Abgleich.'
+    },
+    {
+      title: 'Auswertung und Export',
+      text: 'Bewertungen, Kommentare und Scans je Stelle. CSV, Excel und PDF-Report per Mail.'
+    },
+    {
+      title: 'Datenschutz eingebaut',
+      text: 'Kontaktdaten verschlüsselt, jede Einsicht protokolliert, Löschfristen automatisch, 2FA für dein Team.'
     }
   ],
   steps: [
-    { title: 'QR-Code platzieren', text: 'Druckvorlage oder dynamischen QR-Code fuer Ausgang, Bar, Newsletter oder Social Media nutzen.' },
-    { title: 'Feedback sammeln', text: 'Besucher landen direkt beim richtigen Event und geben anonym oder mit Opt-in Rueckmeldung.' },
-    { title: 'Auswerten und handeln', text: 'Dashboard, Exporte, PDF-Reports und Benachrichtigungen machen aus Feedback konkrete Aufgaben.' }
-  ],
-  pricing: [
     {
-      plan: 'free',
-      name: 'Free',
-      price: '0 EUR',
-      text: 'Basics fuer den Start mit wenigen Events.',
-      ctaLabel: 'Plan anfragen',
-      features: [
-        'Dynamischer Organisations-QR-Code',
-        'Event-spezifische QR-Codes',
-        'Sternebewertung und Freitext',
-        'Newsletter-Opt-in Export',
-        '4 bis 5 einfache Formularvorlagen'
-      ]
+      title: 'Code verteilen',
+      text: 'Aufs Bändchen, aufs Ticket, an die Bar, in Social Media. Jede Stelle bekommt ihren eigenen Namen, so siehst du, wo gescannt wird.'
     },
     {
-      plan: 'pro',
-      name: 'Pro',
-      price: '29 EUR / Monat',
-      text: 'Alles fuer regelmaessige Events, ohne eigene Domain und ohne Team-Management.',
-      highlight: true,
-      ctaLabel: 'Pro anfragen',
-      features: [
-        'Alle Formularvorlagen und eigene Fragen',
-        'Pretix-Sync inklusive Eventbildern',
-        'CSV/XLSX-Export und PDF-Reports',
-        'Low-Rating-Benachrichtigungen',
-        'Webhooks, Wallboard und QR-Quellen-Auswertung'
-      ]
+      title: 'Gäste erzählen',
+      text: 'Sterne, Stichworte, ein Satz dazu. Wer enttäuscht war, hinterlässt auf Wunsch eine Nummer für den Rückruf.'
     },
     {
-      plan: 'business',
-      name: 'Business',
-      price: '79 EUR / Monat',
-      text: 'Fuer Teams, Management und professionelle Mandanten-Setups.',
-      ctaLabel: 'Business anfragen',
-      features: [
-        'Alles aus Pro',
-        'Eigene Domain vorbereitet',
-        'Team- und Rollenmanagement',
-        'Management-Ansichten und mehrere Verantwortliche',
-        'Priorisierte Betriebs- und Integrationsoptionen'
-      ]
+      title: 'Du machst was draus',
+      text: 'Im Dashboard siehst du, was gut lief. Kritische Stimmen landen als Fall bei deinem Team.'
     }
   ],
+  pricing: defaultPlanDefinitions.map(normalizePlan).map(planToPricingItem),
   faq: [
     {
-      question: 'Brauchen Besucher einen Account?',
-      answer: 'Nein. Besucher oeffnen den QR-Code und koennen direkt Feedback geben.'
+      question: 'Brauchen Gäste eine App?',
+      answer: 'Der QR-Code öffnet die Bewertung direkt im Browser des Handys. Angaben wie E-Mail-Adresse oder Telefonnummer sind freiwillig.'
     },
     {
-      question: 'Kann qrating mit Pretix arbeiten?',
-      answer: 'Ja. Pretix-Events und Eventbilder werden serverseitig synchronisiert und lokal fuer die Besucheransicht genutzt.'
+      question: 'Woher weiß der Code, welches Event läuft?',
+      answer: 'qrating vergleicht Datum, Uhrzeit und Zeitzone mit deinen Events. Standardmäßig bleibt die Bewertung nach dem Event noch drei Tage offen.'
     },
     {
-      question: 'Ist anonymes Feedback moeglich?',
-      answer: 'Ja. Newsletter-Opt-ins und Rueckrufnummern sind freiwillig und werden getrennt behandelt.'
+      question: 'Was passiert mit den Daten meiner Gäste?',
+      answer: 'Telefonnummern und E-Mail-Adressen speichert qrating nur mit Einwilligung, verschlüsselt und mit Löschfrist.'
     },
     {
-      question: 'Kann die Website angepasst werden?',
-      answer: 'Ja. Landingpage, FAQ, Impressum und Datenschutz koennen im Adminbereich bearbeitet werden.'
+      question: 'Kann ich qrating selbst betreiben?',
+      answer: 'Ja. qrating läuft mit Docker Compose auf deinem eigenen Server.'
     }
   ],
-  imprint: 'Angaben gemaess Impressumspflicht\n\nqrating Betreiber\nMusterstrasse 1\n12345 Musterstadt\n\nE-Mail: kontakt@qrating.de\n\nBitte passe dieses Impressum vor dem produktiven Betrieb im Adminbereich an.',
-  privacy: 'Datenschutzerklaerung\n\nqrating kann anonymes Veranstaltungsfeedback erfassen. Personenbezogene Daten wie E-Mail-Adressen fuer Newsletter oder freiwillige Rueckrufnummern werden nur fuer den jeweils gewaehlten Zweck verarbeitet.\n\nBitte passe diese Datenschutzerklaerung vor dem produktiven Betrieb im Adminbereich an.'
+  imprint: 'Angaben gemäß Impressumspflicht\n\nqrating Betreiber\nMusterstraße 1\n12345 Musterstadt\n\nE-Mail: kontakt@qrating.de\n\nBitte passe dieses Impressum vor dem produktiven Betrieb im Adminbereich an.',
+  privacy: 'Datenschutzerklärung\n\nqrating kann anonymes Veranstaltungsfeedback erfassen. Personenbezogene Daten wie E-Mail-Adressen für den Newsletter oder freiwillige Rückrufnummern werden nur für den jeweils gewählten Zweck verarbeitet.\n\nBitte passe diese Datenschutzerklärung vor dem produktiven Betrieb im Adminbereich an.'
 };
+
+// Section headings always show text; an emptied field falls back to the default.
+const headingKeys = ['stepsHeadline', 'featuresHeadline', 'pricingHeadline', 'faqHeadline', 'ctaHeadline'];
 
 function normalizeList(value, fallback, shape) {
   const source = Array.isArray(value) ? value : fallback;
@@ -125,7 +111,7 @@ export function normalizeSiteContent(content = {}) {
     eyebrow: String(merged.eyebrow || ''),
     headline: String(merged.headline || defaultSiteContent.headline),
     subheadline: String(merged.subheadline || defaultSiteContent.subheadline),
-    heroImageUrl: String(merged.heroImageUrl || defaultSiteContent.heroImageUrl),
+    heroImageUrl: merged.heroImageUrl === legacyHeroImageUrl ? '' : String(merged.heroImageUrl || ''),
     primaryCtaLabel: String(merged.primaryCtaLabel || defaultSiteContent.primaryCtaLabel),
     primaryCtaUrl: String(merged.primaryCtaUrl || defaultSiteContent.primaryCtaUrl),
     secondaryCtaLabel: String(merged.secondaryCtaLabel || defaultSiteContent.secondaryCtaLabel),
@@ -133,6 +119,9 @@ export function normalizeSiteContent(content = {}) {
     trustText: String(merged.trustText || ''),
     contactEmail: String(merged.contactEmail || ''),
     footerText: String(merged.footerText || ''),
+    ...Object.fromEntries(headingKeys.map((key) => [key, String(merged[key] || defaultSiteContent[key])])),
+    pricingNote: String(merged.pricingNote || ''),
+    ctaText: String(merged.ctaText || ''),
     features: normalizeList(merged.features, defaultSiteContent.features, { title: '', text: '' }),
     steps: normalizeList(merged.steps, defaultSiteContent.steps, { title: '', text: '' }),
     pricing: normalizeList(merged.pricing, defaultSiteContent.pricing, { plan: '', name: '', price: '', text: '', ctaLabel: '', highlight: false, features: [] }),

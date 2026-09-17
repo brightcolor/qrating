@@ -85,6 +85,22 @@ describe('backend flows against PostgreSQL', () => {
     expect(site.body.content.imprint).toContain('E-Mail: kontakt@qrating.de');
   });
 
+  it('shows the current website texts and plan descriptions on an untouched installation', async () => {
+    const site = await request('GET', '/public/site');
+
+    expect(site.body.content.headline).toBe('Dein Publikum hat was zu sagen.');
+    expect(site.body.content.heroImageUrl).toBe('');
+    expect(site.body.content.features).toHaveLength(6);
+    expect(site.body.content.pricing.map((plan) => plan.price)).toEqual(['0 € / Monat', '29 € / Monat', '79 € / Monat']);
+    expect(site.body.content.pricing[0]).toMatchObject({
+      text: 'Für den Einstieg mit wenigen Events',
+      ctaLabel: 'Free anfragen'
+    });
+    expect(site.body.content.pricing[0].features).toContain('2 aktive Events, 1 Benutzer');
+    // Legal texts stay as the installation stored them.
+    expect(site.body.content.imprint).toContain('Angaben gemaess Impressumspflicht');
+  });
+
   it('stores guest feedback with the answers of the event form', async () => {
     const event = await demoEvent();
     const response = await request('POST', `/public/events/${event.event_feedback_token}/feedback`, {
@@ -226,5 +242,29 @@ describe('backend flows against PostgreSQL', () => {
 
     const remaining = await query('SELECT id FROM feedback_forms WHERE event_id = $1 ORDER BY created_at', [event.id]);
     expect(remaining.rows.map((row) => row.id)).toEqual([seededForm, answeredCopy]);
+  });
+
+  it('keeps website texts and plans that were saved in the admin area when the refresh runs again', async () => {
+    const saved = await request('PATCH', '/admin/site-content', {
+      cookie: ownerCookie,
+      body: { content: { headline: 'Ein QR-Code. Echtes Feedback nach jedem Event.', faqHeadline: 'Eure Fragen' } }
+    });
+    expect(saved.status).toBe(200);
+    await query(
+      `UPDATE billing_plans
+       SET summary = 'Basics fuer den Einstieg.', updated_at = created_at + interval '1 minute'
+       WHERE plan_key = 'free'`
+    );
+
+    const migration = await readFile(
+      new URL('../../database/migrations/012_website_refresh.sql', import.meta.url),
+      'utf8'
+    );
+    await query(migration);
+
+    const site = await request('GET', '/public/site');
+    expect(site.body.content.headline).toBe('Ein QR-Code. Echtes Feedback nach jedem Event.');
+    expect(site.body.content.faqHeadline).toBe('Eure Fragen');
+    expect(site.body.content.pricing[0].text).toBe('Basics fuer den Einstieg.');
   });
 });

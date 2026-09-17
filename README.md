@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.15.0
+**Version:** 0.16.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -13,7 +13,7 @@ This repository was built with AI-assisted, vibe-coded development. Treat it lik
 - Product website: `https://qrating.de`
 - Admin/Web UI domain: `https://app.qrating.de`
 - Feedback/QR domain: `https://qrat.ing`
-- Public marketing website on `/` with editable FAQ, imprint, and privacy pages
+- Public product website on `/` with editable texts, section headings, FAQ, imprint, and privacy pages
 - Internal Free, Pro, and Business plans with admin-configurable limits and overrides
 - No self-service checkout flow: operators create users and assign access manually
 - First-user setup: no default admin account is shipped
@@ -184,6 +184,17 @@ The app keeps the existing Free, Pro, and Business model, but access is controll
 - contact CTAs are shown instead of an automated subscription flow
 
 This keeps the product matrix visible without letting visitors self-upgrade.
+
+## Public Website
+
+The product website (`/`, `/faq`, `/impressum`, `/datenschutz`) is a separate bundle with its own design:
+
+- texts, section headings, button labels, and an optional event photo come from the Website admin area; an empty heading shows the default text
+- plan cards read the plan matrix; request buttons open an email to the contact address
+- the QR code in the header area encodes the link of the second button on the feedback domain, so visitors can scan it and try the guest page
+- fonts are bundled with Fontsource and load from the own domain
+- pages switch in place, animations follow `prefers-reduced-motion`
+- migration `012` switches website texts and plan descriptions that were never saved in the admin area to the current defaults
 
 ## Guest Experience
 
@@ -373,7 +384,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.15.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.16.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

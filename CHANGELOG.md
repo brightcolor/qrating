@@ -4,6 +4,24 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.16.0] - 2026-09-17
+
+### Added
+
+- New design for the public website, built around woven festival wristbands: a scannable QR code in the header area that opens the guest page, a sticky navigation that marks the current section, a mobile menu, scroll-in effects, and a copy button for the contact address. Devices that ask for reduced motion get a still page.
+- The website pages switch in place without reloading. The FAQ page opens one answer at a time.
+- Website admin area: headings for every section, a note next to the prices, and a closing text. An empty heading shows the default text.
+- Favicon, page description, and link preview texts.
+
+### Changed
+
+- New default texts for the website and the plans. Migration `012` applies them where nobody saved the website or the plans in the admin area; imprint, privacy text, and contact address keep their stored values.
+- Plan prices read "29 € / Monat" and each plan has its own request button text.
+- The website bundles its fonts (Paytone One, Hanken Grotesk) and requests its texts while the scripts load.
+- nginx compresses text responses and caches the hashed build files for a year.
+- The website shows an event photo in the header area only when one is set; the placeholder image of earlier releases was removed, together with the share button on the plan cards.
+- Version bumped to `0.16.0`.
+
 ## [0.15.0] - 2026-09-17
 
 ### Added

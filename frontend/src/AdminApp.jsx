@@ -745,19 +745,32 @@ function WebsiteContent() {
     {form && <form onSubmit={save} className="mt-6 space-y-6">
       <Panel title="Landingpage">
         <div className="grid gap-4 md:grid-cols-2">
-          <label className="block"><span className="text-sm font-medium">Brand</span><input className="input mt-1" value={form.brand || ''} onChange={(e) => setForm({ ...form, brand: e.target.value })} /></label>
-          <label className="block"><span className="text-sm font-medium">Eyebrow</span><input className="input mt-1" value={form.eyebrow || ''} onChange={(e) => setForm({ ...form, eyebrow: e.target.value })} /></label>
-          <label className="block md:col-span-2"><span className="text-sm font-medium">Headline</span><input className="input mt-1" value={form.headline || ''} onChange={(e) => setForm({ ...form, headline: e.target.value })} /></label>
+          <label className="block"><span className="text-sm font-medium">Marke</span><input className="input mt-1" value={form.brand || ''} onChange={(e) => setForm({ ...form, brand: e.target.value })} /></label>
+          <label className="block"><span className="text-sm font-medium">Zeile über der Überschrift</span><input className="input mt-1" value={form.eyebrow || ''} onChange={(e) => setForm({ ...form, eyebrow: e.target.value })} /></label>
+          <label className="block md:col-span-2"><span className="text-sm font-medium">Überschrift</span><input className="input mt-1" value={form.headline || ''} onChange={(e) => setForm({ ...form, headline: e.target.value })} /></label>
           <label className="block md:col-span-2"><span className="text-sm font-medium">Untertitel</span><textarea className="input mt-1 min-h-24" value={form.subheadline || ''} onChange={(e) => setForm({ ...form, subheadline: e.target.value })} /></label>
-          <label className="block md:col-span-2"><span className="text-sm font-medium">Hero-Bild-URL</span><input className="input mt-1" value={form.heroImageUrl || ''} onChange={(e) => setForm({ ...form, heroImageUrl: e.target.value })} placeholder="/marketing-hero.png oder /storage/..." /></label>
-          <label className="block"><span className="text-sm font-medium">Primaerer CTA Text</span><input className="input mt-1" value={form.primaryCtaLabel || ''} onChange={(e) => setForm({ ...form, primaryCtaLabel: e.target.value })} /></label>
-          <label className="block"><span className="text-sm font-medium">Primaerer CTA Link</span><input className="input mt-1" value={form.primaryCtaUrl || ''} onChange={(e) => setForm({ ...form, primaryCtaUrl: e.target.value })} /></label>
-          <label className="block"><span className="text-sm font-medium">Sekundaerer CTA Text</span><input className="input mt-1" value={form.secondaryCtaLabel || ''} onChange={(e) => setForm({ ...form, secondaryCtaLabel: e.target.value })} /></label>
-          <label className="block"><span className="text-sm font-medium">Sekundaerer CTA Link</span><input className="input mt-1" value={form.secondaryCtaUrl || ''} onChange={(e) => setForm({ ...form, secondaryCtaUrl: e.target.value })} /></label>
-          <label className="block md:col-span-2"><span className="text-sm font-medium">Trust-Text</span><input className="input mt-1" value={form.trustText || ''} onChange={(e) => setForm({ ...form, trustText: e.target.value })} /></label>
+          <label className="block md:col-span-2"><span className="text-sm font-medium">Eventfoto im Kopfbereich (optional)</span><input className="input mt-1" value={form.heroImageUrl || ''} onChange={(e) => setForm({ ...form, heroImageUrl: e.target.value })} placeholder="https://... oder /storage/..." /></label>
+          <label className="block"><span className="text-sm font-medium">Hauptknopf: Text</span><input className="input mt-1" value={form.primaryCtaLabel || ''} onChange={(e) => setForm({ ...form, primaryCtaLabel: e.target.value })} /></label>
+          <label className="block"><span className="text-sm font-medium">Hauptknopf: Link</span><input className="input mt-1" value={form.primaryCtaUrl || ''} onChange={(e) => setForm({ ...form, primaryCtaUrl: e.target.value })} placeholder="#zugang" /></label>
+          <label className="block"><span className="text-sm font-medium">Zweiter Knopf: Text</span><input className="input mt-1" value={form.secondaryCtaLabel || ''} onChange={(e) => setForm({ ...form, secondaryCtaLabel: e.target.value })} /></label>
+          <label className="block"><span className="text-sm font-medium">Zweiter Knopf: Link (auch im QR-Code)</span><input className="input mt-1" value={form.secondaryCtaUrl || ''} onChange={(e) => setForm({ ...form, secondaryCtaUrl: e.target.value })} placeholder="/f/veranstalter" /></label>
+          <label className="block md:col-span-2"><span className="text-sm font-medium">Zeile unter den Knöpfen</span><input className="input mt-1" value={form.trustText || ''} onChange={(e) => setForm({ ...form, trustText: e.target.value })} /></label>
           <label className="block"><span className="text-sm font-medium">Kontakt-E-Mail</span><input className="input mt-1" value={form.contactEmail || ''} onChange={(e) => setForm({ ...form, contactEmail: e.target.value })} /></label>
-          <label className="block"><span className="text-sm font-medium">Footer-Text</span><input className="input mt-1" value={form.footerText || ''} onChange={(e) => setForm({ ...form, footerText: e.target.value })} /></label>
+          <label className="block"><span className="text-sm font-medium">Text in der Fußzeile</span><input className="input mt-1" value={form.footerText || ''} onChange={(e) => setForm({ ...form, footerText: e.target.value })} /></label>
         </div>
+      </Panel>
+
+      <Panel title="Abschnitte">
+        <div className="grid gap-4 md:grid-cols-2">
+          <label className="block"><span className="text-sm font-medium">Überschrift Ablauf</span><input className="input mt-1" value={form.stepsHeadline || ''} onChange={(e) => setForm({ ...form, stepsHeadline: e.target.value })} /></label>
+          <label className="block"><span className="text-sm font-medium">Überschrift Funktionen</span><input className="input mt-1" value={form.featuresHeadline || ''} onChange={(e) => setForm({ ...form, featuresHeadline: e.target.value })} /></label>
+          <label className="block"><span className="text-sm font-medium">Überschrift Preise</span><input className="input mt-1" value={form.pricingHeadline || ''} onChange={(e) => setForm({ ...form, pricingHeadline: e.target.value })} /></label>
+          <label className="block"><span className="text-sm font-medium">Hinweis neben den Preisen</span><input className="input mt-1" value={form.pricingNote || ''} onChange={(e) => setForm({ ...form, pricingNote: e.target.value })} placeholder="z. B. Hinweis zur Umsatzsteuer" /></label>
+          <label className="block"><span className="text-sm font-medium">Überschrift Fragen</span><input className="input mt-1" value={form.faqHeadline || ''} onChange={(e) => setForm({ ...form, faqHeadline: e.target.value })} /></label>
+          <label className="block"><span className="text-sm font-medium">Abschluss: Überschrift</span><input className="input mt-1" value={form.ctaHeadline || ''} onChange={(e) => setForm({ ...form, ctaHeadline: e.target.value })} /></label>
+          <label className="block md:col-span-2"><span className="text-sm font-medium">Abschluss: Text</span><input className="input mt-1" value={form.ctaText || ''} onChange={(e) => setForm({ ...form, ctaText: e.target.value })} /></label>
+        </div>
+        <p className="mt-3 text-sm text-neutral-600">Eine leere Überschrift zeigt den Standardtext. Ein leerer Hinweis oder Abschlusstext wird ausgeblendet.</p>
       </Panel>
 
       <EditableList title="Features" items={form.features || []} fields={[['title', 'Titel'], ['text', 'Text']]} onChange={(index, key, value) => updateList('features', index, key, value)} onAdd={() => addListItem('features')} onRemove={(index) => removeListItem('features', index)} />

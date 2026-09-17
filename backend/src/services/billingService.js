@@ -4,14 +4,14 @@ export const defaultPlanDefinitions = [
   {
     id: 'free',
     name: 'Free',
-    price: '0 EUR',
-    summary: 'Basics fuer den Einstieg.',
+    price: '0 € / Monat',
+    summary: 'Für den Einstieg mit wenigen Events',
+    ctaLabel: 'Free anfragen',
     features: [
-      '1 Organisation',
-      '2 aktive Events',
-      'Dynamische und Event-QR-Codes',
-      'Sternebewertung, Freitext, Newsletter-CSV',
-      '4 bis 5 einfache Formularvorlagen'
+      '2 aktive Events, 1 Benutzer',
+      'Veranstalter- und Event-QR-Codes',
+      'Sterne, Stichworte, Kommentare',
+      'Newsletter-Export, bis zu 5 Formulare'
     ],
     limits: {
       activeEvents: 2,
@@ -27,14 +27,15 @@ export const defaultPlanDefinitions = [
   {
     id: 'pro',
     name: 'Pro',
-    price: '29 EUR / Monat',
-    summary: 'Alles fuer regelmaessige Events, ohne eigene Domain und ohne Team-Management.',
+    price: '29 € / Monat',
+    summary: 'Für regelmäßige Veranstaltungen',
+    ctaLabel: 'Pro anfragen',
     features: [
-      'Unbegrenzte Formularvorlagen und eigene Fragen',
-      'Pretix-Sync und Eventbild-Erkennung',
-      'CSV/XLSX-Export und PDF-Reports',
-      'Low-Rating-Benachrichtigungen',
-      'Webhooks, Wallboard und QR-Quellen-Auswertung'
+      'Beliebig viele Events und Formulare',
+      'Pretix-Anbindung mit Eventbildern',
+      'Excel-Export und PDF-Reports',
+      'Alarm bei schlechter Bewertung',
+      'Webhooks, Wallboard, QR-Quellen'
     ],
     limits: {
       activeEvents: null,
@@ -50,13 +51,14 @@ export const defaultPlanDefinitions = [
   {
     id: 'business',
     name: 'Business',
-    price: '79 EUR / Monat',
-    summary: 'Fuer eigene Domains, Teams und Management-Funktionen.',
+    price: '79 € / Monat',
+    summary: 'Für Teams mit mehreren Verantwortlichen',
+    ctaLabel: 'Business anfragen',
     features: [
       'Alles aus Pro',
-      'Eigene Domain vorbereitet',
-      'Team- und Rollenmanagement',
-      'Management-Ansichten fuer mehrere Verantwortliche',
+      'Teams, Rollen und Event-Zuweisungen',
+      'Beliebig viele Benutzer',
+      'Eigene Domain (in Vorbereitung)',
       'Priorisierte Betriebs- und Integrationsoptionen'
     ],
     limits: {

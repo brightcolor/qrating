@@ -2,8 +2,37 @@
 <html lang="de">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>qrating</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>qrating · QR-Feedback für Events</title>
+    <meta name="description" content="qrating sammelt das Feedback deiner Gäste per QR-Code: Sterne, Stichworte und Kommentare direkt im Handy-Browser, mit Dashboard, Alarm bei Kritik und Pretix-Anbindung." />
+    <meta name="theme-color" content="#FBFBFF" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="qrating" />
+    <meta property="og:title" content="qrating · QR-Feedback für Events" />
+    <meta property="og:description" content="Dein Publikum hat was zu sagen. Ein QR-Code auf Bändchen, Ticket oder Tresen, und du erfährst, wie der Abend ankam." />
+    <style>
+      html.site-html body { background: #fbfbff; }
+    </style>
+    <script>
+      // Website pages: load the texts while the scripts download, and hide scroll-in elements before the first paint.
+      (function () {
+        if (/^\/(admin|e|f)(\/|$)/.test(window.location.pathname)) return;
+        var root = document.documentElement;
+        root.classList.add('site-html');
+        try {
+          if ('IntersectionObserver' in window && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            root.classList.add('site-reveal');
+          }
+        } catch (error) {}
+        if (!window.fetch) return;
+        window.__qratingSite = fetch('/api/public/site', { headers: { accept: 'application/json' } }).then(function (response) {
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          return response.json();
+        });
+        window.__qratingSite.catch(function () {});
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
