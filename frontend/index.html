@@ -13,12 +13,20 @@
     <meta property="og:description" content="Dein Publikum hat was zu sagen. Ein QR-Code auf Bändchen, Ticket oder Tresen, und du erfährst, wie der Abend ankam." />
     <style>
       html.site-html body { background: #fbfbff; }
+      html.guest-html, html.guest-html body { background: #140f1c; color-scheme: dark; }
     </style>
     <script>
       // Website pages: load the texts while the scripts download, and hide scroll-in elements before the first paint.
+      // Guest pages start on their dark stage right away.
       (function () {
-        if (/^\/(admin|e|f)(\/|$)/.test(window.location.pathname)) return;
         var root = document.documentElement;
+        if (/^\/(e|f)\//.test(window.location.pathname)) {
+          root.classList.add('guest-html');
+          var themeColor = document.querySelector('meta[name="theme-color"]');
+          if (themeColor) themeColor.setAttribute('content', '#140f1c');
+          return;
+        }
+        if (/^\/(admin|e|f)(\/|$)/.test(window.location.pathname)) return;
         root.classList.add('site-html');
         try {
           if ('IntersectionObserver' in window && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {

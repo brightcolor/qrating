@@ -744,8 +744,8 @@ adminRouter.get('/forms/profiles', async (req, res, next) => {
         name: profile.name,
         summary: profile.summary,
         badge: profile.badge,
-        tone: profile.tone,
-        questionCount: profile.questions.length
+        questionCount: profile.questions.length,
+        questions: profile.questions.map((item) => ({ label: item.label, questionType: item.questionType }))
       })),
       saved: saved.rows
     });

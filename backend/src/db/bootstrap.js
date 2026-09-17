@@ -59,9 +59,9 @@ export async function seedDefaultData() {
     await client.query(
       `INSERT INTO feedback_questions (feedback_form_id, question_type, internal_name, label, placeholder, sort_order, active, options)
        VALUES
-       ($1, 'text_long', 'moment', 'Was war dein Moment des Abends?', 'Ein kurzer Gedanke reicht ...', 10, true, null),
-       ($1, 'checkboxes', 'positive_tags', 'Was hat für dich gepasst?', null, 20, true, $2::jsonb),
-       ($1, 'checkboxes', 'improvement_tags', 'Wo dürfen wir besser werden?', null, 30, true, $3::jsonb)`,
+       ($1, 'checkboxes', 'positive_tags', 'Was hat für dich gepasst?', null, 10, true, $2::jsonb),
+       ($1, 'checkboxes', 'improvement_tags', 'Wo dürfen wir besser werden?', null, 20, true, $3::jsonb),
+       ($1, 'text_long', 'moment', 'Was war dein Moment des Abends?', 'Ein kurzer Gedanke reicht …', 30, true, null)`,
       [
         form.id,
         JSON.stringify(['Tolle Stimmung', 'Gute Musik', 'Schöne Location', 'Nettes Team', 'Guter Sound', 'Gerne wieder']),

@@ -4,6 +4,27 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.18.0] - 2026-09-17
+
+### Added
+
+- The guest page asks one question per step. Stars, single choice, yes/no, and the recommendation score move on by themselves; tags and free text have a "Weiter" button, optional questions a "Überspringen" button.
+- A summary in the shape of a ticket ends the flow: every answer is listed, one tap opens it again, and sending stamps the ticket.
+- New design for guests: the event picture as a backdrop, the organizer color for stars, buttons, and tags, and colors that stay readable on the dark stage.
+- Stars for rating questions, a 0 to 10 scale for recommendation questions, and large buttons for yes/no and single choice. The first recommendation answer also fills the NPS value of the response.
+- Tag questions offer one extra sentence, which is stored as the positive or improvement comment.
+- Answers survive a reload in the same tab. Phone numbers and email addresses stay out of that storage, and the back gesture of the phone leads to the previous question.
+- 13 German form templates: Schnellfeedback, Party & Club, Festival, Konzert, Geburtstagsfeier, Hochzeit, Firmen- & Weihnachtsfeier, Stadt- & Vereinsfest, Konferenz & Messe, Workshop & Seminar, Theater, Lesung & Comedy, Emotionaler Rückblick, and Nachfassen bei Kritik.
+- 35 new texts for the guest flow, editable under Texts in German and English.
+
+### Changed
+
+- The form builder speaks German, shows an icon and the first questions per template, and previews the guest flow that results from the questions.
+- Texts in the admin area are grouped with readable labels, and each text names its placeholders.
+- Tag questions of the form now provide the options of the guest page; the built-in list is gone.
+- The demo form starts with the two tag questions, so the first answers are taps.
+- Version bumped to `0.18.0`.
+
 ## [0.17.1] - 2026-09-17
 
 ### Fixed

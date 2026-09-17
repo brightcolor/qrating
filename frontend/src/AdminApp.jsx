@@ -27,6 +27,7 @@ import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Too
 import './styles/index.css';
 import { API_BASE, api, assetUrl } from './lib/api.js';
 import { FormBuilder } from './admin/FormBuilder.jsx';
+import { groupTextKeys, textLabels } from './admin/textCatalog.js';
 
 const SecurityCenter = React.lazy(() => import('./admin/SecurityCenter.jsx').then((module) => ({ default: module.SecurityCenter })));
 
@@ -989,15 +990,20 @@ function Texts() {
     <Notice message={message} />
     {loading && <p>Lade Texte ...</p>}
     {error && <ErrorBox error={error} />}
-    {data && <Panel title="Öffentliche Standardtexte">
+    {data && groupTextKeys(Object.keys(data.defaults)).map(([group, keys]) => <Panel key={group} title={group}>
       <div className="grid gap-4">
-        {Object.keys(data.defaults).map((key) => <label key={key} className="block">
-          <span className="text-sm font-medium">{key}</span>
-          <textarea className="input mt-1 min-h-20" value={drafts[key] || ''} onChange={(e) => setDrafts({ ...drafts, [key]: e.target.value })} />
-          <button type="button" onClick={() => save(key)} className="button-secondary mt-2">Speichern</button>
-        </label>)}
+        {keys.map((key) => {
+          const [label, hint] = textLabels[key] || [key];
+          return <label key={key} className="block">
+            <span className="text-sm font-medium">{label}</span>
+            <span className="ml-2 font-mono text-xs text-neutral-500">{key}</span>
+            {hint && <span className="block text-xs text-neutral-500">{hint}</span>}
+            <textarea className="input mt-1 min-h-20" value={drafts[key] || ''} onChange={(e) => setDrafts({ ...drafts, [key]: e.target.value })} />
+            <button type="button" onClick={() => save(key)} className="button-secondary mt-2">Speichern</button>
+          </label>;
+        })}
       </div>
-    </Panel>}
+    </Panel>)}
   </div>;
 }
 

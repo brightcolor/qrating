@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.17.1
+**Version:** 0.18.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -22,10 +22,10 @@ This repository was built with AI-assisted, vibe-coded development. Treat it lik
 - TOTP-based two-factor authentication for admin accounts with recovery codes
 - Dynamic organization QR code: `https://qrat.ing/f/{organizationSlug}`
 - Event-specific QR code: `https://qrat.ing/e/{event_feedback_token}`
-- Mobile-first guest feedback page with event image, large touch targets, and sticky submit
-- Rating, quick tags, free-text answers, newsletter opt-in, and friendly low-rating callback request
+- Mobile-first guest feedback flow: one question per step, single answers move on by themselves, a ticket-style summary, and a stamp after sending
+- Rating, quick tags, free-text answers, recommendation score, newsletter opt-in, and friendly low-rating callback request
 - Pretix event sync with settings sync and robust event image detection
-- Friendly form builder with built-in question profiles, saved custom profiles, reusable questions, and visitor preview
+- Form builder with 13 German templates (party, festival, birthday, wedding, company party, conference, workshop, and more), saved custom templates, and a preview of the guest flow
 - Dashboard, CSV/XLSX exports, newsletter export, and multi-page PDF reports
 - Configurable SMTP for password resets, invitations, low-rating alerts, and report delivery
 - Per-user notification channels scoped to assigned events
@@ -209,18 +209,30 @@ Every error tells people what happened and what to do next:
 
 ## Guest Experience
 
-The public feedback UI is designed for phones:
+The public feedback UI is designed for phones and asks one question per step:
 
-- event image as a compact header
-- event name, date, and location
-- large 1-5 rating buttons
-- quick positive and improvement tags
-- optional positive comment and improvement comment
-- newsletter opt-in with consent text
-- low-rating callback field with empathetic copy and phone number validation
-- short thank-you screen after submission
+- it opens with the event picture, the event name, date, location, and large 1-5 rating buttons
+- a tap on a star, a single choice, yes/no, or a recommendation score moves on to the next question by itself; tags and free text have a "Weiter" button
+- tag questions (`positive_tags`, `improvement_tags`) offer one extra sentence, which is stored as the positive or improvement comment
+- one and two stars add a callback step with empathetic copy and phone number validation
+- forms without an open question of their own get the two standard comment questions
+- the last question asks about event updates; a yes shows the consent text and the email field
+- the summary looks like a ticket: every answer is listed and one tap opens it again for a change
+- sending stamps the ticket and shows the thank-you screen
+- the design uses the organizer color, logo, and event picture; the colors are adjusted until they stay readable on the dark stage
+- answers survive a reload in the same tab; phone numbers and email addresses stay out of that storage
+- the back gesture of the phone leads to the previous question
 
 Guests never see Pretix details, admin logic, or event lists unless that is explicitly enabled later.
+
+## Form Templates
+
+The admin area offers 13 German templates under Formulare: Schnellfeedback, Party & Club, Festival, Konzert,
+Geburtstagsfeier, Hochzeit, Firmen- & Weihnachtsfeier, Stadt- & Vereinsfest, Konferenz & Messe,
+Workshop & Seminar, Theater, Lesung & Comedy, Emotionaler Rückblick, and Nachfassen bei Kritik.
+
+Every template creates editable questions; the panel next to the editor shows the guest flow that results from them.
+Question types: short answer, long answer, multiple selection, single selection, yes/no, recommendation (0 to 10), and stars (1 to 5).
 
 ## Dynamic QR Code
 
@@ -395,7 +407,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.17.1`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.18.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

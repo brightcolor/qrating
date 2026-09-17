@@ -65,9 +65,11 @@ describe('backend flows against PostgreSQL', () => {
     expect(dynamic.status).toBe(200);
     expect(dynamic.body.event.name).toBe('Demo Nacht');
     expect(dynamic.body.event.questions.map((question) => question.internal_name))
-      .toEqual(['moment', 'positive_tags', 'improvement_tags']);
+      .toEqual(['positive_tags', 'improvement_tags', 'moment']);
     expect(dynamic.body.texts.headline).toBe('Wie war dein Abend bei Demo Nacht?');
     expect(dynamic.body.texts.submit).toBe('Abschicken');
+    expect(dynamic.body.texts.next_label).toBe('Weiter');
+    expect(dynamic.body.texts.stamp_label).toBe('Angekommen');
     expect(dynamic.body.texts.thank_headline).toBe('Merci für dein Feedback');
     expect(dynamic.body.texts.subtitle)
       .toBe('Dein Feedback hilft uns, kommende Events noch schöner, entspannter und besser zu machen.');
@@ -121,8 +123,8 @@ describe('backend flows against PostgreSQL', () => {
        ORDER BY q.sort_order`
     );
     expect(answers.rows).toEqual([
-      { internal_name: 'moment', answer_value: 'Die Zugabe' },
-      { internal_name: 'positive_tags', answer_value: ['Gute Musik'] }
+      { internal_name: 'positive_tags', answer_value: ['Gute Musik'] },
+      { internal_name: 'moment', answer_value: 'Die Zugabe' }
     ]);
   });
 
@@ -187,6 +189,29 @@ describe('backend flows against PostgreSQL', () => {
     const slugs = (await query("SELECT slug FROM events WHERE name = 'Sommerfest'")).rows.map((row) => row.slug);
     expect(slugs).toHaveLength(2);
     expect(new Set(slugs).size).toBe(2);
+  });
+
+  it('offers German form templates and creates an event form from one', async () => {
+    const profiles = await request('GET', '/admin/forms/profiles', { cookie: ownerCookie });
+    expect(profiles.status).toBe(200);
+    const byId = Object.fromEntries(profiles.body.builtIn.map((profile) => [profile.id, profile]));
+    expect(byId['club-party'].name).toBe('Party & Club');
+    expect(byId.festival.name).toBe('Festival');
+    expect(byId['birthday-party'].questions[0]).toEqual({ label: 'Wie war die Stimmung?', questionType: 'rating' });
+
+    const event = (await query("SELECT id FROM events WHERE name = 'Sommerfest' ORDER BY date_from LIMIT 1")).rows[0];
+    const created = await request('POST', '/admin/forms/from-profile', {
+      cookie: ownerCookie,
+      body: { profileId: 'birthday-party', eventId: event.id, name: 'Feier von Alex' }
+    });
+    expect(created.status).toBe(201);
+    const questions = await query(
+      'SELECT internal_name, options FROM feedback_questions WHERE feedback_form_id = $1 ORDER BY sort_order',
+      [created.body.id]
+    );
+    expect(questions.rows.map((row) => row.internal_name))
+      .toEqual(['mood_rating', 'positive_tags', 'improvement_tags', 'danced', 'birthday_wishes']);
+    expect(questions.rows[1].options).toContain('Überraschungen');
   });
 
   it('keeps one event per Pretix event across repeated syncs', async () => {
