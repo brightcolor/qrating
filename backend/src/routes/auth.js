@@ -122,9 +122,10 @@ authRouter.post('/setup/first-admin', authLimiter, async (req, res, next) => {
           [organizationName, organizationSlug]
         )).rows[0];
 
+      // The account that sets the installation up also runs the platform above the organizations.
       const user = (await client.query(
-        `INSERT INTO users (organization_id, name, email, password_hash, role, status)
-         VALUES ($1, $2, $3, $4, 'owner', 'active')
+        `INSERT INTO users (organization_id, name, email, password_hash, role, status, platform_admin)
+         VALUES ($1, $2, $3, $4, 'owner', 'active', true)
          RETURNING *`,
         [organization.id, name, email, passwordHash]
       )).rows[0];
@@ -316,17 +317,26 @@ authRouter.post('/logout', (req, res) => {
 
 authRouter.get('/me', requireAdmin, async (req, res, next) => {
   try {
+    // The session may work in another organization than the one the account belongs to.
     const result = await query(
-      `SELECT u.id, u.name, u.email, u.role, u.two_factor_enabled,
-              o.id AS organization_id, o.name AS organization_name, o.slug AS organization_slug
-       FROM users u JOIN organizations o ON o.id = u.organization_id WHERE u.id = $1`,
-      [req.admin.sub]
+      `SELECT u.id, u.name, u.email, u.role AS home_role, u.two_factor_enabled, u.platform_admin,
+              home.id AS home_organization_id, home.name AS home_organization_name, home.slug AS home_organization_slug,
+              visited.id AS organization_id, visited.name AS organization_name, visited.slug AS organization_slug
+       FROM users u
+       JOIN organizations home ON home.id = u.organization_id
+       JOIN organizations visited ON visited.id = $2
+       WHERE u.id = $1`,
+      [req.admin.sub, req.admin.organizationId]
     );
     const user = result.rows[0];
     res.json({
       ...user,
+      role: req.admin.role || user.home_role,
+      platformAdmin: Boolean(user.platform_admin),
+      acting: Boolean(req.admin.acting) && user.home_organization_id !== user.organization_id,
       twoFactorEnabled: Boolean(user.two_factor_enabled),
-      two_factor_enabled: undefined
+      two_factor_enabled: undefined,
+      platform_admin: undefined
     });
   } catch (error) {
     next(error);

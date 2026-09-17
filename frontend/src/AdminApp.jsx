@@ -2,6 +2,7 @@
 import {
   BarChart3,
   Bell,
+  Building2,
   CalendarDays,
   CreditCard,
   Download,
@@ -31,6 +32,7 @@ import { groupTextKeys, textLabels } from './admin/textCatalog.js';
 import { eventLabel, formatDate } from './admin/eventLabel.js';
 
 const SecurityCenter = React.lazy(() => import('./admin/SecurityCenter.jsx').then((module) => ({ default: module.SecurityCenter })));
+const Tenants = React.lazy(() => import('./admin/Tenants.jsx').then((module) => ({ default: module.Tenants })));
 
 function useAsync(fn, deps = []) {
   const [state, setState] = useState({ loading: true, data: null, error: null });
@@ -50,12 +52,14 @@ function useAsync(fn, deps = []) {
 function AdminApp() {
   const [authenticated, setAuthenticated] = useState(false);
   const [page, setPage] = useState(() => new URLSearchParams(window.location.search).has('plan') || new URLSearchParams(window.location.search).has('billing') ? 'billing' : 'dashboard');
+  const { data: me } = useAsync(() => (authenticated ? api('/admin/me') : Promise.resolve(null)), [authenticated]);
   const path = window.location.pathname;
   const query = new URLSearchParams(window.location.search);
   if (!authenticated && path.includes('/accept-invite')) return <AcceptInvite token={query.get('token')} onLogin={() => setAuthenticated(true)} />;
   if (!authenticated && path.includes('/reset-password')) return <ResetPassword token={query.get('token')} onLogin={() => setAuthenticated(true)} />;
   if (!authenticated) return <AuthGate onLogin={() => setAuthenticated(true)} />;
   const nav = [
+    ...(me?.platformAdmin ? [['tenants', 'Mandanten', Building2]] : []),
     ['dashboard', 'Dashboard', BarChart3],
     ['security', 'Sicherheit', ShieldCheck],
     ['events', 'Events', CalendarDays],
@@ -76,7 +80,7 @@ function AdminApp() {
   return <div className="min-h-screen bg-neutral-100">
     <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-neutral-200 bg-white p-5 lg:block">
       <div className="text-xl font-semibold">qrating</div>
-      <TenantBadge />
+      <TenantBadge me={me} />
       <nav className="mt-6 space-y-1">
         {nav.map(([id, label, Icon]) => <NavButton key={id} icon={Icon} label={label} active={page === id} onClick={() => setPage(id)} />)}
       </nav>
@@ -87,6 +91,8 @@ function AdminApp() {
         <div className="mb-5 flex flex-wrap gap-2 lg:hidden">
           {nav.map(([id, label]) => <button key={id} onClick={() => setPage(id)} className="rounded-md bg-white px-3 py-2 text-sm">{label}</button>)}
         </div>
+        <ActingBanner me={me} />
+        {page === 'tenants' && <React.Suspense fallback={<p>Lade Mandanten ...</p>}><Tenants /></React.Suspense>}
         {page === 'dashboard' && <Dashboard />}
         {page === 'security' && <React.Suspense fallback={<p>Lade Security Center ...</p>}><SecurityCenter /></React.Suspense>}
         {page === 'events' && <Events />}
@@ -108,13 +114,35 @@ function AdminApp() {
   </div>;
 }
 
-// Shows which tenant this login belongs to; the slug is the one in the QR codes.
-function TenantBadge() {
-  const { data } = useAsync(() => api('/admin/me'), []);
-  if (!data?.organization_name) return null;
-  return <div className="mt-4 rounded-md bg-neutral-100 px-3 py-2">
-    <p className="text-sm font-semibold leading-tight">{data.organization_name}</p>
-    <p className="mt-0.5 font-mono text-xs text-neutral-500">{data.organization_slug}</p>
+// Shows which tenant this session works in; the slug is the one in the QR codes.
+function TenantBadge({ me }) {
+  if (!me?.organization_name) return null;
+  return <div className={`mt-4 rounded-md px-3 py-2 ${me.acting ? 'bg-amber-100' : 'bg-neutral-100'}`}>
+    <p className="text-sm font-semibold leading-tight">{me.organization_name}</p>
+    <p className="mt-0.5 font-mono text-xs text-neutral-500">{me.organization_slug}</p>
+    {me.acting && <p className="mt-1 text-xs font-medium text-amber-900">Als Plattform-Admin betreten</p>}
+  </div>;
+}
+
+// While a platform admin works inside another tenant, the way back stays in sight.
+function ActingBanner({ me }) {
+  const [message, setMessage] = useState('');
+  if (!me?.acting) return null;
+  async function leave() {
+    setMessage('');
+    try {
+      await api('/admin/platform/leave', { method: 'POST', body: '{}' });
+      window.location.reload();
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+  return <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-md bg-amber-100 p-3 text-sm text-amber-950">
+    <span>Du arbeitest als <strong>{me.organization_name}</strong>. Änderungen hier gehören diesem Mandanten.</span>
+    <div className="flex items-center gap-3">
+      {message && <span className="text-red-700">{message}</span>}
+      <button onClick={leave} className="button-secondary"><LogOut size={16} /> Zurück zu {me.home_organization_name}</button>
+    </div>
   </div>;
 }
 

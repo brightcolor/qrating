@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.19.2
+**Version:** 0.20.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -14,6 +14,7 @@ This repository was built with AI-assisted, vibe-coded development. Treat it lik
 - Admin/Web UI domain: `https://app.qrating.de`
 - Feedback/QR domain: `https://qrat.ing`
 - Public product website on `/` with editable texts, section headings, FAQ, imprint, and privacy pages
+- Platform level above the organizations: tenant list, new tenants, and entering a tenant with an entry in the audit log
 - Internal Free, Pro, and Business plans with admin-configurable limits and overrides
 - No self-service checkout flow: operators create users and assign access manually
 - First-user setup: no default admin account is shipped
@@ -105,6 +106,14 @@ After setup:
 - create further users from the admin user management area
 - assign roles and event access per user
 - configure SMTP before using email invitations or password reset links
+
+## Tenants
+
+An installation carries as many organizations (tenants) as needed. Each one has its own events, forms, texts, QR codes, guests, and users; every query runs inside one organization.
+
+The account that completes the first-admin setup also runs the platform. Under Mandanten it sees every organization with its plan, events, feedback count, users, and Pretix connections, creates further tenants, and enters one to work inside it. While a platform admin works in another tenant, a banner names it and offers the way back, and entering and leaving are written to the audit log of that tenant.
+
+Accounts without the platform role only ever see their own organization; the platform routes answer them with HTTP 403.
 
 ## Domains
 
@@ -412,7 +421,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.19.2`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.20.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

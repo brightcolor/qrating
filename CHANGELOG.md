@@ -4,6 +4,20 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.20.0] - 2026-09-17
+
+### Added
+
+- An installation can carry several tenants. The account of the first setup runs the platform and finds them under Mandanten: every organization with plan, events, feedback count, users, and Pretix connections.
+- New tenants are created there with a name and an optional slug; the slug goes into the QR code of that tenant.
+- A platform admin enters a tenant and works inside it. A banner names the tenant and leads back, and both steps are written to the audit log of that tenant.
+- Migration `014` gives the platform role to the account that set the installation up.
+
+### Changed
+
+- The sidebar marks a visited tenant, and the account endpoint reports the tenant of the session, the home organization, and the platform role.
+- Version bumped to `0.20.0`.
+
 ## [0.19.2] - 2026-09-17
 
 ### Fixed

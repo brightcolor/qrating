@@ -2,9 +2,17 @@ import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
 import { sendError } from './errors.js';
 
-export function signAdmin(user) {
+// Platform admins work in their own organization and can step into another one; `acting` marks that visit.
+export function signAdmin(user, { organizationId = user.organization_id, role = user.role, acting = false } = {}) {
   return jwt.sign(
-    { sub: user.id, organizationId: user.organization_id, role: user.role },
+    {
+      sub: user.id,
+      organizationId,
+      role,
+      platformAdmin: Boolean(user.platform_admin),
+      homeOrganizationId: user.organization_id,
+      acting: Boolean(acting)
+    },
     env.sessionSecret,
     { expiresIn: '12h' }
   );
@@ -41,6 +49,22 @@ export function requireRole(minimumRole) {
       return sendError(req, res, 403, 'Für diese Aktion fehlt dir die Berechtigung. Ein Admin deiner Organisation kann deine Rolle anpassen.');
     }
     next();
+  };
+}
+
+// The platform role decides over all organizations, so it is read from the database on every use.
+export function requirePlatformAdmin(db) {
+  return async (req, res, next) => {
+    try {
+      if (!req.admin) return sendError(req, res, 401, 'Du bist nicht angemeldet. Bitte melde dich an.');
+      const result = await db.query('SELECT platform_admin FROM users WHERE id = $1 AND status = $2', [req.admin.sub, 'active']);
+      if (!result.rows[0]?.platform_admin) {
+        return sendError(req, res, 403, 'Diese Ansicht gehört der Plattform-Verwaltung. Dein Konto verwaltet einen einzelnen Mandanten.');
+      }
+      next();
+    } catch (error) {
+      next(error);
+    }
   };
 }
 
