@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.33.0
+**Version:** 0.33.1
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -441,10 +441,28 @@ docker compose exec postgres pg_dump -U qrating qrating > qrating-backup.sql
 tar -czf qrating-storage.tar.gz storage
 ```
 
+Nightly backup:
+
+A small script keeps the last fourteen days. It writes the database as a custom-format dump, packs the uploaded files and reads the table of contents back, so a broken dump is noticed the night it happens.
+
+```bash
+target=/opt/qrating/backups
+mkdir -p "$target" && chmod 700 "$target"
+stamp=$(date +%Y-%m-%d-%H%M)
+docker compose exec -T postgres pg_dump -U qrating -d qrating --format=custom > "$target/qrating-$stamp.dump"
+docker compose exec -T postgres pg_restore --list < "$target/qrating-$stamp.dump" > /dev/null
+tar -czf "$target/qrating-storage-$stamp.tgz" -C /opt/qrating storage
+chmod 600 "$target"/qrating-*
+find "$target" -maxdepth 1 -name 'qrating-*' -mtime +13 -delete
+```
+
+Both files carry personal data, so they belong to root alone and into the same protection as the database itself.
+
 Restore:
 
 ```bash
 docker compose exec -T postgres psql -U qrating qrating < qrating-backup.sql
+docker compose exec -T postgres pg_restore -U qrating -d qrating --clean --no-owner < qrating-2026-09-18-0325.dump
 tar -xzf qrating-storage.tar.gz
 docker compose up -d --build
 ```
@@ -467,7 +485,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.33.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.33.1`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

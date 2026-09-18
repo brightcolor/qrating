@@ -4,6 +4,13 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.33.1] - 2026-09-18
+
+### Documentation
+
+- The README describes a nightly backup that keeps fourteen days, reads the dump back before it counts as done, and leaves both files readable for root alone.
+- Version bumped to `0.33.1`.
+
 ## [0.33.0] - 2026-09-18
 
 ### Changed
