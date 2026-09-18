@@ -1,4 +1,5 @@
 import { DateTime } from 'luxon';
+import { isPublishedInSource } from '../utils/sourcePayload.js';
 
 // Only an active event collects feedback. A draft is not out yet, a finished or
 // archived one is done.
@@ -47,6 +48,7 @@ export function isEventFeedbackOpen(event, now = DateTime.utc()) {
 export function upcomingEvents(events, now = DateTime.utc(), limit = 5) {
   return events
     .filter((event) => event.feedback_enabled && event.status === 'active' && !event.not_found_in_source)
+    .filter(isPublishedInSource)
     .map((event) => ({ event, start: calculateFeedbackWindow(event).feedbackStart }))
     .filter((item) => {
       const zone = item.event.event_timezone || 'UTC';

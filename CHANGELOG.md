@@ -4,6 +4,13 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.43.0] - 2026-09-18
+
+### Changed
+
+- Events that the organizer has not published yet stay off the guest pages. Until now an evening that was still under wraps in the ticket system appeared in the list of what comes next, without a date people could act on. An event of our own is unaffected, and so is the rating of a running event.
+- Version bumped to `0.43.0`.
+
 ## [0.42.0] - 2026-09-18
 
 ### Changed

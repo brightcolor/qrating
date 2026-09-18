@@ -1,6 +1,7 @@
 // The events an organization still has ahead. They stand on the guest page when no
 // round is open, and after a submitted rating as a pointer to the next evening.
 import { plainText } from '../utils/localized.js';
+import { isPublishedInSource, sourcePayload } from '../utils/sourcePayload.js';
 import { upcomingEvents } from './eventResolver.js';
 
 const defaultCount = 3;
@@ -9,23 +10,13 @@ const defaultCount = 3;
 // so it only appears while tickets can really be bought.
 export function ticketsAvailable(event, now = new Date()) {
   if (!event || event.ticket_link_enabled === false) return false;
-  const raw = typeof event.raw_source_payload === 'string'
-    ? safeJson(event.raw_source_payload)
-    : event.raw_source_payload;
+  const raw = sourcePayload(event);
   if (raw && raw.live === false) return false;
   const start = raw?.presale_start ? new Date(raw.presale_start) : null;
   const end = raw?.presale_end ? new Date(raw.presale_end) : null;
   if (start && !Number.isNaN(start.getTime()) && now < start) return false;
   if (end && !Number.isNaN(end.getTime()) && now > end) return false;
   return true;
-}
-
-function safeJson(value) {
-  try {
-    return JSON.parse(value);
-  } catch {
-    return null;
-  }
 }
 
 // One entry as the guest page needs it: name, date, place and where tickets live.
@@ -60,8 +51,9 @@ export async function upcomingFor(db, event, organization = {}, { limit = defaul
   const rows = await organizationEvents(db, event.organization_id);
   const chosen = Array.isArray(event.upcoming_event_ids) ? event.upcoming_event_ids : [];
   const byId = new Map(rows.map((row) => [row.id, row]));
+  // A hand-picked event that the organizer has not published in Pretix stays out too.
   const picked = chosen.length
-    ? chosen.map((id) => byId.get(id)).filter(Boolean)
+    ? chosen.map((id) => byId.get(id)).filter(Boolean).filter(isPublishedInSource)
     : upcomingEvents(rows.filter((row) => row.id !== event.id), undefined, limit);
   const now = new Date();
   return picked.filter((row) => row.id !== event.id).slice(0, limit).map((row) => publicUpcoming(row, organization, now));

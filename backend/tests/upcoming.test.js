@@ -121,6 +121,44 @@ describe('events that are still to come', () => {
     await query("UPDATE events SET status = 'active' WHERE id = $1", [running.id]);
   });
 
+  it('keeps an event out that the organizer has not published in Pretix', async () => {
+    await query(
+      "UPDATE events SET source = 'pretix', raw_source_payload = $2 WHERE id = $1",
+      [later.id, JSON.stringify({ slug: 'hafenklang', live: false })]
+    );
+
+    const guest = await request('GET', `/public/f/${organization.slug}`);
+    const namen = guest.body.upcoming.map((item) => item.name);
+
+    expect(namen).toContain('Weihnachtsedition');
+    expect(namen).not.toContain('Hafenklang');
+  });
+
+  it('keeps it out even when the event picked it by hand', async () => {
+    const saved = await request('PATCH', `/admin/events/${running.id}`, {
+      cookie: ownerCookie,
+      body: { upcomingEnabled: true, upcomingEventIds: [later.id, soon.id] }
+    });
+    expect(saved.status).toBe(200);
+
+    const guest = await request('GET', `/public/e/${running.event_feedback_token}`);
+
+    expect(guest.body.upcoming.map((item) => item.name)).toEqual(['Weihnachtsedition']);
+
+    await request('PATCH', `/admin/events/${running.id}`, {
+      cookie: ownerCookie,
+      body: { upcomingEnabled: true, upcomingEventIds: [] }
+    });
+  });
+
+  it('shows an event of our own, which carries no such flag', async () => {
+    await query('UPDATE events SET raw_source_payload = null WHERE id = $1', [later.id]);
+
+    const guest = await request('GET', `/public/f/${organization.slug}`);
+
+    expect(guest.body.upcoming.map((item) => item.name)).toContain('Hafenklang');
+  });
+
   it('goes straight into the rating while a round is open', async () => {
     const guest = await request('GET', `/public/f/${organization.slug}`);
 
