@@ -423,7 +423,7 @@ function Events() {
     <EventCreate onCreated={() => setReload(reload + 1)} />
     {loading && <p>Lade Events ...</p>}
     {error && <ErrorBox error={error} />}
-    <div className="mt-5 grid gap-4">{data?.map((event) => <EventCard key={event.id} event={event} onChanged={() => setReload(reload + 1)} />)}</div>
+    <div className="mt-5 grid gap-4">{data?.map((event) => <EventCard key={event.id} event={event} events={data || []} onChanged={() => setReload(reload + 1)} />)}</div>
   </div>;
 }
 
@@ -456,12 +456,40 @@ function EventCreate({ onCreated }) {
   </Panel>;
 }
 
-function EventCard({ event, onChanged }) {
+function EventCard({ event, events = [], onChanged }) {
   const eventUrl = event.feedbackUrl || `/e/${event.event_feedback_token}`;
   const [message, setMessage] = useState('');
   const [imageOpen, setImageOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [imageForm, setImageForm] = useState({ imageUrl: event.image_url || '', imageAlt: event.image_alt || '' });
+  const [upcomingOpen, setUpcomingOpen] = useState(false);
+  const [upcomingForm, setUpcomingForm] = useState({
+    enabled: event.upcoming_enabled !== false,
+    ids: Array.isArray(event.upcoming_event_ids) ? event.upcoming_event_ids : []
+  });
+
+  async function saveUpcoming() {
+    setMessage('');
+    try {
+      await api(`/admin/events/${event.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ upcomingEnabled: upcomingForm.enabled, upcomingEventIds: upcomingForm.ids })
+      });
+      setMessage(upcomingForm.enabled
+        ? (upcomingForm.ids.length ? `Gäste sehen nach dem Feedback ${upcomingForm.ids.length} ausgewählte Events.` : 'Gäste sehen nach dem Feedback die nächsten Events.')
+        : 'Der Hinweis auf kommende Events ist aus.');
+      onChanged?.();
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
+  }
+
+  function toggleUpcoming(id) {
+    setUpcomingForm((current) => ({
+      ...current,
+      ids: current.ids.includes(id) ? current.ids.filter((item) => item !== id) : [...current.ids, id].slice(0, 5)
+    }));
+  }
   async function syncImage() {
     try {
       await api(`/admin/events/${event.id}/sync-image`, { method: 'POST', body: '{}' });
@@ -548,6 +576,7 @@ function EventCard({ event, onChanged }) {
         <a className="button-secondary" href={`${API_BASE}/admin/events/${event.id}/export.xlsx`}><Download size={16} /> XLSX</a>
         <a className="button-secondary" href={`${API_BASE}/admin/events/${event.id}/report.pdf`}><FileText size={16} /> PDF</a>
         <button onClick={() => setImageOpen(!imageOpen)} className="button-secondary"><Image size={16} /> Bild bearbeiten</button>
+        <button onClick={() => setUpcomingOpen(!upcomingOpen)} className="button-secondary"><CalendarDays size={16} /> Kommende Events</button>
         {event.source === 'pretix' && <button onClick={syncImage} className="button-secondary"><Image size={16} /> Bild neu laden</button>}
         <a className="button-secondary" href={`${API_BASE}/admin/events/${event.id}/qr-print`} target="_blank"><QrCode size={16} /> Druck</a>
         <button onClick={openPreview} className="button-secondary"><Eye size={16} /> Vorschau</button>
@@ -571,6 +600,20 @@ function EventCard({ event, onChanged }) {
       <div className="mt-3 flex flex-wrap gap-2">
         <button onClick={removeEvent} className="inline-flex items-center justify-center gap-2 rounded-md bg-red-700 px-4 py-2 text-sm font-medium text-white hover:bg-red-800"><Trash2 size={16} /> Endgültig löschen</button>
         <button onClick={() => setConfirmDelete(null)} className="button-secondary">Abbrechen</button>
+      </div>
+    </div>}
+    {upcomingOpen && <div className="mt-4 border-t border-neutral-100 pt-4">
+      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={upcomingForm.enabled} onChange={(e) => setUpcomingForm({ ...upcomingForm, enabled: e.target.checked })} /> Nach dem Feedback auf kommende Events hinweisen</label>
+      <p className="mt-2 text-sm text-neutral-500">Ohne Auswahl zeigt qrating die nächsten Events nach Datum. Wähle bis zu fünf aus, wenn es bestimmte sein sollen.</p>
+      <div className="mt-3 grid gap-2 md:grid-cols-2">
+        {events.filter((item) => item.id !== event.id).map((item) => <label key={item.id} className="flex items-center gap-2 rounded-md bg-neutral-50 p-2 text-sm">
+          <input type="checkbox" checked={upcomingForm.ids.includes(item.id)} onChange={() => toggleUpcoming(item.id)} disabled={!upcomingForm.enabled} />
+          <span>{eventLabel(item)}</span>
+        </label>)}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button type="button" onClick={saveUpcoming} className="button-primary">Auswahl speichern</button>
+        <button type="button" onClick={() => setUpcomingForm({ ...upcomingForm, ids: [] })} className="button-secondary">Automatisch wählen</button>
       </div>
     </div>}
     {imageOpen && <form onSubmit={submitImage} className="mt-4 grid gap-3 border-t border-neutral-100 pt-4 md:grid-cols-[2fr_2fr_auto]">

@@ -181,11 +181,14 @@ export function formatDateTime(value, locale = 'de-DE') {
   return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
 }
 
-export function formatDay(value, locale = 'de-DE') {
+export function formatDay(value, locale = 'de-DE', { withTime = false } = {}) {
   if (!value) return '';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
-  return new Intl.DateTimeFormat(locale, { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
+  const parts = withTime
+    ? { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }
+    : { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' };
+  return new Intl.DateTimeFormat(locale, parts).format(date);
 }
 
 // Answers survive a reload in the same tab. Contact details and the email address stay out of storage,

@@ -5,6 +5,7 @@ import '@fontsource/paytone-one';
 import './guest.css';
 import { api, assetUrl } from '../lib/api.js';
 import { guestPalette, paletteStyle } from './colors.js';
+import { UpcomingList } from './Upcoming.jsx';
 import {
   answerText,
   buildPayload,
@@ -68,7 +69,7 @@ export function eventImage(event) {
   return assetUrl(url);
 }
 
-export function FeedbackFlow({ event, texts, sourceType, lang = 'de', preview = false }) {
+export function FeedbackFlow({ event, texts, sourceType, lang = 'de', preview = false, upcoming = [] }) {
   const locale = lang === 'en' ? 'en-GB' : 'de-DE';
   const questions = useMemo(() => event.questions || [], [event.questions]);
   const [draft] = useState(() => loadDraft(event.token));
@@ -285,6 +286,7 @@ export function FeedbackFlow({ event, texts, sourceType, lang = 'de', preview = 
           </Ticket>
           <h1 id="guest-thanks-title" ref={heading} tabIndex={-1} className="guest-thanks-title">{texts.thank_headline}</h1>
           <p className="guest-help">{texts.thank_text}</p>
+          <UpcomingList items={upcoming} locale={locale} headline={texts.upcoming_headline || 'Als Nächstes'} shopLabel={texts.upcoming_shop_label || 'Tickets'} />
           {footerText && <p className="guest-fine">{footerText}</p>}
           {event.credit && <p className="guest-fine">{event.credit}</p>}
         </section>

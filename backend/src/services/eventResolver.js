@@ -43,6 +43,21 @@ export function isEventFeedbackOpen(event, now = DateTime.utc()) {
   return current >= feedbackStart && current <= feedbackEnd;
 }
 
+// Events whose feedback round has not started yet, the closest one first.
+export function upcomingEvents(events, now = DateTime.utc(), limit = 5) {
+  return events
+    .filter((event) => event.feedback_enabled && event.status === 'active' && !event.not_found_in_source)
+    .map((event) => ({ event, start: calculateFeedbackWindow(event).feedbackStart }))
+    .filter((item) => {
+      const zone = item.event.event_timezone || 'UTC';
+      const current = DateTime.isDateTime(now) ? now.setZone(zone) : asDateTime(now, zone);
+      return item.start > current;
+    })
+    .sort((a, b) => a.start.toMillis() - b.start.toMillis())
+    .slice(0, limit)
+    .map((item) => item.event);
+}
+
 export function rankCandidateEvents(events, now = DateTime.utc()) {
   const enriched = events
     .filter((event) => isEventFeedbackOpen(event, now))
@@ -97,11 +112,13 @@ export class EventResolver {
       [organization.id]
     );
     const ranked = rankCandidateEvents(eventResult.rows, now);
+    const upcoming = upcomingEvents(eventResult.rows, now);
     return {
-      status: ranked[0] ? 'ok' : 'no_event',
+      status: ranked[0] ? 'ok' : (upcoming.length ? 'not_yet' : 'no_event'),
       organization,
       event: ranked[0] || null,
       candidates: ranked,
+      upcoming,
       qrSource
     };
   }
@@ -110,7 +127,7 @@ export class EventResolver {
     const result = await this.db.query(
       `SELECT e.*, o.slug AS organization_slug, o.name AS organization_name, o.primary_color, o.logo_url,
               o.privacy_text, o.footer_text, o.branding, o.anti_spam_settings, o.default_language,
-              o.product_credit_enabled
+              o.product_credit_enabled, o.ticketshop_url
        FROM events e
        JOIN organizations o ON o.id = e.organization_id
        WHERE e.event_feedback_token = $1`,
@@ -118,8 +135,15 @@ export class EventResolver {
     );
     const event = result.rows[0];
     if (!event) return { status: 'event_not_found', event: null };
+    const zone = event.event_timezone || 'UTC';
+    const current = DateTime.isDateTime(now) ? now.setZone(zone) : asDateTime(now, zone);
+    // Before its round an event shows itself; afterwards the page stays closed.
+    const notYet = event.feedback_enabled
+      && event.status === 'active'
+      && !event.not_found_in_source
+      && calculateFeedbackWindow(event).feedbackStart > current;
     return {
-      status: isEventFeedbackOpen(event, now) ? 'ok' : 'closed',
+      status: isEventFeedbackOpen(event, now) ? 'ok' : (notYet ? 'not_yet' : 'closed'),
       event
     };
   }

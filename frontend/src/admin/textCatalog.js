@@ -50,6 +50,10 @@ export const textLabels = {
   submit: ['Knopf zum Abschicken'],
   sending_label: ['Knopf während des Sendens'],
   stamp_label: ['Stempel auf der Karte'],
+  upcoming_headline: ['Überschrift über den kommenden Events'],
+  upcoming_text: ['Text, solange kein Event zur Bewertung offen ist'],
+  upcoming_more_headline: ['Überschrift über den weiteren Events'],
+  upcoming_shop_label: ['Beschriftung des Ticket-Links'],
   preview_hint: ['Hinweis in der Vorschau'],
   thank_headline: ['Dank, Überschrift'],
   thank_text: ['Dank, Text'],
@@ -85,6 +89,7 @@ export const textGroups = [
   ['Zusammenfassung und Dank', [
     'summary_headline', 'summary_text', 'summary_rating_label', 'summary_contact_label', 'summary_newsletter_label',
     'summary_skipped', 'edit_label', 'privacy_short', 'submit', 'sending_label', 'stamp_label',
+    'upcoming_headline', 'upcoming_text', 'upcoming_more_headline', 'upcoming_shop_label',
     'thank_headline', 'thank_text', 'preview_hint'
   ]],
   ['Seiten ohne offene Bewertung', [

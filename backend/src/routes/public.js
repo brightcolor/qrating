@@ -11,6 +11,7 @@ import { WebhookService } from '../services/webhookService.js';
 import { enqueueJob } from '../services/jobService.js';
 import { NewsletterService } from '../services/newsletterService.js';
 import { markCompleted, recordProgress } from '../services/guestSessionService.js';
+import { upcomingFor, upcomingForOrganization } from '../services/upcomingService.js';
 import { encryptSecret } from '../utils/crypto.js';
 import { getSiteContent } from '../services/siteContentService.js';
 import { emailDomain, emailHash, publicEventStatus, publicOrganization } from '../utils/security.js';
@@ -154,17 +155,34 @@ async function publicPayload(resolveResult, questions = [], language = null) {
     footer_text: event.footer_text,
     branding: event.branding,
     default_language: event.default_language,
-    product_credit_enabled: event.product_credit_enabled
+    product_credit_enabled: event.product_credit_enabled,
+    ticketshop_url: event.ticketshop_url
   };
   const requestedLanguage = language || organization.default_language || 'de';
   const texts = await loadResolvedTexts({ query }, event.organization_id, event.id, requestedLanguage, event);
-  return { event: eventToPublic(event, organization, questions), texts };
+  const upcoming = await upcomingFor({ query }, event, organization);
+  return { event: eventToPublic(event, organization, questions), texts, upcoming };
 }
 
 publicRouter.get('/f/:organizationSlug/:sourceSlug?', async (req, res, next) => {
   try {
     const resolver = new EventResolver({ query });
     const resolved = await resolver.resolveCurrentEvent(req.params.organizationSlug, req.params.sourceSlug);
+    if (resolved.status === 'not_yet') {
+      const texts = await loadResolvedTexts(
+        { query },
+        resolved.organization.id,
+        null,
+        req.query.lang || resolved.organization.default_language || 'de',
+        {}
+      );
+      return res.json({
+        status: 'waiting',
+        texts,
+        organization: publicOrganization(resolved.organization),
+        upcoming: await upcomingForOrganization({ query }, resolved.organization)
+      });
+    }
     if (resolved.status !== 'ok') {
       return res.status(404).json({
         status: resolved.status,
@@ -194,6 +212,14 @@ publicRouter.get('/e/:eventToken', async (req, res, next) => {
         });
       }
       const feedbackWindow = resolved.event ? calculateFeedbackWindow(resolved.event) : null;
+      if (resolved.status === 'not_yet') {
+        await trackQrScan(resolved.event, req.query.source, null, 'event_specific');
+        return res.json({
+          status: 'waiting',
+          ...(await publicPayload({ event: resolved.event }, await activeQuestions(resolved.event.id), req.query.lang)),
+          feedback: { opensAt: feedbackWindow?.feedbackStart?.toISO(), closesAt: feedbackWindow?.feedbackEnd?.toISO() }
+        });
+      }
       return res.status(410).json({
         status: resolved.status,
         texts: systemTexts(req.query.lang),
@@ -265,7 +291,7 @@ publicRouter.post('/events/:eventToken/progress', progressLimiter, async (req, r
     const resolver = new EventResolver({ query });
     const resolved = await resolver.resolveEventByToken(req.params.eventToken);
     // A closed event has no flow to follow, and the answer stays the same either way.
-    if (resolved.status === 'ok') {
+    if (resolved.status === 'ok' || resolved.status === 'not_yet') {
       const qrSource = await findQrSource(resolved.event, value.sourceType);
       await recordProgress({ query }, {
         event: resolved.event,

@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.35.0
+**Version:** 0.36.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -248,6 +248,19 @@ Workshop & Seminar, Theater, Lesung & Comedy, Emotionaler Rückblick, and Nachfa
 
 Every template creates editable questions; the panel next to the editor shows the guest flow that results from them.
 Question types: short answer, long answer, multiple selection, single selection, yes/no, recommendation (0 to 10), and stars (1 to 5).
+
+## Before And After The Round
+
+A guest who scans early sees what the code is for: the event, its date and five quiet stars, with the moment the rating opens. The page of an organization shows the event that comes next the same way, and the ones after it as a list with a link to the ticket shop.
+
+While a round runs nothing stands in the way: the guest goes straight into the rating. The events that follow appear after the feedback, on the thank-you screen.
+
+Each event decides for itself, on its card in the admin area:
+
+- `upcomingEnabled`: whether guests see the pointer at all
+- `upcomingEventIds`: up to five events chosen by hand; without a choice the next ones by date follow
+
+The shop link of an entry comes from the Pretix address of that event, otherwise from the ticket shop of the organization.
 
 ## Mark And Note
 
@@ -506,7 +519,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.35.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.36.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

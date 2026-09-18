@@ -4,6 +4,16 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.36.0] - 2026-09-18
+
+### Added
+
+- A guest page that is scanned before its round shows what it will ask about: the event, its date and five quiet stars, plus the moment the rating opens.
+- The page of an organization without an open round names the event that comes next and lists the ones after it, each with a link to the ticket shop.
+- While a round runs the guest goes straight into the rating; the coming events appear after the feedback on the thank-you screen.
+- Every event sets for itself whether that pointer appears and which events it names, with up to five chosen by hand.
+- Version bumped to `0.36.0`.
+
 ## [0.35.0] - 2026-09-18
 
 ### Added

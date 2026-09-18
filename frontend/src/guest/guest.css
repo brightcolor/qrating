@@ -1126,3 +1126,148 @@
     animation: none !important;
   }
 }
+
+/* Waiting page and the pointer to the next events */
+.guest-waiting {
+  justify-content: center;
+  padding-top: 8px;
+}
+
+.guest-waiting-kicker {
+  margin: 0 0 6px;
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.guest-quiet-stars {
+  display: flex;
+  gap: 10px;
+  margin: 20px 0 12px;
+}
+
+.guest-quiet-stars svg {
+  width: 34px;
+  height: 34px;
+  stroke: var(--haze);
+  fill: none;
+  opacity: 0.55;
+}
+
+.guest-waiting-hint {
+  margin: 0 0 8px;
+  color: var(--chalk);
+  font-size: 16px;
+}
+
+.guest-upcoming {
+  margin-top: 26px;
+}
+
+.guest-upcoming-title {
+  margin: 0 0 10px;
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--haze);
+  font-weight: 600;
+}
+
+.guest-upcoming-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.guest-upcoming-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+
+.guest-upcoming-date {
+  flex: 0 0 54px;
+  text-align: center;
+  border-radius: 12px;
+  background: var(--stage-raised);
+  border: 1px solid var(--line);
+  padding: 7px 0;
+}
+
+.guest-upcoming-date b {
+  display: block;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 21px;
+  line-height: 1;
+}
+
+.guest-upcoming-date span {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--haze);
+}
+
+.guest-upcoming-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.guest-upcoming-text strong {
+  display: block;
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.guest-upcoming-text span {
+  display: block;
+  color: var(--haze);
+  font-size: 13px;
+}
+
+.guest-upcoming-link {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  padding: 7px 14px;
+  font-size: 14px;
+  color: var(--chalk);
+  text-decoration: none;
+}
+
+.guest-upcoming-link:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.guest-waiting-lead {
+  margin-top: 6px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--stage-raised);
+  padding: 18px;
+}
+
+.guest-waiting-name {
+  margin: 0 0 4px;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.guest-waiting-lead .guest-quiet-stars {
+  margin: 14px 0 10px;
+}
+
+.guest-waiting-lead .guest-waiting-hint {
+  margin: 0;
+  font-size: 15px;
+  color: var(--haze);
+}

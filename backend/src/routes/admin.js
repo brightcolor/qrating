@@ -342,6 +342,14 @@ adminRouter.put('/events/:id/assignments', async (req, res, next) => {
   }
 });
 
+// The guest page shows at most a handful of events; ids that are no ids fall out.
+function cleanEventIds(value) {
+  const list = Array.isArray(value) ? value : [];
+  return list
+    .filter((id) => typeof id === 'string' && /^[0-9a-f-]{36}$/i.test(id))
+    .slice(0, 5);
+}
+
 // What an event can be: a draft, active and rateable, finished, or archived.
 const eventStatuses = ['draft', 'active', 'closed', 'archived'];
 
@@ -363,6 +371,8 @@ adminRouter.patch('/events/:id', async (req, res, next) => {
         feedback_window_days = COALESCE($9, feedback_window_days),
         feedback_window_hours = $10,
         resolver_priority = COALESCE($11, resolver_priority),
+        upcoming_enabled = COALESCE($16, upcoming_enabled),
+        upcoming_event_ids = COALESCE($17::jsonb, upcoming_event_ids),
         image_url = CASE WHEN $12::text = 'keep' THEN image_url WHEN $12::text = 'clear' THEN null ELSE $13::text END,
         image_alt = CASE WHEN $12::text = 'clear' THEN null WHEN $14::boolean THEN $15::text ELSE image_alt END,
         image_source = CASE WHEN $12::text = 'keep' THEN image_source WHEN $12::text = 'clear' THEN null ELSE 'manual'::image_source END,
@@ -384,7 +394,9 @@ adminRouter.patch('/events/:id', async (req, res, next) => {
         image.mode,
         image.url,
         image.altProvided,
-        image.alt
+        image.alt,
+        req.body.upcomingEnabled === undefined ? null : Boolean(req.body.upcomingEnabled),
+        req.body.upcomingEventIds === undefined ? null : JSON.stringify(cleanEventIds(req.body.upcomingEventIds))
       ]
     );
     if (!result.rows[0]) throw httpError(404, 'Dieses Event gibt es nicht mehr oder es gehört zu einer anderen Organisation. Lade die Liste neu.');

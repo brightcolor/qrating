@@ -61,7 +61,11 @@ export const defaultTextsByLanguage = {
     not_found_headline: 'Diese Bewertungsseite gibt es nicht.',
     not_found_text: 'Prüfe den QR-Code oder den Link. Vielleicht wurde er inzwischen durch einen neuen ersetzt.',
     not_started_headline: 'Die Bewertung ist noch nicht geöffnet.',
-    not_started_text: 'Sie startet am {datum}. Schau dann gerne wieder vorbei.'
+    not_started_text: 'Sie startet am {datum}. Schau dann gerne wieder vorbei.',
+    upcoming_headline: 'Als Nächstes',
+    upcoming_text: 'Sobald ein Event läuft, öffnet sich hier die Bewertung.',
+    upcoming_more_headline: 'Danach',
+    upcoming_shop_label: 'Tickets'
   },
   en: {
     headline: 'How was your night at {event_name}?',
@@ -125,7 +129,11 @@ export const defaultTextsByLanguage = {
     not_found_headline: 'This feedback page does not exist.',
     not_found_text: 'Please check the QR code or the link. It may have been replaced by a new one.',
     not_started_headline: 'Feedback is not open yet.',
-    not_started_text: 'It opens on {datum}. Please come back then.'
+    not_started_text: 'It opens on {datum}. Please come back then.',
+    upcoming_headline: 'Coming up',
+    upcoming_text: 'As soon as an event runs, the rating opens here.',
+    upcoming_more_headline: 'Later',
+    upcoming_shop_label: 'Tickets'
   }
 };
 

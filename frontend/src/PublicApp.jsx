@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from './lib/api.js';
-import { FeedbackFlow, GuestScreen, eventImage } from './guest/FeedbackFlow.jsx';
+import { FeedbackFlow, GuestScreen, GuestStage, eventImage } from './guest/FeedbackFlow.jsx';
+import { WaitingScreen } from './guest/Upcoming.jsx';
 import { formatDateTime } from './guest/flow.js';
 
 // The website has its own bundle; main.jsx usually loads it directly.
@@ -38,6 +39,23 @@ function PublicFeedback({ mode, identifier, source }) {
       <p>{lang === 'en' ? 'Loading the feedback form …' : 'Feedbackformular wird geladen …'}</p>
     </GuestScreen>;
   }
+  // Before a round starts the page shows what it will ask about.
+  if (data?.status === 'waiting') {
+    const organization = data.event?.organization || data.organization;
+    return <GuestStage brandColor={organization?.primaryColor} imageUrl={eventImage(data.event)} lang={lang}>
+      <div className="guest-frame">
+        <WaitingScreen
+      organization={data.event?.organization || data.organization}
+      event={data.event}
+      texts={data.texts}
+      upcoming={data.upcoming || []}
+      opensAt={data.feedback?.opensAt}
+      lang={lang}
+      credit={data.event?.credit || null}
+      />
+      </div>
+    </GuestStage>;
+  }
   // Closed or unknown events answer with their status and texts; everything else is a loading problem.
   const closed = error?.body?.status ? error.body : data && data.status !== 'ok' ? data : null;
   if (error && !closed) {
@@ -57,7 +75,7 @@ function PublicFeedback({ mode, identifier, source }) {
       <p>{notice.text}</p>
     </GuestScreen>;
   }
-  return <FeedbackFlow event={data.event} texts={data.texts} sourceType={source || mode} lang={lang} preview={Boolean(data.preview)} />;
+  return <FeedbackFlow event={data.event} texts={data.texts} upcoming={data.upcoming || []} sourceType={source || mode} lang={lang} preview={Boolean(data.preview)} />;
 }
 
 // Headline and text for guest pages without an open feedback round.
