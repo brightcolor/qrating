@@ -4,6 +4,14 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.29.0] - 2026-09-18
+
+### Security
+
+- The libraries for sending mail, for validating input and for reading query strings are updated to versions without the known advisories. `npm audit --omit=dev` reports nothing for backend and frontend.
+- Sending mail runs on the current major version of the mail library. A new test hands a mail with umlauts to a mail server of its own and reads back what arrived, so the library is checked instead of a mock.
+- Version bumped to `0.29.0`.
+
 ## [0.28.0] - 2026-09-18
 
 ### Changed

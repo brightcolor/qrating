@@ -1,6 +1,6 @@
 {
   "name": "qrating-backend",
-  "version": "0.28.0",
+  "version": "0.29.0",
   "type": "module",
   "private": true,
   "scripts": {
@@ -20,12 +20,15 @@
     "joi": "^17.13.3",
     "jsonwebtoken": "^9.0.2",
     "luxon": "^3.5.0",
-    "nodemailer": "^8.0.7",
+    "nodemailer": "^10.0.10",
     "pg": "^8.13.1",
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
     "vitest": "^2.1.8"
+  },
+  "overrides": {
+    "qs": "^6.16.0"
   }
 }
