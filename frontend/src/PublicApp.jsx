@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from './lib/api.js';
 import { FeedbackFlow, GuestScreen, GuestStage, eventImage } from './guest/FeedbackFlow.jsx';
+import { assetUrl } from './lib/api.js';
 import { WaitingScreen } from './guest/Upcoming.jsx';
 import { PrivacyPage } from './guest/Privacy.jsx';
 import { formatDateTime } from './guest/flow.js';
@@ -43,11 +44,15 @@ function PublicFeedback({ mode, identifier, source }) {
   // Before a round starts the page shows what it will ask about.
   if (data?.status === 'waiting') {
     const organization = data.event?.organization || data.organization;
-    return <GuestStage brandColor={organization?.primaryColor} imageUrl={eventImage(data.event)} lang={lang}>
+    // Der Abend, auf den gewartet wird, stellt sein Plakat über die ganze Seite.
+    const lead = data.event || (data.upcoming || [])[0] || null;
+    const poster = eventImage(data.event) || assetUrl(lead?.imageUrl) || null;
+    return <GuestStage brandColor={organization?.primaryColor} imageUrl={poster} poster={Boolean(poster)} lang={lang}>
       <div className="guest-frame">
         <WaitingScreen
       organization={data.event?.organization || data.organization}
       event={data.event}
+      poster={Boolean(poster)}
       texts={data.texts}
       upcoming={data.upcoming || []}
       opensAt={data.feedback?.opensAt}

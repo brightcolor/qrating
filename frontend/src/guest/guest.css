@@ -1248,27 +1248,38 @@
   }
 }
 
-/* Waiting page and the pointer to the next events */
-.guest-waiting-poster {
-  margin: 0 0 16px;
-  overflow: hidden;
-  border-radius: 20px;
-  background: var(--stage-raised);
-  box-shadow: var(--shadow-poster);
-}
-
-.guest-waiting-poster img {
-  display: block;
+/* The poster of the evening fills the page. The veil below it reaches the stage
+   color before the text starts, so the words never sit on the picture. */
+.guest-backdrop.is-poster img {
+  inset: 0;
   width: 100%;
-  height: auto;
-  /* A flyer carries its date and its names at the edges, so it stays whole. */
-  max-height: 34vh;
-  object-fit: contain;
+  height: 100%;
+  filter: none;
+  opacity: 1;
+  /* A flyer carries its name at the top, so the crop keeps the upper part. */
+  object-position: 50% 18%;
 }
 
+.guest-backdrop.is-poster::after {
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    var(--veil-top) 16%,
+    var(--veil-mid) 30%,
+    var(--stage) 45%
+  );
+}
+
+/* Waiting page and the pointer to the next events */
 .guest-waiting {
   justify-content: center;
   padding-top: 8px;
+}
+
+/* With a poster the words move down, into the calm part under the picture. */
+.guest-waiting.has-poster {
+  justify-content: flex-end;
+  padding-top: 46vh;
 }
 
 .guest-waiting-kicker {

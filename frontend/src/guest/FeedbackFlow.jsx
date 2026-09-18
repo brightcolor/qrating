@@ -39,12 +39,12 @@ const ratingPause = 900;
 const choicePause = 420;
 
 // Pages with their own top bar say so and place the switch in it themselves.
-export function GuestStage({ brandColor, imageUrl = null, lang = 'de', ownSwitch = false, children }) {
+export function GuestStage({ brandColor, imageUrl = null, lang = 'de', ownSwitch = false, poster = false, children }) {
   const { choice, theme, cycle } = useGuestTheme();
   const palette = useMemo(() => guestPalette(brandColor, theme), [brandColor, theme]);
   return <ThemeContext.Provider value={{ choice, cycle, lang }}>
     <div className="guest" data-theme={theme} lang={lang} style={paletteStyle(palette)}>
-      <div className={`guest-backdrop${imageUrl ? ' has-image' : ''}`} aria-hidden="true">
+      <div className={`guest-backdrop${imageUrl ? ' has-image' : ''}${poster ? ' is-poster' : ''}`} aria-hidden="true">
         {imageUrl
           ? <img src={imageUrl} alt="" />
           : <><span className="guest-light guest-light--a" /><span className="guest-light guest-light--b" /></>}

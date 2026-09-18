@@ -101,15 +101,7 @@ function reloadPage() {
 }
 
 // The page before a round starts: what will be rated here, and what comes after it.
-function WaitingPoster({ url, name }) {
-  const picture = assetUrl(url);
-  if (!picture) return null;
-  return <figure className="guest-waiting-poster">
-    <img src={picture} alt={name ? `Bild zu ${name}` : ''} loading="lazy" />
-  </figure>;
-}
-
-export function WaitingScreen({ organization, event, texts = {}, upcoming = [], opensAt, lang = 'de', credit = null, onOpen = reloadPage }) {
+export function WaitingScreen({ organization, event, texts = {}, upcoming = [], opensAt, lang = 'de', credit = null, poster = false, onOpen = reloadPage }) {
   const locale = lang === 'en' ? 'en-GB' : 'de-DE';
   const lead = event || upcoming[0] || null;
   const rest = event ? upcoming : upcoming.slice(1);
@@ -119,8 +111,7 @@ export function WaitingScreen({ organization, event, texts = {}, upcoming = [], 
     ? (texts.not_started_text || 'Sie startet am {datum}.').replaceAll('{datum}', formatDay(opens, locale, { withTime: true }))
     : texts.no_event_text || 'Schau gerne später noch einmal vorbei.';
 
-  return <section className="guest-step guest-waiting">
-    <WaitingPoster url={lead?.imageUrl} name={lead?.name} />
+  return <section className={`guest-step guest-waiting${poster ? ' has-poster' : ''}`}>
     {organization?.name && <p className="guest-waiting-kicker">{organization.name}</p>}
     <h1 className="guest-question">{event ? event.name : (texts.upcoming_headline || 'Als Nächstes')}</h1>
     {event

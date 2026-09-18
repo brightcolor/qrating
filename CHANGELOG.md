@@ -4,6 +4,13 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.46.0] - 2026-09-18
+
+### Changed
+
+- The page before a round is now carried by the flyer of the evening: it fills the screen and fades into the page before the first word. The picture used to sit in a small frame above the name.
+- Version bumped to `0.46.0`.
+
 ## [0.45.2] - 2026-09-18
 
 ### Fixed
