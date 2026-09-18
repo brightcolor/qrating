@@ -101,7 +101,16 @@ function reloadPage() {
 }
 
 // The page before a round starts: what will be rated here, and what comes after it.
-export function WaitingScreen({ organization, event, texts = {}, upcoming = [], opensAt, lang = 'de', credit = null, poster = false, onOpen = reloadPage }) {
+// The flyer runs across the full width and fades into the page at its own height,
+// so a landscape poster keeps its shape instead of being blown up to fill a phone.
+function WaitingPoster({ url, name }) {
+  if (!url) return null;
+  return <figure className="guest-waiting-poster">
+    <img src={url} alt={name ? `Bild zu ${name}` : ''} />
+  </figure>;
+}
+
+export function WaitingScreen({ organization, event, texts = {}, upcoming = [], opensAt, lang = 'de', credit = null, poster = null, onOpen = reloadPage }) {
   const locale = lang === 'en' ? 'en-GB' : 'de-DE';
   const lead = event || upcoming[0] || null;
   const rest = event ? upcoming : upcoming.slice(1);
@@ -112,6 +121,7 @@ export function WaitingScreen({ organization, event, texts = {}, upcoming = [], 
     : texts.no_event_text || 'Schau gerne später noch einmal vorbei.';
 
   return <section className={`guest-step guest-waiting${poster ? ' has-poster' : ''}`}>
+    <WaitingPoster url={poster} name={lead?.name} />
     {organization?.name && <p className="guest-waiting-kicker">{organization.name}</p>}
     <h1 className="guest-question">{event ? event.name : (texts.upcoming_headline || 'Als Nächstes')}</h1>
     {event

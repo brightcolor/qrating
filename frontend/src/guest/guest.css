@@ -1248,26 +1248,28 @@
   }
 }
 
-/* The poster of the evening fills the page. The veil below it reaches the stage
-   color before the text starts, so the words never sit on the picture. */
-.guest-backdrop.is-poster img {
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  filter: none;
-  opacity: 1;
-  /* A flyer carries its name at the top, so the crop keeps the upper part. */
-  object-position: 50% 18%;
+/* The poster of the evening runs across the full width, keeps its own height and
+   fades into the page. A flyer is usually wider than tall, so filling a phone
+   screen with it would show two letters and nothing else. */
+.guest-waiting-poster {
+  position: relative;
+  width: 100vw;
+  margin: calc(-1 * max(14px, env(safe-area-inset-top))) 0 14px;
+  margin-left: 50%;
+  transform: translateX(-50%);
+  overflow: hidden;
 }
 
-.guest-backdrop.is-poster::after {
-  background: linear-gradient(
-    180deg,
-    transparent 0%,
-    var(--veil-top) 16%,
-    var(--veil-mid) 30%,
-    var(--stage) 45%
-  );
+.guest-waiting-poster img {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* A portrait flyer stops here, and the crop keeps the part that carries the name. */
+  max-height: 52vh;
+  object-fit: cover;
+  object-position: 50% 12%;
+  -webkit-mask-image: linear-gradient(180deg, #000 62%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 62%, transparent 100%);
 }
 
 /* Waiting page and the pointer to the next events */
@@ -1276,10 +1278,10 @@
   padding-top: 8px;
 }
 
-/* With a poster the words move down, into the calm part under the picture. */
+/* With a poster the words follow the picture instead of standing in the middle. */
 .guest-waiting.has-poster {
-  justify-content: flex-end;
-  padding-top: 46vh;
+  justify-content: flex-start;
+  padding-top: 0;
 }
 
 .guest-waiting-kicker {

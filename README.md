@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.46.0
+**Version:** 0.46.1
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -271,7 +271,7 @@ Two kinds of sheet exist:
 
 A guest who scans early sees what the code is for: the event, its date, a countdown in days, hours, minutes and seconds, and five quiet stars, with the moment the rating opens. The last day drops the day segment and the three remaining ones take the room. When the countdown reaches zero the page loads itself again, so the rating stands there without a tap. The page of an organization shows the event that comes next the same way, and the ones after it as a list with a link to the ticket shop.
 
-The picture of an event carries the page. On the page before a round the flyer of the evening fills the screen, and a veil takes it down to the stage color before the first word starts, so no text ever sits on the picture. The crop keeps the upper part, where a flyer carries its name. Every entry in the list of what comes next carries its own picture as a small poster behind the date. An evening without a picture keeps the quiet layout.
+The picture of an event carries the page. On the page before a round the flyer of the evening runs across the full width, keeps its own height and fades into the page, so no text ever sits on the picture. A flyer is usually wider than tall: filling a phone screen with it would show two letters and nothing else. A portrait one stops at 52 % of the screen, and that crop keeps the part carrying the name. Every entry in the list of what comes next carries its own picture as a small poster behind the date. An evening without a picture keeps the quiet layout.
 
 While a round runs nothing stands in the way: the guest goes straight into the rating. The events that follow appear after the feedback, on the thank-you screen.
 
@@ -559,7 +559,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.46.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.46.1`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

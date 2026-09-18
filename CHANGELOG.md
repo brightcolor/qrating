@@ -4,6 +4,13 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.46.1] - 2026-09-18
+
+### Fixed
+
+- The flyer on the page before a round keeps its own shape. Filling the whole screen blew a wide flyer up until only two letters of its name were left.
+- Version bumped to `0.46.1`.
+
 ## [0.46.0] - 2026-09-18
 
 ### Changed

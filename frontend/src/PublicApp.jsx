@@ -47,12 +47,12 @@ function PublicFeedback({ mode, identifier, source }) {
     // Der Abend, auf den gewartet wird, stellt sein Plakat über die ganze Seite.
     const lead = data.event || (data.upcoming || [])[0] || null;
     const poster = eventImage(data.event) || assetUrl(lead?.imageUrl) || null;
-    return <GuestStage brandColor={organization?.primaryColor} imageUrl={poster} poster={Boolean(poster)} lang={lang}>
+    return <GuestStage brandColor={organization?.primaryColor} lang={lang}>
       <div className="guest-frame">
         <WaitingScreen
       organization={data.event?.organization || data.organization}
       event={data.event}
-      poster={Boolean(poster)}
+      poster={poster}
       texts={data.texts}
       upcoming={data.upcoming || []}
       opensAt={data.feedback?.opensAt}
