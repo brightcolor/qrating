@@ -1,6 +1,14 @@
 /* The credit line travels between the guest pages and the website, so it carries
    its own styles and borrows only the color it already stands in. */
 
+/* The line closes the page, so it sits in the middle. The element in the
+   selector keeps it ahead of the paragraph style it shares its class with. */
+p.brand-credit {
+  margin-top: 26px;
+  text-align: center;
+  text-wrap: balance;
+}
+
 .brand-credit-link {
   color: inherit;
   text-decoration: none;

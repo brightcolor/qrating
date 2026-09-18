@@ -4,6 +4,13 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.43.1] - 2026-09-18
+
+### Changed
+
+- The note about the makers sits in the middle under the page. It used to hang on the left edge below the content.
+- Version bumped to `0.43.1`.
+
 ## [0.43.0] - 2026-09-18
 
 ### Changed
