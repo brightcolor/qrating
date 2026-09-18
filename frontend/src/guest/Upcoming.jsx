@@ -34,7 +34,13 @@ export function Countdown({ target, lang = 'de', onDone }) {
     running.current = Boolean(first && !first.done);
     setParts(first);
     if (!first || first.done) return undefined;
-    const timer = setInterval(() => setParts(countdownParts(target)), 1000);
+    // Once it reaches zero the page reloads; a timer that keeps firing would
+    // redraw the page every second while it waits for that.
+    const timer = setInterval(() => {
+      const next = countdownParts(target);
+      setParts(next);
+      if (next?.done) clearInterval(timer);
+    }, 1000);
     return () => clearInterval(timer);
   }, [target]);
 

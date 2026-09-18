@@ -52,12 +52,13 @@ function lowRatingMessage(event, feedback) {
 }
 
 // A stored secret that cannot be opened must not swallow the whole message.
-function openStored(value) {
+function openStored(value, label) {
   if (!value) return null;
   try {
     return decryptSecret(value);
-  } catch {
-    return 'liegt verschlüsselt vor, im Dashboard einsehbar';
+  } catch (error) {
+    console.error(`[notification] ${label} konnte nicht entschlüsselt werden: ${error.message}`);
+    return 'liess sich mit dem aktuellen Schlüssel nicht öffnen. Die Angabe steht im Low-Rating-Dashboard.';
   }
 }
 
@@ -76,8 +77,8 @@ function block(label, value) {
 
 export function lowRatingDetailMessage(event, feedback) {
   const item = feedback.low_rating_case || {};
-  const phone = openStored(item.contact_phone_encrypted) || feedback.contact_phone || null;
-  const note = openStored(item.contact_note_encrypted) || item.contact_note || feedback.contact_note || null;
+  const phone = openStored(item.contact_phone_encrypted, 'Die Rückrufnummer');
+  const note = openStored(item.contact_note_encrypted, 'Das Anliegen');
   const zone = event.event_timezone || 'Europe/Berlin';
   const when = [moment(event.date_from, zone), plainText(event.location)].filter(Boolean).join(' · ');
   return [
@@ -159,7 +160,6 @@ export class NotificationService {
     const payload = {
       title: lowRatingTitle(event, feedback),
       text: lowRatingMessage(event, feedback),
-      detailText: lowRatingDetailMessage(event, feedback),
       event: notificationEvent(event),
       feedback: notificationFeedback(feedback)
     };
@@ -178,7 +178,7 @@ export class NotificationService {
         deliveries.push({ channelId: channel.id, ok: true, skipped: true, reason: 'duplicate' });
         continue;
       }
-      const delivery = await this.sendChannel(channel, payload)
+      const delivery = await this.sendChannel(channel, payload, { event, feedback })
         .then((response) => ({ channelId: channel.id, ok: true, response }))
         .catch((error) => ({ channelId: channel.id, ok: false, error: error.message }));
       deliveries.push(delivery);
@@ -198,7 +198,9 @@ export class NotificationService {
     return deliveries;
   }
 
-  async sendChannel(channel, payload) {
+  // `source` carries the unredacted rating. Only the mail branch reads it, so a
+  // channel that was never meant to name a guest cannot start doing so by accident.
+  async sendChannel(channel, payload, source = null) {
     const config = channel.config || {};
     const secret = channel.secret_encrypted ? openSecret(channel.secret_encrypted, 'Das gespeicherte Secret dieses Kanals') : null;
     const type = channel.channel_type;
@@ -206,7 +208,7 @@ export class NotificationService {
       const result = await this.smtpService.sendMail(channel.organization_id, {
         to: config.to || channel.user_email,
         subject: payload.title,
-        text: payload.detailText || payload.text
+        text: source ? lowRatingDetailMessage(source.event, source.feedback) : payload.text
       });
       if (result?.skipped) {
         throw httpError(400, 'Der E-Mail-Versand ist nicht eingerichtet oder ausgeschaltet. Richte ihn unter SMTP ein und aktiviere ihn.');

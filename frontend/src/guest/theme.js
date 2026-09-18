@@ -81,8 +81,17 @@ export function useGuestTheme() {
     if (typeof window === 'undefined' || !window.matchMedia) return undefined;
     const query = window.matchMedia('(prefers-color-scheme: dark)');
     const listen = (event) => setPrefersDark(event.matches);
-    query.addEventListener('change', listen);
-    return () => query.removeEventListener('change', listen);
+    // Safari learned addEventListener on a media query in version 14; before that
+    // only addListener exists, and a throw here would leave the page blank.
+    if (typeof query.addEventListener === 'function') {
+      query.addEventListener('change', listen);
+      return () => query.removeEventListener('change', listen);
+    }
+    if (typeof query.addListener === 'function') {
+      query.addListener(listen);
+      return () => query.removeListener(listen);
+    }
+    return undefined;
   }, []);
 
   return {

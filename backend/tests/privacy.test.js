@@ -98,6 +98,29 @@ describe('the page that says what happens with the data', () => {
     expect(textOf(withOne.body)).toContain('news.example.com');
   });
 
+  it('claims no confirmation mail it never sends', async () => {
+    const page = await request('GET', `/public/privacy/${slug}`);
+
+    expect(textOf(page.body)).not.toMatch(/bestätigst sie über eine E-Mail/i);
+  });
+
+  it('names the mail server once one is set up, because the callback number travels that way', async () => {
+    const organization = (await query('SELECT id FROM organizations LIMIT 1')).rows[0];
+    const without = await request('GET', `/public/privacy/${slug}`);
+    expect(textOf(without.body)).not.toContain('mail.example.com');
+
+    await query(
+      `INSERT INTO smtp_settings (organization_id, host, port, from_email, enabled)
+       VALUES ($1, 'mail.example.com', 587, 'feedback@example.com', true)
+       ON CONFLICT (organization_id) DO UPDATE SET host = EXCLUDED.host, enabled = true`,
+      [organization.id]
+    );
+
+    const withOne = await request('GET', `/public/privacy/${slug}`);
+    expect(textOf(withOne.body)).toContain('mail.example.com');
+    expect(textOf(withOne.body)).toContain('Rückrufnummer');
+  });
+
   it('promises in the same breath that nothing goes further', async () => {
     const page = await request('GET', `/public/privacy/${slug}`);
     const receivers = page.body.sections.find((section) => section.id === 'empfaenger');

@@ -59,13 +59,13 @@ describe('NotificationService', () => {
     );
     expect(result[0].ok).toBe(true);
     const mail = smtpService.sendMail.mock.calls[0][1];
-    // Die Mail geht an ein bekanntes Postfach und trägt alles.
+    // The mail goes to a known mailbox and carries everything.
     expect(mail.to).toBe('person@example.com');
     expect(mail.subject).toBe('qrating: 1 Stern für Demo');
     expect(mail.text).toContain('+491234');
     expect(mail.text).toContain('Bitte anrufen');
     expect(mail.text).toContain('1 Stern');
-    // Die Zeit steht in der Zone des Abends, nicht als roher Zeitstempel.
+    // The time stands in the zone of the evening, not as a raw stamp.
     expect(mail.text).toContain('1. Januar 2026 um 13:00');
     expect(mail.text).not.toContain('GMT');
   });

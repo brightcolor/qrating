@@ -24,9 +24,10 @@ export function controllerOf(organization = {}) {
   return { name, address, email, complete: Boolean(name && address && email) };
 }
 
-export function privacySections(organization = {}, { newsletter = null } = {}) {
+export function privacySections(organization = {}, { newsletter = null, mailHost = null } = {}) {
   const controller = controllerOf(organization);
   const host = newsletter?.api_url ? safeHost(newsletter.api_url) : null;
+  const mail = trimmed(mailHost);
 
   const collected = [
     'Deine Sterne und die Antworten auf die Fragen des Formulars.',
@@ -45,6 +46,9 @@ export function privacySections(organization = {}, { newsletter = null } = {}) {
   ];
   if (host) {
     receivers.push(`Meldest du dich für Infos an, geht deine Adresse an das Newslettersystem unter ${host}, aus dem die E-Mails verschickt werden.`);
+  }
+  if (mail) {
+    receivers.push(`Hinterlässt du eine Rückrufnummer, geht sie als E-Mail an die Veranstalterin über den Mailserver ${mail}.`);
   }
   receivers.push('Darüber hinaus geben wir deine Daten an niemanden weiter. Verkauft oder für Werbung Dritter genutzt werden sie nie.');
 
@@ -84,7 +88,7 @@ export function privacySections(organization = {}, { newsletter = null } = {}) {
       paragraphs: [],
       items: [
         'Bewertung und Freitext: unser berechtigtes Interesse an der Verbesserung unserer Veranstaltungen, Art. 6 Abs. 1 lit. f DSGVO.',
-        'E-Mail-Adresse und Newsletter: deine Einwilligung, Art. 6 Abs. 1 lit. a DSGVO. Du bestätigst sie über eine E-Mail an deine Adresse.',
+        'E-Mail-Adresse und Newsletter: deine Einwilligung, Art. 6 Abs. 1 lit. a DSGVO.',
         'Telefonnummer für einen Rückruf: deine Einwilligung, Art. 6 Abs. 1 lit. a DSGVO.'
       ]
     },
@@ -127,7 +131,7 @@ function safeHost(url) {
   }
 }
 
-export function privacyPage(organization = {}, { newsletter = null } = {}) {
+export function privacyPage(organization = {}, { newsletter = null, mailHost = null } = {}) {
   return {
     organization: {
       name: organization.name,
@@ -137,6 +141,6 @@ export function privacyPage(organization = {}, { newsletter = null } = {}) {
     },
     controller: controllerOf(organization),
     ownText: trimmed(organization.privacy_text),
-    sections: privacySections(organization, { newsletter })
+    sections: privacySections(organization, { newsletter, mailHost })
   };
 }

@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.46.1
+**Version:** 0.47.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -309,7 +309,7 @@ The website of the product carries its own line in the footer; the website conte
 
 A rating of one or two stars reaches the people assigned to that event. Two things decide whether anything arrives at all: a notification channel of that person, and a row in `user_event_assignments` for that event with `notify_low_rating`. **The recipient hangs on the event, not on the channel** — a channel alone stays silent, and the job still reports `done`.
 
-What travels depends on the channel. **A push names no guest**: stars, event, time, and the note that the details are elsewhere. It lands on a lock screen and travels over a notification service. **A mail carries everything**: the callback number, the request, the free-text answers and a link into the dashboard. It goes to a mailbox the organizer named.
+What travels depends on the channel. **A push names no guest**: stars, event, time, and the note that the details are elsewhere. It lands on a lock screen and travels over a notification service. **A mail carries everything**: the callback number, the request, the free-text answers and a link into the dashboard. It goes to a mailbox the organizer named. The detailed text is built inside the mail branch and never enters the payload the other channels see, so a channel added later cannot start naming a guest by accident.
 
 ## Where Guests Stop
 
@@ -559,7 +559,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.46.1`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.47.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

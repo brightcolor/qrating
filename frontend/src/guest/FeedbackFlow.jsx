@@ -71,9 +71,10 @@ function PreviewBanner({ preview, texts }) {
 }
 
 // The public payload falls back to the organizer logo when an event has no picture of its own.
-export function eventImage(event) {
+export function eventImage(event, organization = null) {
   const url = event?.imageUrl;
-  if (!url || url === event.organization?.logoUrl) return null;
+  const logo = event?.organization?.logoUrl || organization?.logoUrl || null;
+  if (!url || url === logo) return null;
   return assetUrl(url);
 }
 

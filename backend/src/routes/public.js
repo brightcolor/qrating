@@ -53,7 +53,18 @@ publicRouter.get('/privacy/:slug', async (req, res, next) => {
       });
     }
     const newsletter = await new NewsletterService({ query }).connectionFor(organization.id);
-    res.json({ status: 'ok', credit: creditFor(organization), ...privacyPage(organization, { newsletter }) });
+    const smtp = (await query(
+      'SELECT host FROM smtp_settings WHERE organization_id = $1 AND enabled = true',
+      [organization.id]
+    )).rows[0];
+    res.json({
+      status: 'ok',
+      credit: creditFor(organization),
+      ...privacyPage(organization, {
+        newsletter: newsletter ? { api_url: newsletter.api_url } : null,
+        mailHost: smtp?.host || null
+      })
+    });
   } catch (error) {
     next(error);
   }

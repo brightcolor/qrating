@@ -4,6 +4,18 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.47.0] - 2026-09-19
+
+### Fixed
+
+- The privacy page no longer claims a confirmation email that the software never sends, and it names the mail server once one is set up, because a callback number travels that way.
+- The detailed text of a low-rating alert is built inside the mail branch instead of riding along in the message every channel sees.
+- Deleting a notification channel no longer fails once a rating had been announced over two of them.
+- The countdown stops its timer at zero instead of redrawing the page every second while it waits for the reload.
+- Guest pages work on phones whose browser only knows the older way of watching the system setting. Before, such a phone showed a blank page after a scan.
+- A failed decryption is logged and says what to do, and the poster on the waiting page no longer shows the organizer logo stretched across the top.
+- Version bumped to `0.47.0`.
+
 ## [0.46.1] - 2026-09-18
 
 ### Fixed

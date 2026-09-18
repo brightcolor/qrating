@@ -46,7 +46,7 @@ function PublicFeedback({ mode, identifier, source }) {
     const organization = data.event?.organization || data.organization;
     // Der Abend, auf den gewartet wird, stellt sein Plakat über die ganze Seite.
     const lead = data.event || (data.upcoming || [])[0] || null;
-    const poster = eventImage(data.event) || assetUrl(lead?.imageUrl) || null;
+    const poster = eventImage(data.event, organization) || eventImage(lead, organization) || null;
     return <GuestStage brandColor={organization?.primaryColor} lang={lang}>
       <div className="guest-frame">
         <WaitingScreen
