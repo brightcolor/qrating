@@ -1,5 +1,11 @@
-// The organizer picks one brand color; the guest page derives readable variants for its dark stage and the paper ticket.
+// The organizer picks one brand color; the guest page derives readable variants for its
+// stage — dark or light — and for the paper ticket.
 export const stageHex = '#140f1c';
+export const lightStageHex = '#f6f4fa';
+
+export function stageFor(theme) {
+  return theme === 'light' ? lightStageHex : stageHex;
+}
 
 const fallbackBrand = '#2563eb';
 const white = [255, 255, 255];
@@ -49,13 +55,15 @@ function rgba(rgb, alpha) {
   return `rgba(${rgb.map(Math.round).join(', ')}, ${alpha})`;
 }
 
-export function guestPalette(brandColor) {
+export function guestPalette(brandColor, theme = 'dark') {
   const brand = parseHex(brandColor) || parseHex(fallbackBrand);
-  const stage = parseHex(stageHex);
+  const stage = parseHex(stageFor(theme));
+  // A dark stage needs the color lighter, a light one needs it deeper.
+  const target = theme === 'light' ? ink : white;
   // Buttons, chips and stars: visible against the stage.
-  const fill = withContrast(brand, stage, white, 3);
+  const fill = withContrast(brand, stage, target, 3);
   // Text and focus rings on the stage.
-  const accent = withContrast(brand, stage, white, 4.5);
+  const accent = withContrast(brand, stage, target, 4.5);
   const paper = mix(paperBase, brand, 0.07).map(Math.round);
   const stamp = withContrast(brand, paper, ink, 4.5);
   return {

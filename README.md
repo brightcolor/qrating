@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.38.0
+**Version:** 0.39.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -267,7 +267,7 @@ Two kinds of sheet exist:
 
 ## Before And After The Round
 
-A guest who scans early sees what the code is for: the event, its date and five quiet stars, with the moment the rating opens. The page of an organization shows the event that comes next the same way, and the ones after it as a list with a link to the ticket shop.
+A guest who scans early sees what the code is for: the event, its date, a countdown in days, hours, minutes and seconds, and five quiet stars, with the moment the rating opens. The last day drops the day segment and the three remaining ones take the room. When the countdown reaches zero the page loads itself again, so the rating stands there without a tap. The page of an organization shows the event that comes next the same way, and the ones after it as a list with a link to the ticket shop.
 
 While a round runs nothing stands in the way: the guest goes straight into the rating. The events that follow appear after the feedback, on the thank-you screen.
 
@@ -278,12 +278,18 @@ Each event decides for itself, on its card in the admin area:
 
 The shop link of an entry comes from the Pretix address of that event, otherwise from the ticket shop of the organization. It only appears while tickets can really be bought: Pretix says whether the shop is public (`live`) and when the sale runs (`presale_start`, `presale_end`), and an event that is out of that window shows no link. `ticketLinkEnabled` switches the link off for an event even while the sale runs.
 
+## Light And Dark
+
+The guest page follows the system setting of the phone. A button in the corner — in the feedback flow it sits in the top bar — walks through three settings: **Automatisch**, **Hell**, **Dunkel**. The chosen one lives in `localStorage` under `qrating.theme` and holds on this device; a browser that refuses storage simply keeps following the system.
+
+The stage colors swap through `data-theme` on the guest container. The brand color of an organization is recalculated for the ground it stands on: `guestPalette(color, 'light' | 'dark')` moves it toward the ink on a light page and toward the white on a dark one, until buttons reach a contrast of 3 and text 4.5. A test walks eight brand colors through both grounds.
+
 ## Mark And Note
 
 Two things carry the product into the open, and an organization can switch each one off under **Branding**:
 
 - the qrating mark in the middle of every QR code. The code is written with the highest error correction and the mark covers about a fifth of its width, so it stays readable. A test decodes a code with the mark and proves it.
-- the note `qrating — ein Projekt von bright color` on the guest page, on the ticket stub of the thank-you screen and under the event on the print sheet.
+- the note `qrating — ein Projekt von bright color` on the guest page, on the ticket stub of the thank-you screen and under the event on the print sheet. On screen both names carry their sign and lead to <https://qrating.de> and <https://bright-color.de>; the sheet keeps the plain line, since paper has no links.
 
 The website of the product carries its own line in the footer; the website content switches it with `showProductCredit`.
 
@@ -535,7 +541,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.38.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.39.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

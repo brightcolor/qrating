@@ -4,6 +4,15 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.39.0] - 2026-09-18
+
+### Added
+
+- The page before a round shows a countdown in days, hours, minutes and seconds. Once the last day is over the day segment drops out, and when the countdown reaches zero the page loads the rating by itself.
+- Guest pages come in light and dark. They follow the system setting of the device, and a button walks through automatic, light and dark; the choice stays on that device.
+- The note under a public page names both makers with their sign and links them.
+- Version bumped to `0.39.0`.
+
 ## [0.38.0] - 2026-09-18
 
 ### Added

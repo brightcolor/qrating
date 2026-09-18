@@ -5,6 +5,9 @@ import '@fontsource/paytone-one';
 import './guest.css';
 import { api, assetUrl } from '../lib/api.js';
 import { guestPalette, paletteStyle } from './colors.js';
+import { useGuestTheme } from './theme.js';
+import { ThemeContext, ThemeSwitch } from './ThemeSwitch.jsx';
+import { ProductCredit } from '../lib/credit.jsx';
 import { UpcomingList } from './Upcoming.jsx';
 import {
   answerText,
@@ -35,16 +38,21 @@ import {
 const ratingPause = 900;
 const choicePause = 420;
 
-export function GuestStage({ brandColor, imageUrl = null, lang = 'de', children }) {
-  const palette = useMemo(() => guestPalette(brandColor), [brandColor]);
-  return <div className="guest" lang={lang} style={paletteStyle(palette)}>
-    <div className={`guest-backdrop${imageUrl ? ' has-image' : ''}`} aria-hidden="true">
-      {imageUrl
-        ? <img src={imageUrl} alt="" />
-        : <><span className="guest-light guest-light--a" /><span className="guest-light guest-light--b" /></>}
+// Pages with their own top bar say so and place the switch in it themselves.
+export function GuestStage({ brandColor, imageUrl = null, lang = 'de', ownSwitch = false, children }) {
+  const { choice, theme, cycle } = useGuestTheme();
+  const palette = useMemo(() => guestPalette(brandColor, theme), [brandColor, theme]);
+  return <ThemeContext.Provider value={{ choice, cycle, lang }}>
+    <div className="guest" data-theme={theme} lang={lang} style={paletteStyle(palette)}>
+      <div className={`guest-backdrop${imageUrl ? ' has-image' : ''}`} aria-hidden="true">
+        {imageUrl
+          ? <img src={imageUrl} alt="" />
+          : <><span className="guest-light guest-light--a" /><span className="guest-light guest-light--b" /></>}
+      </div>
+      {ownSwitch ? null : <ThemeSwitch />}
+      {children}
     </div>
-    {children}
-  </div>;
+  </ThemeContext.Provider>;
 }
 
 export function GuestScreen({ brandColor, imageUrl, lang, loading = false, children }) {
@@ -288,7 +296,7 @@ export function FeedbackFlow({ event, texts, sourceType, lang = 'de', preview = 
           <p className="guest-help">{texts.thank_text}</p>
           <UpcomingList items={upcoming} locale={locale} headline={texts.upcoming_headline || 'Als Nächstes'} shopLabel={texts.upcoming_shop_label || 'Tickets'} />
           {footerText && <p className="guest-fine">{footerText}</p>}
-          {event.credit && <p className="guest-fine">{event.credit}</p>}
+          <ProductCredit credit={event.credit} />
         </section>
       </div>
     </GuestStage>;
@@ -392,7 +400,7 @@ export function FeedbackFlow({ event, texts, sourceType, lang = 'de', preview = 
     </>;
   }
 
-  return <GuestStage brandColor={brandColor} imageUrl={image} lang={lang}>
+  return <GuestStage brandColor={brandColor} imageUrl={image} lang={lang} ownSwitch>
     <div className="guest-frame">
       <PreviewBanner preview={preview} texts={texts} />
       <header className="guest-top">
@@ -407,6 +415,7 @@ export function FeedbackFlow({ event, texts, sourceType, lang = 'de', preview = 
           </button>
           <p className="guest-title">{event.name}</p>
           <p className="guest-count" aria-hidden="true">{onSummary ? <Check size={18} strokeWidth={2.6} /> : `${index + 1}/${total}`}</p>
+          <ThemeSwitch className="guest-bar-theme" />
         </div>
         <p className="sr-only" aria-live="polite">
           {onSummary ? texts.summary_headline : fillText(texts.progress_label, { nummer: index + 1, gesamt: total })}

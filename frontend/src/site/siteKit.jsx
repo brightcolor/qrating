@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { BrightColorSign, brightColorUrl } from '../lib/credit.jsx';
 import { encode } from 'uqr';
 import { ArrowRight, Check, Copy, Mail } from 'lucide-react';
 
@@ -300,7 +301,10 @@ export function SiteFooter({ site, links }) {
         <a href={`mailto:${links.email}`}>Kontakt</a>
         <a href={links.admin}>Anmelden</a>
       </nav>
-      <p className="footer-copy">© {new Date().getFullYear()} {site.brand}{site.showProductCredit === false ? '' : ' · ein Projekt von bright color'}</p>
+      <p className="footer-copy">© {new Date().getFullYear()} {site.brand}{site.showProductCredit === false ? '' : <>
+        {' · ein Projekt von '}
+        <a className="brand-credit-link" href={brightColorUrl} target="_blank" rel="noreferrer"><BrightColorSign />bright color</a>
+      </>}</p>
     </div>
   </footer>;
 }
