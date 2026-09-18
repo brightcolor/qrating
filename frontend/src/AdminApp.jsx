@@ -592,6 +592,49 @@ function EventCard({ event, onChanged }) {
   </article>;
 }
 
+// Wie weit die Gäste im Fragebogen kommen: Aufrufe, Abschlüsse und der Schritt, an dem Schluss war.
+function Funnel({ funnel }) {
+  if (!funnel || !funnel.sessions) {
+    return <Panel title="Wie weit die Gäste kommen">
+      <p className="text-sm text-neutral-500">Für dieses Event ist noch kein Aufruf der Gästeseite gezählt.</p>
+    </Panel>;
+  }
+  return <div className="grid gap-6">
+    <div className="grid gap-4 md:grid-cols-4">
+      <Stat title="Aufrufe der Gästeseite" value={funnel.sessions} />
+      <Stat title="Abgeschickt" value={funnel.completed} />
+      <Stat title="Abgebrochen" value={funnel.dropped} />
+      <Stat title="Abschlussquote" value={`${funnel.completionRate} %`} />
+    </div>
+    <Panel title="Wie weit die Gäste kommen">
+      <div className="space-y-2">
+        {funnel.steps.map((step) => <div key={`${step.position}-${step.step}`} className="rounded-md bg-neutral-50 p-3">
+          <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+            <strong>{step.position + 1}. {step.label || stepNames[step.kind] || step.step}</strong>
+            <span className="text-neutral-600">{step.reached} von {funnel.sessions} · {step.share} %{step.dropped ? ` · ${step.dropped} hier aufgehört` : ''}</span>
+          </div>
+          <div className="mt-2 h-2 rounded-full bg-neutral-200">
+            <div className="h-2 rounded-full bg-blue-600" style={{ width: `${step.share}%` }} />
+          </div>
+        </div>)}
+      </div>
+      {Number(funnel.dropped_seconds) > 0 && <p className="mt-4 text-sm text-neutral-500">
+        Wer abbricht, ist im Schnitt {funnel.dropped_seconds} Sekunden auf der Seite; wer abschickt, {funnel.completed_seconds || '-'} Sekunden.
+      </p>}
+    </Panel>
+  </div>;
+}
+
+const stepNames = {
+  rating: 'Bewertung',
+  question: 'Frage',
+  comment: 'Freitext',
+  contact: 'Kontakt',
+  newsletter: 'Newsletter',
+  summary: 'Zusammenfassung',
+  submitted: 'Abgeschickt'
+};
+
 function Analytics() {
   const { data: events, loading, error: eventsError } = useAsync(() => api('/admin/events'), []);
   const [eventId, setEventId] = useState('');
@@ -634,6 +677,7 @@ function Analytics() {
         <Panel title="Bewertungsverteilung"><div className="h-72"><ResponsiveContainer><BarChart data={fillRatings(data.distribution)}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="rating" /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="count" fill="#2563eb" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer></div></Panel>
         <Panel title="Verlauf"><div className="h-72"><ResponsiveContainer><LineChart data={data.timeline}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="bucket" tickFormatter={(v) => new Date(v).getHours()} /><YAxis allowDecimals={false} /><Tooltip /><Line type="monotone" dataKey="count" stroke="#2563eb" strokeWidth={2} /></LineChart></ResponsiveContainer></div></Panel>
       </div>
+      <Funnel funnel={data.funnel} />
       <Panel title="Eigene Fragen">{data.questionStats.length ? <div className="space-y-2">{data.questionStats.slice(0, 20).map((row, idx) => <div key={`${row.id}-${idx}`} className="flex justify-between rounded-md bg-neutral-50 p-3 text-sm"><span>{row.label}: {JSON.stringify(row.answer_value)}</span><strong>{row.count}</strong></div>)}</div> : <p className="text-sm text-neutral-500">Noch keine auswertbaren Antworten.</p>}</Panel>
       <Panel title="Kommentare">{data.comments.map((comment) => <div key={comment.id} className="border-b border-neutral-100 py-3 text-sm"><strong>{comment.rating} Sterne</strong><p>{comment.comment_positive || comment.comment_improvement || comment.general_comment || 'Kein Text'}</p></div>)}</Panel>
     </div>}

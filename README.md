@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.33.1
+**Version:** 0.34.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -31,6 +31,7 @@ This repository was built with AI-assisted, vibe-coded development. Treat it lik
 - Pretix event sync with settings sync and robust event image detection
 - Event pictures kept by hand: picture URL and description per event in the admin area, marked as manual so a Pretix sync keeps them
 - Form builder with 13 German templates (party, festival, birthday, wedding, company party, conference, workshop, and more), saved custom templates, and a preview of the guest flow
+- Drop-off view per event: how often the guest page was opened and at which step people stopped
 - Newsletter opt-ins handed to MailWizz, with the event of the entry in a custom field
 - Dashboard, CSV/XLSX exports, newsletter export, and a designed PDF report with key figures, rating chart and guest comments; every download is named after its event, the event date and the moment of the download
 - Configurable SMTP for password resets, invitations, low-rating alerts, and report delivery
@@ -247,6 +248,17 @@ Workshop & Seminar, Theater, Lesung & Comedy, Emotionaler Rückblick, and Nachfa
 
 Every template creates editable questions; the panel next to the editor shows the guest flow that results from them.
 Question types: short answer, long answer, multiple selection, single selection, yes/no, recommendation (0 to 10), and stars (1 to 5).
+
+## Where Guests Stop
+
+Every visit of a guest page is one session. The page reports each step it shows, the submission closes the session, and the admin area reads two things out of that: how often the page was opened, and the step people stopped at.
+
+- `POST /public/events/:eventToken/progress` takes `sessionKey`, the step, its position and the number of steps
+- the key lives in the tab of the guest (`sessionStorage`), so a reload continues the same visit
+- a preview reports nothing, and an event whose round is over records nothing
+- the analytics of an event carry a `funnel`: sessions, completed, dropped, the rate and one row per step with reach and drop
+
+A session holds no personal data: the address of the guest and the browser are only kept as a hash, next to the step and the times. Sessions are deleted together with the feedback of the organization, along the same retention.
 
 ## Event Status
 
@@ -485,7 +497,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.33.1`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.34.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

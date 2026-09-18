@@ -9,6 +9,8 @@ import {
   answerText,
   buildPayload,
   buildSteps,
+  progressPayload,
+  sessionKeyFor,
   choiceTypes,
   clearDraft,
   emptyAnswers,
@@ -82,6 +84,8 @@ export function FeedbackFlow({ event, texts, sourceType, lang = 'de', preview = 
   const [done, setDone] = useState(false);
   const [startedAt] = useState(() => draft?.startedAt || new Date().toISOString());
   const [honeypot, setHoneypot] = useState('');
+  const [sessionKey] = useState(() => (preview ? null : sessionKeyFor(event.token)));
+  const reported = useRef('');
   const timer = useRef(null);
   const depth = useRef(0);
   const heading = useRef(null);
@@ -143,6 +147,18 @@ export function FeedbackFlow({ event, texts, sourceType, lang = 'de', preview = 
   useEffect(() => {
     if (!done) saveDraft(event.token, { state, stepId: step.id, startedAt });
   }, [event.token, state, step.id, startedAt, done]);
+
+  // Every step travels to the server once, so the admin area sees how far guests get.
+  useEffect(() => {
+    if (preview || !sessionKey || done) return;
+    const payload = progressPayload({ steps, index, sessionKey, sourceType, texts });
+    const mark = `${payload.step}:${payload.stepIndex}`;
+    if (reported.current === mark) return;
+    reported.current = mark;
+    api(`/public/events/${event.token}/progress`, { method: 'POST', body: JSON.stringify(payload) }).catch(() => {
+      // A visit that nobody counts still gets its feedback through.
+    });
+  }, [event.token, index, steps, sessionKey, sourceType, texts, preview, done]);
 
   function goTo(id, nextDirection = 'forward') {
     clearTimeout(timer.current);
@@ -246,7 +262,7 @@ export function FeedbackFlow({ event, texts, sourceType, lang = 'de', preview = 
     try {
       await api(`/public/events/${event.token}/feedback`, {
         method: 'POST',
-        body: JSON.stringify(buildPayload(state, { questions, sourceType, startedAt, honeypot, language: lang }))
+        body: JSON.stringify(buildPayload(state, { questions, sourceType, startedAt, honeypot, language: lang, sessionKey }))
       });
       clearDraft(event.token);
       setDone(true);

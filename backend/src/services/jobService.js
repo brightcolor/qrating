@@ -218,6 +218,13 @@ export class JobWorker {
       [job.organization_id, Number(org.retention_low_rating_phone_days || 90)]
     );
     if (org.retention_feedback_days) {
+      // Visits of the guest page follow the feedback: same organization, same period.
+      await this.db.query(
+        `DELETE FROM guest_sessions
+         WHERE organization_id = $1
+           AND started_at < now() - ($2 * interval '1 day')`,
+        [job.organization_id, Number(org.retention_feedback_days)]
+      );
       await this.db.query(
         `DELETE FROM feedback_responses
          WHERE organization_id = $1

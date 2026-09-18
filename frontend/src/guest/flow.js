@@ -143,7 +143,7 @@ export function answerText(question, value, texts) {
   }
 }
 
-export function buildPayload(state, { questions = [], sourceType, startedAt, honeypot = '', language = 'de' }) {
+export function buildPayload(state, { questions = [], sourceType, startedAt, honeypot = '', language = 'de', sessionKey = null }) {
   const answers = {};
   for (const question of questions) {
     const value = state.answers[question.internal_name];
@@ -166,6 +166,7 @@ export function buildPayload(state, { questions = [], sourceType, startedAt, hon
     contactNote: lowRating ? state.contactNote.trim() : '',
     testimonialAllowed: false,
     language,
+    sessionKey,
     sourceType,
     honeypot,
     startedAt,
@@ -191,6 +192,52 @@ export function formatDay(value, locale = 'de-DE') {
 // because a device at the exit may serve many guests.
 const draftPrefix = 'qrating:feedback:';
 const draftMaxAge = 2 * 60 * 60 * 1000;
+
+const sessionPrefix = 'qrating-session:';
+
+// One key per visit and event. It stays in the tab, says nothing about the person,
+// and lets the admin area count how far this visit got.
+export function sessionKeyFor(token, make = () => globalThis.crypto?.randomUUID?.() || String(Math.random()).slice(2)) {
+  const name = sessionPrefix + token;
+  try {
+    const stored = globalThis.sessionStorage?.getItem(name);
+    if (stored) return stored;
+  } catch {
+    // Private windows may refuse storage; then every visit counts as its own.
+  }
+  const key = String(make()).replace(/[^A-Za-z0-9-]/g, '').slice(0, 64) || 'ohne-schluessel';
+  try {
+    globalThis.sessionStorage?.setItem(name, key);
+  } catch {
+    // See above.
+  }
+  return key;
+}
+
+// What the guest page reports after every step.
+export function progressPayload({ steps = [], index = 0, sessionKey, sourceType, texts = {} }) {
+  const step = steps[index] || { id: 'rating', kind: 'rating' };
+  return {
+    sessionKey,
+    step: step.id,
+    stepKind: step.kind,
+    stepLabel: stepLabel(step, texts),
+    stepIndex: index,
+    stepsTotal: steps.length || 1,
+    sourceType
+  };
+}
+
+export function stepLabel(step, texts = {}) {
+  if (!step) return '';
+  if (step.kind === 'question') return step.question?.label || 'Frage';
+  if (step.kind === 'rating') return texts.rating_label || 'Bewertung';
+  if (step.kind === 'contact') return texts.low_rating_contact_label || 'Kontakt';
+  if (step.kind === 'newsletter') return texts.newsletter_label || 'Newsletter';
+  if (step.kind === 'summary') return texts.summary_title || 'Zusammenfassung';
+  if (step.kind === 'comment') return step.field === 'commentImprovement' ? (texts.improvement_label || 'Verbesserung') : (texts.positive_label || 'Positives');
+  return step.id;
+}
 
 export function loadDraft(token, now = Date.now()) {
   try {

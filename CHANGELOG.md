@@ -4,6 +4,15 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.34.0] - 2026-09-18
+
+### Added
+
+- Every visit of a guest page is counted, and the flow reports the step it shows. The analytics of an event now answer two questions: how often did somebody open the page, and where did they stop.
+- The admin area shows the visits, the submissions, the drop-outs, the completion rate and one line per step with how many got there and how many ended there.
+- A visit keeps no personal data: address and browser are hashed, and the visits are deleted with the feedback of the organization.
+- Version bumped to `0.34.0`.
+
 ## [0.33.1] - 2026-09-18
 
 ### Documentation

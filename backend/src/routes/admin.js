@@ -16,6 +16,7 @@ import { defaultTexts, defaultTextsByLanguage } from '../services/textService.js
 import { buildEventReportPdf } from '../utils/pdf.js';
 import { renderQrPrintSheet } from '../utils/printSheet.js';
 import { NewsletterService } from '../services/newsletterService.js';
+import { buildFunnel } from '../services/guestSessionService.js';
 import { attachmentHeader } from '../utils/downloadName.js';
 import { SmtpService } from '../services/smtpService.js';
 import { NotificationService, publicChannel } from '../services/notificationService.js';
@@ -434,12 +435,33 @@ adminRouter.get('/events/:id/analytics', async (req, res, next) => {
        ORDER BY bucket`,
       [req.params.id]
     );
+    // Every visit of the guest page, grouped by the step it ended on.
+    const funnelRows = await query(
+      `SELECT last_step_index AS position,
+              COALESCE(last_step, 'unbekannt') AS step,
+              last_step_kind AS kind,
+              max(last_step_label) AS label,
+              count(*)::int AS stopped,
+              count(*) FILTER (WHERE completed_at IS NOT NULL)::int AS completed
+       FROM guest_sessions
+       WHERE event_id = $1
+       GROUP BY last_step_index, last_step, last_step_kind
+       ORDER BY last_step_index`,
+      [req.params.id]
+    );
+    const duration = await query(
+      `SELECT round(avg(EXTRACT(EPOCH FROM (last_seen_at - started_at))) FILTER (WHERE completed_at IS NULL))::int AS dropped_seconds,
+              round(avg(EXTRACT(EPOCH FROM (completed_at - started_at))) FILTER (WHERE completed_at IS NOT NULL))::int AS completed_seconds
+       FROM guest_sessions WHERE event_id = $1`,
+      [req.params.id]
+    );
     res.json({
       summary: summary.rows[0],
       distribution: distribution.rows,
       comments: comments.rows,
       questionStats: questionStats.rows,
-      timeline: timeline.rows
+      timeline: timeline.rows,
+      funnel: { ...buildFunnel(funnelRows.rows), ...duration.rows[0] }
     });
   } catch (error) {
     next(error);

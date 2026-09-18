@@ -10,6 +10,7 @@ import { env } from '../config/env.js';
 import { WebhookService } from '../services/webhookService.js';
 import { enqueueJob } from '../services/jobService.js';
 import { NewsletterService } from '../services/newsletterService.js';
+import { markCompleted, recordProgress } from '../services/guestSessionService.js';
 import { encryptSecret } from '../utils/crypto.js';
 import { getSiteContent } from '../services/siteContentService.js';
 import { emailDomain, emailHash, publicEventStatus, publicOrganization } from '../utils/security.js';
@@ -217,6 +218,24 @@ publicRouter.get('/events/:eventToken/status', async (req, res, next) => {
   }
 });
 
+const progressLimiter = rateLimit({
+  windowMs: env.rateLimitWindowMs,
+  max: Math.max(env.rateLimitMax * 20, 200),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Von diesem Anschluss kamen gerade sehr viele Anfragen. Bitte lade die Seite in einem Moment neu.' }
+});
+
+const progressSchema = Joi.object({
+  sessionKey: Joi.string().max(64).required(),
+  step: Joi.string().max(80).required(),
+  stepKind: Joi.string().max(40).allow('', null),
+  stepLabel: Joi.string().max(160).allow('', null),
+  stepIndex: Joi.number().integer().min(0).max(200).default(0),
+  stepsTotal: Joi.number().integer().min(1).max(200).default(1),
+  sourceType: Joi.string().max(80).allow('', null)
+});
+
 const feedbackSchema = Joi.object({
   rating: Joi.number().integer().min(1).max(5).required(),
   npsScore: Joi.number().integer().min(0).max(10).allow(null),
@@ -233,7 +252,32 @@ const feedbackSchema = Joi.object({
   answers: Joi.object().unknown(true).default({}),
   honeypot: Joi.string().allow('', null),
   startedAt: Joi.date().iso().allow(null),
+  sessionKey: Joi.string().max(64).allow('', null),
   language: Joi.string().max(10).allow('', null)
+});
+
+// Every step of the guest flow reports back here, so the admin area can see where people stop.
+publicRouter.post('/events/:eventToken/progress', progressLimiter, async (req, res, next) => {
+  try {
+    const { value, error } = progressSchema.validate(req.body, { stripUnknown: true });
+    if (error) return res.status(400).json({ error: 'Der Schritt konnte nicht vermerkt werden. Bitte lade die Seite neu.' });
+    const resolver = new EventResolver({ query });
+    const resolved = await resolver.resolveEventByToken(req.params.eventToken);
+    // A closed event has no flow to follow, and the answer stays the same either way.
+    if (resolved.status === 'ok') {
+      const qrSource = await findQrSource(resolved.event, value.sourceType);
+      await recordProgress({ query }, {
+        event: resolved.event,
+        qrSource,
+        progress: value,
+        userAgent: req.headers['user-agent'],
+        ip: req.ip
+      });
+    }
+    res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
 });
 
 publicRouter.post('/events/:eventToken/feedback', feedbackLimiter, async (req, res, next) => {
@@ -293,6 +337,12 @@ publicRouter.post('/events/:eventToken/feedback', feedbackLimiter, async (req, r
         );
       }
     }
+    await markCompleted({ query }, {
+      event,
+      sessionKey: value.sessionKey,
+      feedbackId: feedback.id,
+      stepsTotal: questions.length + 3
+    });
     const webhook = new WebhookService({ query });
     if (value.newsletterOptin) {
       const normalizedEmail = String(value.newsletterEmail || '').trim().toLowerCase();
