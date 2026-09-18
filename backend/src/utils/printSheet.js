@@ -68,14 +68,14 @@ body { background: #eceef1; color: var(--ink); font-family: "Segoe UI", -apple-s
 .middle { display: flex; flex-direction: column; align-items: center; }
 .stars { display: flex; gap: 2.5mm; color: var(--accent); }
 .stars svg { width: 10mm; height: 10mm; }
-.hook { margin: 6mm 0 0; font-family: Georgia, "Times New Roman", serif; font-size: 46pt; line-height: 1.04; letter-spacing: -.015em; font-weight: 400; }
-.lead { margin: 5mm 0 0; max-width: 118mm; font-size: 12.5pt; line-height: 1.5; color: var(--muted); }
-.code { margin: 9mm 0 0; padding: 5mm; border: 1px solid var(--line); border-radius: 3mm; }
-.code svg { display: block; width: 78mm; height: 78mm; }
-.steps { margin: 7mm 0 0; padding: 0; list-style: none; display: flex; gap: 7mm; font-size: 10pt; letter-spacing: .2em; text-transform: uppercase; }
+.hook { margin: 5mm 0 0; font-family: Georgia, "Times New Roman", serif; font-size: 40pt; line-height: 1.04; letter-spacing: -.015em; font-weight: 400; }
+.lead { margin: 4mm 0 0; max-width: 118mm; font-size: 12pt; line-height: 1.45; color: var(--muted); }
+.code { margin: 8mm 0 0; padding: 4mm; border: 1px solid var(--line); border-radius: 3mm; }
+.code svg { display: block; width: 112mm; height: 112mm; }
+.steps { margin: 6mm 0 0; padding: 0; list-style: none; display: flex; gap: 7mm; font-size: 10pt; letter-spacing: .2em; text-transform: uppercase; }
 .steps li { position: relative; }
 .steps li + li::before { content: ""; position: absolute; left: -4.2mm; top: 50%; width: 1.4mm; height: 1.4mm; margin-top: -.7mm; border-radius: 50%; background: var(--accent); }
-.what { position: relative; width: 100%; border-top: 1px solid var(--line); padding-top: 9mm; }
+.what { position: relative; width: 100%; border-top: 1px solid var(--line); padding-top: 7mm; }
 .rule { position: absolute; top: -.6mm; left: 50%; width: 16mm; height: 1.2mm; margin-left: -8mm; border-radius: 1mm; background: var(--accent); }
 .event { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 23pt; line-height: 1.2; }
 .when { margin: 3mm 0 0; font-size: 11.5pt; color: var(--muted); }
@@ -93,44 +93,44 @@ const designStyles = {
   klassik: '',
   pur: `
 .sheet { justify-content: center; gap: 0; }
-.hook { font-size: 58pt; }
-.code { margin-top: 14mm; padding: 6mm; border-width: 0; }
-.code svg { width: 104mm; height: 104mm; }
-.steps { margin-top: 10mm; }
+.hook { font-size: 54pt; }
+.code { margin-top: 12mm; padding: 0; border-width: 0; }
+.code svg { width: 140mm; height: 140mm; }
+.steps { margin-top: 9mm; }
 .event { font-size: 17pt; margin-top: 12mm; }
 .when { font-size: 10.5pt; }
 .what { border-top: 0; padding-top: 0; }
 .rule { display: none; }`,
   tafel: `
 .sheet { padding: 0 0 12mm; justify-content: flex-start; overflow: hidden; }
-.band { width: 100%; background: var(--accent); color: #fff; padding: 16mm 14mm 14mm; text-align: left; }
+.band { width: 100%; background: var(--accent); color: #fff; padding: 13mm 14mm 11mm; text-align: left; }
 .band .host { color: rgba(255,255,255,.82); }
-.band .hook { color: #fff; font-family: "Segoe UI", Arial, sans-serif; font-weight: 700; font-size: 52pt; letter-spacing: -.02em; margin-top: 4mm; }
+.band .hook { color: #fff; font-family: "Segoe UI", Arial, sans-serif; font-weight: 700; font-size: 44pt; letter-spacing: -.02em; margin-top: 4mm; }
 .band .lead { color: rgba(255,255,255,.88); max-width: none; margin-top: 4mm; }
 .middle { padding: 0 14mm; }
 .stars { display: none; }
-.code { margin-top: 14mm; border: 0; padding: 0; }
-.code svg { width: 96mm; height: 96mm; }
+.code { margin-top: 9mm; border: 0; padding: 0; }
+.code svg { width: 120mm; height: 120mm; }
 .what { border-top: 0; padding: 10mm 14mm 0; }
 .rule { display: none; }
 .event { font-family: "Segoe UI", Arial, sans-serif; font-weight: 700; font-size: 20pt; }`,
   karte: `
 body { padding-top: 40px; }
-.sheet { min-height: 120mm; width: 148mm; padding: 12mm; border: 1.5px dashed var(--line); border-radius: 4mm; flex-direction: row; align-items: center; gap: 10mm; text-align: left; }
-.middle { align-items: flex-start; flex: 1 1 auto; }
+.sheet { min-height: 0; width: 112mm; padding: 11mm; border: 1.5px dashed var(--line); border-radius: 4mm; justify-content: flex-start; }
+.stars { gap: 2mm; }
 .stars svg { width: 7mm; height: 7mm; }
-.hook { font-size: 30pt; margin-top: 4mm; }
-.lead { font-size: 10.5pt; margin-top: 3mm; }
+.hook { font-size: 24pt; margin-top: 4mm; }
+.lead { font-size: 10pt; margin-top: 3mm; max-width: none; }
 .steps { font-size: 8.5pt; gap: 5mm; margin-top: 5mm; }
-.code { order: 2; margin: 0; padding: 0; border: 0; flex: 0 0 auto; }
-.code svg { width: 62mm; height: 62mm; }
-.what { border-top: 0; padding-top: 4mm; width: auto; }
+.code { margin-top: 6mm; padding: 0; border: 0; }
+.code svg { width: 88mm; height: 88mm; }
+.what { border-top: 0; padding-top: 6mm; }
 .rule { display: none; }
-.event { font-size: 14pt; }
-.when { font-size: 10pt; margin-top: 1mm; }
-.credit { margin-top: 3mm; }
+.event { font-size: 13pt; }
+.when { font-size: 9.5pt; margin-top: 1mm; }
+.credit { margin-top: 3mm; font-size: 7.5pt; }
 .cut { margin: 0 0 8px; font-size: 12px; color: #6b6f76; }
-@media print { .sheet { min-height: 120mm; padding: 12mm; } .cut { display: none; } }`
+@media print { .sheet { min-height: 0; width: 112mm; padding: 11mm; } .cut { display: none; } }`
 };
 
 // Guests scan the code, so nothing here asks anyone to type an address.
@@ -149,12 +149,8 @@ function sheetBody({ design, hostLine, hook, lead, qrSvg, event, details, credit
       + `${bottom}</article>`;
   }
 
-  if (design === 'karte') {
-    return `<p class="cut">Ausschneiden und aufstellen.</p><article class="sheet">`
-      + `<div class="middle"><p class="host">${hostLine}</p>${stars}<h1 class="hook">${hook}</h1><p class="lead">${lead}</p>${steps}${bottom}</div>`
-      + `<figure class="code">${qrSvg}</figure>`
-      + '</article>';
-  }
+  // The card stands upright on a table, so the code sits under the question, at full width.
+  const cut = design === 'karte' ? '<p class="cut">Ausschneiden und aufstellen.</p>' : '';
 
   if (design === 'pur') {
     return `<article class="sheet">`
@@ -163,7 +159,7 @@ function sheetBody({ design, hostLine, hook, lead, qrSvg, event, details, credit
       + `${bottom}</article>`;
   }
 
-  return `<article class="sheet">`
+  return `${cut}<article class="sheet">`
     + `<p class="host">${hostLine}</p>`
     + `<div class="middle">${stars}<h1 class="hook">${hook}</h1><p class="lead">${lead}</p>`
     + `<figure class="code">${qrSvg}</figure>${steps}</div>`

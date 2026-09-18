@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.41.0
+**Version:** 0.42.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -259,6 +259,8 @@ A sheet carries the code, and four designs decide how it looks. The admin area p
 | `pur` | the question and a large code, nothing else |
 | `tafel` | a coloured band with the question in large type, the code below, for the wall |
 | `karte` | a small card to cut out and put on a table |
+
+The code carries the whole sheet, so it takes the room: 112 mm in **Klassik**, 140 mm in **Pur**, 120 mm in **Tafel** and 88 mm on the **Tischkarte**, which now stands upright with the code under the question. A test holds a floor under each of those four, so no later change shrinks them by accident.
 
 Two kinds of sheet exist:
 
@@ -547,7 +549,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.41.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.42.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

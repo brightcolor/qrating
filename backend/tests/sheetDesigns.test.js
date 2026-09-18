@@ -101,6 +101,27 @@ describe('sheets for events and for the organizer', () => {
     expect(own).not.toContain('Wie war');
   });
 
+  // The code is the only thing a guest uses, so no design may shrink it again.
+  it('gives the code the room it needs in every design', () => {
+    const floors = { klassik: 110, pur: 135, tafel: 118, karte: 85 };
+
+    for (const [design, floor] of Object.entries(floors)) {
+      const paper = renderQrPrintSheet({
+        event: { name: 'Sommerfest', date_from: '2026-07-01T16:00:00.000Z', event_timezone: 'Europe/Berlin' },
+        organizationName: 'HSP-Events',
+        accentColor: '#2563eb',
+        qrSvg: '<svg id="code"></svg>',
+        nonce: 'test',
+        design
+      });
+      // The last rule for the code wins, so the width of this design stands at the end.
+      const widths = [...paper.matchAll(/\.code svg \{[^}]*width: ([\d.]+)mm/g)].map((hit) => Number(hit[1]));
+
+      expect(widths.length, `${design}: keine Breite gefunden`).toBeGreaterThan(0);
+      expect(widths.at(-1), `${design}: Code zu klein`).toBeGreaterThanOrEqual(floor);
+    }
+  });
+
   it('keeps every design on one page and readable', () => {
     for (const design of Object.keys(sheetDesigns)) {
       const paper = renderQrPrintSheet({

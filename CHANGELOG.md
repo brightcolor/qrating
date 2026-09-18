@@ -4,6 +4,13 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.42.0] - 2026-09-18
+
+### Changed
+
+- The QR code takes far more room on every print sheet: it grew by about half, and the table card now stands upright with the code under the question. Headlines and spacing gave way for it, and every sheet still prints on one page.
+- Version bumped to `0.42.0`.
+
 ## [0.41.0] - 2026-09-18
 
 ### Changed
