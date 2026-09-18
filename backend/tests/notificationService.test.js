@@ -64,6 +64,28 @@ describe('NotificationService', () => {
     }));
     expect(smtpService.sendMail.mock.calls[0][1].text).not.toContain('+491234');
     expect(smtpService.sendMail.mock.calls[0][1].text).not.toContain('Bitte anrufen');
+    // Ein Stern ist ein Stern.
+    expect(smtpService.sendMail.mock.calls[0][1].subject).toBe('qrating: 1 Stern für Demo');
+    expect(smtpService.sendMail.mock.calls[0][1].text).toContain('(1 Stern)');
+  });
+
+  it('counts more than one in the plural', async () => {
+    const db = {
+      query: vi.fn()
+        .mockResolvedValueOnce({
+          rows: [{ id: 'channel-1', organization_id: 'org-1', channel_type: 'email', config: { to: 'person@example.com' } }]
+        })
+        .mockResolvedValueOnce({ rows: [{ id: 'delivery-1' }] })
+        .mockResolvedValue({ rows: [] })
+    };
+    const smtpService = { sendMail: vi.fn().mockResolvedValue({ accepted: ['person@example.com'] }) };
+    const service = new NotificationService(db, { smtpService });
+    await service.dispatchLowRating(
+      { id: 'event-1', organization_id: 'org-1', name: 'Demo' },
+      { id: 'feedback-2', rating: 2, submitted_at: '2026-01-01T12:00:00Z' }
+    );
+
+    expect(smtpService.sendMail.mock.calls[0][1].subject).toBe('qrating: 2 Sterne für Demo');
   });
 
   it('sends ntfy titles with umlauts as encoded words', async () => {

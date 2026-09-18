@@ -4,6 +4,13 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.44.2] - 2026-09-18
+
+### Fixed
+
+- The alert about a low rating says "1 Stern" for a single star.
+- Version bumped to `0.44.2`.
+
 ## [0.44.1] - 2026-09-18
 
 ### Fixed

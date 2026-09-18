@@ -22,6 +22,11 @@ export function publicChannel(row) {
   return { ...safe, has_secret: Boolean(secret || secret_encrypted) };
 }
 
+// One star is a star, not stars.
+function stars(rating) {
+  return `${rating} ${Number(rating) === 1 ? 'Stern' : 'Sterne'}`;
+}
+
 function lowRatingMessage(event, feedback) {
   const contactPhone = feedback.low_rating_case?.contact_phone_encrypted
     ? 'Rückrufnummer: im geschützten Low-Rating-Dashboard hinterlegt.'
@@ -30,7 +35,7 @@ function lowRatingMessage(event, feedback) {
     ? 'Kontakt-Hinweis: im geschützten Low-Rating-Dashboard hinterlegt.'
     : null;
   return [
-    `qrating: niedrige Bewertung (${feedback.rating} Sterne)`,
+    `qrating: niedrige Bewertung (${stars(feedback.rating)})`,
     '',
     `Event: ${event.name}`,
     `Zeitpunkt: ${feedback.submitted_at}`,
@@ -42,7 +47,7 @@ function lowRatingMessage(event, feedback) {
 }
 
 function lowRatingTitle(event, feedback) {
-  return `qrating: ${feedback.rating} Sterne für ${event.name}`;
+  return `qrating: ${stars(feedback.rating)} für ${event.name}`;
 }
 
 function notificationEvent(event) {
