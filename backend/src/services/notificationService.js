@@ -1,4 +1,6 @@
 import { httpError } from '../middleware/errors.js';
+import { env } from '../config/env.js';
+import { decryptSecret } from '../utils/crypto.js';
 import { plainText } from '../utils/localized.js';
 import { fetchService, openSecret } from '../utils/serviceErrors.js';
 import { SmtpService } from './smtpService.js';
@@ -27,6 +29,8 @@ function stars(rating) {
   return `${rating} ${Number(rating) === 1 ? 'Stern' : 'Sterne'}`;
 }
 
+// A push travels over a notification service and lands on a lock screen, so it
+// names no guest. The mail goes to a known mailbox and carries everything.
 function lowRatingMessage(event, feedback) {
   const contactPhone = feedback.low_rating_case?.contact_phone_encrypted
     ? 'Rückrufnummer: im geschützten Low-Rating-Dashboard hinterlegt.'
@@ -42,8 +46,46 @@ function lowRatingMessage(event, feedback) {
     contactPhone,
     contactNote,
     '',
-    'Bitte zeitnah prüfen und empathisch nachfassen, falls eine Telefonnummer hinterlegt wurde.'
+    'Die Einzelheiten stehen in der E-Mail und im Low-Rating-Dashboard.'
   ].filter(Boolean).join('\n');
+}
+
+// A stored secret that cannot be opened must not swallow the whole message.
+function openStored(value) {
+  if (!value) return null;
+  try {
+    return decryptSecret(value);
+  } catch {
+    return 'liegt verschlüsselt vor, im Dashboard einsehbar';
+  }
+}
+
+function block(label, value) {
+  const text = String(value ?? '').trim();
+  return text ? `${label}:\n${text}` : null;
+}
+
+export function lowRatingDetailMessage(event, feedback) {
+  const item = feedback.low_rating_case || {};
+  const phone = openStored(item.contact_phone_encrypted) || feedback.contact_phone || null;
+  const note = openStored(item.contact_note_encrypted) || item.contact_note || feedback.contact_note || null;
+  const when = [event.date_from, plainText(event.location)].filter(Boolean).join(' · ');
+  return [
+    `Ein Gast hat ${stars(feedback.rating)} gegeben.`,
+    '',
+    `Event: ${event.name}`,
+    when ? `Wann und wo: ${when}` : null,
+    `Abgegeben: ${feedback.submitted_at}`,
+    '',
+    phone ? `Rückrufnummer: ${phone}` : 'Rückruf: nicht gewünscht.',
+    block('Anliegen', note),
+    block('Was gut war', feedback.comment_positive),
+    block('Was besser sein darf', feedback.comment_improvement),
+    block('Weiterer Kommentar', feedback.general_comment),
+    '',
+    `Vorgang bearbeiten: ${env.adminAppUrl}/admin — Bereich Low-Rating`,
+    'Diese Angaben stehen nur in dieser E-Mail und im Dashboard. Bitte entsprechend behandeln.'
+  ].filter((line) => line !== null).join('\n');
 }
 
 function lowRatingTitle(event, feedback) {
@@ -107,6 +149,7 @@ export class NotificationService {
     const payload = {
       title: lowRatingTitle(event, feedback),
       text: lowRatingMessage(event, feedback),
+      detailText: lowRatingDetailMessage(event, feedback),
       event: notificationEvent(event),
       feedback: notificationFeedback(feedback)
     };
@@ -153,7 +196,7 @@ export class NotificationService {
       const result = await this.smtpService.sendMail(channel.organization_id, {
         to: config.to || channel.user_email,
         subject: payload.title,
-        text: payload.text
+        text: payload.detailText || payload.text
       });
       if (result?.skipped) {
         throw httpError(400, 'Der E-Mail-Versand ist nicht eingerichtet oder ausgeschaltet. Richte ihn unter SMTP ein und aktiviere ihn.');

@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.44.2
+**Version:** 0.45.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -305,6 +305,12 @@ Two things carry the product into the open, and an organization can switch each 
 
 The website of the product carries its own line in the footer; the website content switches it with `showProductCredit`.
 
+## When A Rating Is Low
+
+A rating of one or two stars reaches the people assigned to that event. Two things decide whether anything arrives at all: a notification channel of that person, and a row in `user_event_assignments` for that event with `notify_low_rating`. **The recipient hangs on the event, not on the channel** — a channel alone stays silent, and the job still reports `done`.
+
+What travels depends on the channel. **A push names no guest**: stars, event, time, and the note that the details are elsewhere. It lands on a lock screen and travels over a notification service. **A mail carries everything**: the callback number, the request, the free-text answers and a link into the dashboard. It goes to a mailbox the organizer named.
+
 ## Where Guests Stop
 
 Every visit of a guest page is one session. The page reports each step it shows, the submission closes the session, and the admin area reads two things out of that: how often the page was opened, and the step people stopped at.
@@ -553,7 +559,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.44.2`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.45.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

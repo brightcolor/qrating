@@ -58,15 +58,48 @@ describe('NotificationService', () => {
       }
     );
     expect(result[0].ok).toBe(true);
-    expect(smtpService.sendMail).toHaveBeenCalledWith('org-1', expect.objectContaining({
-      to: 'person@example.com',
-      text: expect.stringContaining('geschützten Low-Rating-Dashboard')
-    }));
-    expect(smtpService.sendMail.mock.calls[0][1].text).not.toContain('+491234');
-    expect(smtpService.sendMail.mock.calls[0][1].text).not.toContain('Bitte anrufen');
-    // Ein Stern ist ein Stern.
-    expect(smtpService.sendMail.mock.calls[0][1].subject).toBe('qrating: 1 Stern für Demo');
-    expect(smtpService.sendMail.mock.calls[0][1].text).toContain('(1 Stern)');
+    const mail = smtpService.sendMail.mock.calls[0][1];
+    // Die Mail geht an ein bekanntes Postfach und trägt alles.
+    expect(mail.to).toBe('person@example.com');
+    expect(mail.subject).toBe('qrating: 1 Stern für Demo');
+    expect(mail.text).toContain('+491234');
+    expect(mail.text).toContain('Bitte anrufen');
+    expect(mail.text).toContain('1 Stern');
+  });
+
+  it('keeps the guest out of a push, which lands on a lock screen', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    const db = {
+      query: vi.fn()
+        .mockResolvedValueOnce({
+          rows: [{
+            id: 'channel-2',
+            organization_id: 'org-1',
+            channel_type: 'ntfy',
+            config: { topicUrl: 'https://ntfy.example/topic' }
+          }]
+        })
+        .mockResolvedValueOnce({ rows: [{ id: 'delivery-2' }] })
+        .mockResolvedValue({ rows: [] })
+    };
+    const service = new NotificationService(db, { fetchImpl });
+    await service.dispatchLowRating(
+      { id: 'event-1', organization_id: 'org-1', name: 'Demo' },
+      {
+        id: 'feedback-1',
+        rating: 2,
+        submitted_at: '2026-01-01T12:00:00Z',
+        low_rating_case: {
+          contact_phone_encrypted: encryptSecret('+491234'),
+          contact_note: 'Bitte anrufen'
+        }
+      }
+    );
+
+    const body = fetchImpl.mock.calls[0][1].body;
+    expect(body).not.toContain('+491234');
+    expect(body).not.toContain('Bitte anrufen');
+    expect(body).toContain('Low-Rating-Dashboard');
   });
 
   it('counts more than one in the plural', async () => {

@@ -4,6 +4,13 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.45.0] - 2026-09-18
+
+### Changed
+
+- An alert about a low rating now says different things depending on where it goes. A push names no guest — stars, event, time. A mail carries the whole picture: callback number, request, the free-text answers and a link into the dashboard.
+- Version bumped to `0.45.0`.
+
 ## [0.44.2] - 2026-09-18
 
 ### Fixed
