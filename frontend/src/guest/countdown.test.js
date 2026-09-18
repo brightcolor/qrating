@@ -58,6 +58,13 @@ describe('the countdown until a round opens', () => {
     expect(segments[0]).toMatchObject({ key: 'days', value: '5', label: 'Tage' });
   });
 
+  it('counts a single day in the singular', () => {
+    const parts = countdownParts(new Date('2026-09-19T15:00:00.000Z'), now);
+
+    expect(countdownSegments(parts)[0]).toMatchObject({ value: '1', label: 'Tag' });
+    expect(countdownSegments(parts, 'en')[0].label).toBe('day');
+  });
+
   it('names the segments in the language of the page', () => {
     const parts = countdownParts(new Date('2026-09-23T12:00:00.000Z'), now);
 

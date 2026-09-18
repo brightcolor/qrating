@@ -80,7 +80,8 @@ export function publicOrganization(organization = {}) {
     instagramUrl: organization.instagram_url,
     facebookUrl: organization.facebook_url,
     branding: organization.branding || {},
-    defaultLanguage: organization.default_language
+    defaultLanguage: organization.default_language,
+    credit: creditFor(organization)
   };
 }
 
@@ -101,7 +102,8 @@ export function publicEventStatus(event = {}) {
       privacy_text: event.privacy_text,
       footer_text: event.footer_text,
       branding: event.branding,
-      default_language: event.default_language
+      default_language: event.default_language,
+      product_credit_enabled: event.product_credit_enabled
     })
   };
 }

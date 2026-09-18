@@ -62,6 +62,17 @@ describe('the note about qrating and the mark in the code', () => {
     expect(guest.body.event.credit).toContain('bright color');
   });
 
+  it('shows the note on a page that waits for the next event', async () => {
+    const organization = (await query('SELECT slug FROM organizations LIMIT 1')).rows[0];
+    await query("UPDATE events SET date_from = now() + interval '10 days', date_to = NULL");
+
+    const waiting = await request('GET', `/public/f/${organization.slug}`);
+
+    expect(waiting.body.status).toBe('waiting');
+    expect(waiting.body.event).toBeUndefined();
+    expect(waiting.body.organization.credit).toBe(productCredit);
+  });
+
   it('carries the mark in the QR code and the note on the sheet', async () => {
     const code = await text(`/admin/events/${event.id}/qr`, ownerCookie);
     const sheet = await text(`/admin/events/${event.id}/qr-print`, ownerCookie);
@@ -84,6 +95,9 @@ describe('the note about qrating and the mark in the code', () => {
     const sheet = await text(`/admin/events/${event.id}/qr-print`, ownerCookie);
 
     expect(guest.body.event.credit).toBe(null);
+    const organization = (await query('SELECT slug FROM organizations LIMIT 1')).rows[0];
+    const waiting = await request('GET', `/public/f/${organization.slug}`);
+    expect(waiting.body.organization.credit).toBe(null);
     expect(code.body).not.toContain('#FFC933');
     expect(sheet.body).not.toContain('#FFC933');
     expect(sheet.body).not.toContain('bright color');

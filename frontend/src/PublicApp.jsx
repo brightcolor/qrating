@@ -51,7 +51,7 @@ function PublicFeedback({ mode, identifier, source }) {
       upcoming={data.upcoming || []}
       opensAt={data.feedback?.opensAt}
       lang={lang}
-      credit={data.event?.credit || null}
+      credit={data.event?.credit || data.organization?.credit || null}
       />
       </div>
     </GuestStage>;

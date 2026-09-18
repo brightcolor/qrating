@@ -4,6 +4,14 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.39.1] - 2026-09-18
+
+### Fixed
+
+- The note about the makers now also appears on the page of an organization that waits for its next event. It used to travel with the event alone, so exactly that page stayed without it.
+- The countdown says "1 Tag" on the last day.
+- Version bumped to `0.39.1`.
+
 ## [0.39.0] - 2026-09-18
 
 ### Added

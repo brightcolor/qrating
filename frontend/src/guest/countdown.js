@@ -26,8 +26,8 @@ export function countdownParts(target, now = new Date()) {
 }
 
 export const countdownLabels = {
-  de: { days: 'Tage', hours: 'Std', minutes: 'Min', seconds: 'Sek' },
-  en: { days: 'days', hours: 'hrs', minutes: 'min', seconds: 'sec' }
+  de: { days: 'Tage', day: 'Tag', hours: 'Std', minutes: 'Min', seconds: 'Sek' },
+  en: { days: 'days', day: 'day', hours: 'hrs', minutes: 'min', seconds: 'sec' }
 };
 
 // Days drop out once the last one is over, so the remaining segments get the room.
@@ -37,7 +37,7 @@ export function countdownSegments(parts, lang = 'de') {
   const keys = parts.days > 0 ? ['days', 'hours', 'minutes', 'seconds'] : ['hours', 'minutes', 'seconds'];
   return keys.map((key) => ({
     key,
-    label: labels[key],
+    label: key === 'days' && parts.days === 1 ? labels.day : labels[key],
     value: key === 'days' ? String(parts.days) : String(parts[key]).padStart(2, '0')
   }));
 }
