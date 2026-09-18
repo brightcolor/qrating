@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.36.0
+**Version:** 0.37.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -248,6 +248,22 @@ Workshop & Seminar, Theater, Lesung & Comedy, Emotionaler Rückblick, and Nachfa
 
 Every template creates editable questions; the panel next to the editor shows the guest flow that results from them.
 Question types: short answer, long answer, multiple selection, single selection, yes/no, recommendation (0 to 10), and stars (1 to 5).
+
+## Print Sheets
+
+A sheet carries the code, and four designs decide how it looks. The admin area picks one under **QR & Wallboard**; the address takes it as `?design=`:
+
+| Design | What it looks like |
+|---|---|
+| `klassik` | rating stars, the question, the code, and the event below a rule |
+| `pur` | the question and a large code, nothing else |
+| `tafel` | a coloured band with the question in large type, the code below, for the wall |
+| `karte` | a small card to cut out and put on a table |
+
+Two kinds of sheet exist:
+
+- `GET /admin/events/:id/qr-print` for one event, with its name and date
+- `GET /admin/organizations/:id/qr-print` for the organizer. It carries the dynamic code, so it leads to whatever runs, and it names no single evening. An own headline fits through `?hook=`.
 
 ## Before And After The Round
 
@@ -519,7 +535,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.36.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.37.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

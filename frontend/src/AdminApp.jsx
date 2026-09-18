@@ -579,6 +579,7 @@ function EventCard({ event, events = [], onChanged }) {
         <button onClick={() => setUpcomingOpen(!upcomingOpen)} className="button-secondary"><CalendarDays size={16} /> Kommende Events</button>
         {event.source === 'pretix' && <button onClick={syncImage} className="button-secondary"><Image size={16} /> Bild neu laden</button>}
         <a className="button-secondary" href={`${API_BASE}/admin/events/${event.id}/qr-print`} target="_blank"><QrCode size={16} /> Druck</a>
+        <a className="button-secondary" href={`${API_BASE}/admin/events/${event.id}/qr-print?design=pur`} target="_blank"><QrCode size={16} /> Druck pur</a>
         <button onClick={openPreview} className="button-secondary"><Eye size={16} /> Vorschau</button>
         <label className="flex items-center gap-2 rounded-md border border-neutral-200 px-3 py-2 text-sm">
           <Archive size={16} className="text-neutral-500" />
@@ -1291,6 +1292,8 @@ function QrAndWallboard() {
   const { data: events, error: eventsError } = useAsync(() => api('/admin/events'), []);
   const [selectedEvent, setSelectedEvent] = useState('');
   const [source, setSource] = useState({ sourceSlug: 'ausgang', label: 'Ausgang', type: 'dynamic_organization' });
+  const { data: designs } = useAsync(() => api('/admin/print-designs'), []);
+  const [design, setDesign] = useState('klassik');
   const [message, setMessage] = useState('');
   useEffect(() => {
     if (!selectedEvent && events?.[0]) setSelectedEvent(events[0].id);
@@ -1321,7 +1324,17 @@ function QrAndWallboard() {
         {dashboard?.organization && <p className="mt-4 break-all text-sm text-neutral-600">Beispiel: {dashboard.feedbackAppUrl}/f/{dashboard.organization.slug}/bar</p>}
       </Panel>
       <Panel title="Druckvorlagen">
-        <div className="space-y-2">{events?.map((event) => <a key={event.id} className="button-secondary w-full justify-between" href={`${API_BASE}/admin/events/${event.id}/qr-print`} target="_blank"><span>{eventLabel(event)}</span><QrCode size={16} /></a>)}</div>
+        <div className="grid gap-2 md:grid-cols-2">
+          {designs?.map((item) => <label key={item.id} className={`flex cursor-pointer gap-2 rounded-md border p-3 text-sm ${design === item.id ? 'border-blue-600 bg-blue-50' : 'border-neutral-200'}`}>
+            <input className="mt-1" type="radio" name="print-design" value={item.id} checked={design === item.id} onChange={() => setDesign(item.id)} />
+            <span><strong>{item.label}</strong><span className="block text-neutral-600">{item.hint}</span></span>
+          </label>)}
+        </div>
+        {dashboard?.organization && <a className="button-primary mt-4 w-full justify-between" href={`${API_BASE}/admin/organizations/${dashboard.organization.id}/qr-print?design=${design}`} target="_blank">
+          <span>Aushang für {dashboard.organization.name}</span><QrCode size={16} />
+        </a>}
+        <p className="mt-2 text-sm text-neutral-500">Der Aushang für den Veranstalter trägt den dynamischen Code: Er führt immer zum Event, das gerade läuft.</p>
+        <div className="mt-4 space-y-2">{events?.map((event) => <a key={event.id} className="button-secondary w-full justify-between" href={`${API_BASE}/admin/events/${event.id}/qr-print?design=${design}`} target="_blank"><span>{eventLabel(event)}</span><QrCode size={16} /></a>)}</div>
       </Panel>
     </div>
     <Panel title="QR-Quellen-Auswertung">

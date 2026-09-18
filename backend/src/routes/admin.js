@@ -14,7 +14,7 @@ import { normalizeEventInput, normalizeEventImageUpdate } from '../db/bootstrap.
 import { toCsv, toXlsx } from '../utils/export.js';
 import { defaultTexts, defaultTextsByLanguage } from '../services/textService.js';
 import { buildEventReportPdf } from '../utils/pdf.js';
-import { renderQrPrintSheet } from '../utils/printSheet.js';
+import { isSheetDesign, renderQrPrintSheet, sheetDesigns } from '../utils/printSheet.js';
 import { NewsletterService } from '../services/newsletterService.js';
 import { buildFunnel } from '../services/guestSessionService.js';
 import { attachmentHeader } from '../utils/downloadName.js';
@@ -83,6 +83,17 @@ async function ensureEventAccess(req, eventId) {
   if (!(await canAccessEvent({ query }, req.admin, eventId))) {
     throw httpError(403, 'Du hast für dieses Event keine Berechtigung. Ein Event-Manager oder Admin kann dich dem Event zuweisen.');
   }
+}
+
+function sheetHeaders(res) {
+  // The print dialog needs a script, and helmet's script-src 'self' blocks inline code.
+  // This one response carries a stricter policy of its own that allows exactly this script.
+  const nonce = randomToken(16);
+  res.setHeader(
+    'content-security-policy',
+    `default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'self'`
+  );
+  return nonce;
 }
 
 // Name, colour and the two switches of the organization, for QR codes and sheets.
@@ -768,22 +779,48 @@ adminRouter.get('/events/:id/qr-print', async (req, res, next) => {
     const url = `${env.feedbackAppUrl}/e/${event.event_feedback_token}`;
     const look = await organizationLook(req.admin.organizationId);
     const svg = await renderQrSvg(url, { withMark: look.qr_mark_enabled !== false });
-    // The print dialog needs a script, and helmet's script-src 'self' blocks inline code.
-    // This one response carries a stricter policy of its own that allows exactly this script.
-    const nonce = randomToken(16);
-    res.setHeader(
-      'content-security-policy',
-      `default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'self'`
-    );
+    const nonce = sheetHeaders(res);
     // Event names come from admins and from the Pretix sync, so every value is escaped inside the sheet.
     res.type('html').send(renderQrPrintSheet({
       event,
       organizationName: look.name,
       accentColor: look.primary_color,
       credit: look.product_credit_enabled === false ? null : productCredit,
+      design: isSheetDesign(req.query.design) ? req.query.design : undefined,
       qrSvg: svg,
       nonce
     }));
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.get('/organizations/:id/qr-print', async (req, res, next) => {
+  try {
+    const org = (await query('SELECT * FROM organizations WHERE id = $1 AND id = $2', [req.params.id, req.admin.organizationId])).rows[0];
+    if (!org) throw httpError(404, 'Diese Organisation gehört nicht zu deinem Konto. Lade die Seite neu.');
+    const url = `${env.feedbackAppUrl}/f/${org.slug}`;
+    const svg = await renderQrSvg(url, { withMark: org.qr_mark_enabled !== false });
+    const nonce = sheetHeaders(res);
+    res.type('html').send(renderQrPrintSheet({
+      event: null,
+      organizationName: org.name,
+      accentColor: org.primary_color,
+      credit: org.product_credit_enabled === false ? null : productCredit,
+      design: isSheetDesign(req.query.design) ? req.query.design : 'pur',
+      hook: req.query.hook ? String(req.query.hook).slice(0, 60) : null,
+      qrSvg: svg,
+      nonce
+    }));
+  } catch (error) {
+    next(error);
+  }
+});
+
+// The admin area lists what a sheet can look like.
+adminRouter.get('/print-designs', async (req, res, next) => {
+  try {
+    res.json(Object.entries(sheetDesigns).map(([id, design]) => ({ id, ...design })));
   } catch (error) {
     next(error);
   }

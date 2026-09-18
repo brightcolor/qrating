@@ -4,6 +4,15 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.37.0] - 2026-09-18
+
+### Added
+
+- A print sheet for the organizer: it carries the dynamic code, leads to whatever event runs and names no single evening. An own headline fits on it.
+- Four designs for the sheets: the classic one, a pure one with only the question and a large code, a poster with a coloured band, and a small card to cut out.
+- The admin area picks the design under QR & Wallboard, and the print button of an event follows that choice.
+- Version bumped to `0.37.0`.
+
 ## [0.36.0] - 2026-09-18
 
 ### Added
