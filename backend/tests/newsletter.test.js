@@ -256,6 +256,21 @@ describe('newsletter connection to MailWizz', () => {
     expect(back.body).toMatchObject({ source_field_tag: 'QUELLE', source_field_value: 'qrating' });
   });
 
+  it('stores the consent in the words the organization put on the page', async () => {
+    const consent = 'Ja, ich möchte Post von HSP-Events bekommen.';
+    await query(
+      `INSERT INTO text_templates (organization_id, event_id, language, key, value)
+       VALUES ((SELECT organization_id FROM events WHERE id = $1), null, 'de', 'newsletter_label', $2)`,
+      [event.id, consent]
+    );
+
+    const feedback = await submitFeedback('einwilligung@example.com');
+    expect(feedback.status).toBe(201);
+
+    const optin = (await query("SELECT consent_text FROM newsletter_optins ORDER BY consent_given_at DESC LIMIT 1")).rows[0];
+    expect(optin.consent_text).toBe(consent);
+  });
+
   it('collects the entries that are still open', async () => {
     const queued = await request('POST', '/admin/newsletter/sync-pending', { cookie: ownerCookie });
 

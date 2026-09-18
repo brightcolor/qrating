@@ -143,7 +143,7 @@ export function answerText(question, value, texts) {
   }
 }
 
-export function buildPayload(state, { questions = [], sourceType, startedAt, honeypot = '' }) {
+export function buildPayload(state, { questions = [], sourceType, startedAt, honeypot = '', language = 'de' }) {
   const answers = {};
   for (const question of questions) {
     const value = state.answers[question.internal_name];
@@ -165,6 +165,7 @@ export function buildPayload(state, { questions = [], sourceType, startedAt, hon
     contactPhone,
     contactNote: lowRating ? state.contactNote.trim() : '',
     testimonialAllowed: false,
+    language,
     sourceType,
     honeypot,
     startedAt,

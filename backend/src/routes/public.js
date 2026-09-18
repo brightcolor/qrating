@@ -232,7 +232,8 @@ const feedbackSchema = Joi.object({
   sourceType: Joi.string().max(80).default('event_specific'),
   answers: Joi.object().unknown(true).default({}),
   honeypot: Joi.string().allow('', null),
-  startedAt: Joi.date().iso().allow(null)
+  startedAt: Joi.date().iso().allow(null),
+  language: Joi.string().max(10).allow('', null)
 });
 
 publicRouter.post('/events/:eventToken/feedback', feedbackLimiter, async (req, res, next) => {
@@ -246,6 +247,8 @@ publicRouter.post('/events/:eventToken/feedback', feedbackLimiter, async (req, r
     const resolved = await resolver.resolveEventByToken(req.params.eventToken);
     if (resolved.status !== 'ok') return res.status(410).json({ error: 'Die Bewertung für dieses Event ist gerade geschlossen. Dein Feedback konnte deshalb nicht gespeichert werden.' });
     const event = resolved.event;
+    // The texts of the organization: the guest agreed to these words, so these are the ones that get stored.
+    const texts = await loadResolvedTexts({ query }, event.organization_id, event.id, value.language || event.default_language || 'de', event);
     const antiSpam = event.anti_spam_settings || {};
     const secondsSinceStart = value.startedAt ? (Date.now() - new Date(value.startedAt).getTime()) / 1000 : null;
     const honeypotHit = antiSpam.honeypot_enabled !== false && Boolean(value.honeypot);
@@ -307,7 +310,7 @@ publicRouter.post('/events/:eventToken/feedback', feedbackLimiter, async (req, r
           encryptSecret(normalizedEmail),
           emailHash(normalizedEmail),
           emailDomain(normalizedEmail),
-          defaultTexts.newsletter_label
+          texts.newsletter_label
         ]
       )).rows[0];
       // The handover to the newsletter system runs in the background, so the guest waits for nothing.
@@ -321,7 +324,7 @@ publicRouter.post('/events/:eventToken/feedback', feedbackLimiter, async (req, r
         emailProvided: true,
         emailHash: emailHash(normalizedEmail),
         emailDomain: emailDomain(normalizedEmail),
-        consentText: defaultTexts.newsletter_label,
+        consentText: texts.newsletter_label,
         source: value.sourceType,
         consentGivenAt: feedback.submitted_at
       });
@@ -353,7 +356,7 @@ publicRouter.post('/events/:eventToken/feedback', feedbackLimiter, async (req, r
             feedback.rating,
             value.contactPhone ? encryptSecret(value.contactPhone) : null,
             value.contactNote ? encryptSecret(value.contactNote) : null,
-            defaultTexts.low_rating_contact_text,
+            texts.low_rating_contact_text,
             'Besucher hat freiwillig eine Rückrufnummer zur Klärung einer niedrigen Bewertung hinterlassen.'
           ]
         );
@@ -370,7 +373,7 @@ publicRouter.post('/events/:eventToken/feedback', feedbackLimiter, async (req, r
         feedbackId: feedback.id
       }).catch(() => {});
     }
-    res.status(201).json({ ok: true, message: defaultTexts.thank_text });
+    res.status(201).json({ ok: true, message: texts.thank_text });
   } catch (error) {
     next(error);
   }

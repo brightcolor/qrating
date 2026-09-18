@@ -246,7 +246,7 @@ export function FeedbackFlow({ event, texts, sourceType, lang = 'de', preview = 
     try {
       await api(`/public/events/${event.token}/feedback`, {
         method: 'POST',
-        body: JSON.stringify(buildPayload(state, { questions, sourceType, startedAt, honeypot }))
+        body: JSON.stringify(buildPayload(state, { questions, sourceType, startedAt, honeypot, language: lang }))
       });
       clearDraft(event.token);
       setDone(true);

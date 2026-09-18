@@ -124,9 +124,11 @@ describe('guest flow', () => {
       contactNote: 'Bitte anrufen',
       newsletter: true,
       newsletterEmail: ' gast@example.de '
-    }, { questions, sourceType: 'bar', startedAt: '2026-09-17T18:00:00.000Z' });
+    }, { questions, sourceType: 'bar', startedAt: '2026-09-17T18:00:00.000Z', language: 'en' });
 
     expect(payload).toMatchObject({
+      // The language travels along, so the stored consent is the text the guest read.
+      language: 'en',
       rating: 2,
       npsScore: 9,
       commentPositive: 'Starke Band',

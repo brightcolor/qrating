@@ -4,6 +4,14 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.31.0] - 2026-09-18
+
+### Fixed
+
+- The Pretix sync read only the first page of the event list, so an organizer with more events than fit on one page kept the rest out of qrating. The sync now follows every page, up to fifty, and ignores a next page that leaves the Pretix address.
+- A newsletter opt-in stored the default consent sentence instead of the sentence the organization put on the guest page. The consent is stored the way the guest read it, in the language of the page, and the same goes for the contact text of a low rating and the thank-you.
+- Version bumped to `0.31.0`.
+
 ## [0.30.1] - 2026-09-18
 
 ### Fixed

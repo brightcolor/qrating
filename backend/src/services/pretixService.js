@@ -3,6 +3,9 @@ import { randomToken, slugify } from '../utils/crypto.js';
 import { plainText } from '../utils/localized.js';
 import { fetchService, openSecret } from '../utils/serviceErrors.js';
 
+// A sync walks at most this many pages, so a broken answer cannot turn into an endless run.
+const maxEventPages = 50;
+
 // Pretix answers for the organizer event list.
 const pretixEventListReasons = {
   401: ['hat den API-Token abgelehnt', 'Trage in der Verbindung einen gültigen Token ein.'],
@@ -45,28 +48,33 @@ export class PretixService {
     const organizer = connection.pretix_organizer_slug;
     let imported = 0;
     let images = 0;
-    const response = await fetchService('Pretix', this.fetchImpl, `${base}/api/v1/organizers/${organizer}/events/`, {
-      headers: { Authorization: `Token ${token}` }
-    }, { overrides: pretixEventListReasons });
-    const data = await response.json();
-    const events = data.results || [];
+    // Pretix hands out its events page by page. The last page carries no "next",
+    // and a "next" that leaves the Pretix address is ignored.
+    let nextUrl = `${base}/api/v1/organizers/${organizer}/events/`;
+    for (let page = 0; nextUrl && page < maxEventPages; page += 1) {
+      const response = await fetchService('Pretix', this.fetchImpl, nextUrl, {
+        headers: { Authorization: `Token ${token}` }
+      }, { overrides: pretixEventListReasons });
+      const data = await response.json();
+      nextUrl = typeof data.next === 'string' && data.next.startsWith(base) ? data.next : null;
 
-    for (const pretixEvent of events) {
-      if (connection.import_live_only && !pretixEvent.live) continue;
-      if (connection.ignore_testmode && pretixEvent.testmode) continue;
-      if (connection.import_public_only && pretixEvent.is_public === false) continue;
-      const saved = await this.upsertPretixEvent(connection, pretixEvent);
-      imported += 1;
-      if (connection.import_event_images) {
-        // Events without a picture answer with null; a failed lookup keeps its reason on the event.
-        const resolved = await this.syncImageForEvent(authConnection, saved, pretixEvent.slug).catch((error) => ({ error }));
-        if (resolved?.error) {
-          await this.db.query(
-            'UPDATE events SET image_sync_error = $1, image_last_synced_at = now(), updated_at = now() WHERE id = $2',
-            [resolved.error.message || String(resolved.error), saved.id]
-          );
-        } else if (resolved?.url) {
-          images += 1;
+      for (const pretixEvent of data.results || []) {
+        if (connection.import_live_only && !pretixEvent.live) continue;
+        if (connection.ignore_testmode && pretixEvent.testmode) continue;
+        if (connection.import_public_only && pretixEvent.is_public === false) continue;
+        const saved = await this.upsertPretixEvent(connection, pretixEvent);
+        imported += 1;
+        if (connection.import_event_images) {
+          // Events without a picture answer with null; a failed lookup keeps its reason on the event.
+          const resolved = await this.syncImageForEvent(authConnection, saved, pretixEvent.slug).catch((error) => ({ error }));
+          if (resolved?.error) {
+            await this.db.query(
+              'UPDATE events SET image_sync_error = $1, image_last_synced_at = now(), updated_at = now() WHERE id = $2',
+              [resolved.error.message || String(resolved.error), saved.id]
+            );
+          } else if (resolved?.url) {
+            images += 1;
+          }
         }
       }
     }
