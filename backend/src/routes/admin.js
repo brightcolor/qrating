@@ -335,9 +335,15 @@ adminRouter.put('/events/:id/assignments', async (req, res, next) => {
   }
 });
 
+// What an event can be: a draft, active and rateable, finished, or archived.
+const eventStatuses = ['draft', 'active', 'closed', 'archived'];
+
 adminRouter.patch('/events/:id', async (req, res, next) => {
   try {
     await ensureEventAccess(req, req.params.id);
+    if (req.body.status !== undefined && req.body.status !== null && !eventStatuses.includes(req.body.status)) {
+      throw httpError(400, `Den Status „${req.body.status}“ gibt es nicht. Möglich sind: ${eventStatuses.join(', ')}.`);
+    }
     const image = normalizeEventImageUpdate(req.body);
     const result = await query(
       `UPDATE events SET

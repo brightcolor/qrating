@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.31.0
+**Version:** 0.32.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -248,6 +248,17 @@ Workshop & Seminar, Theater, Lesung & Comedy, Emotionaler Rückblick, and Nachfa
 Every template creates editable questions; the panel next to the editor shows the guest flow that results from them.
 Question types: short answer, long answer, multiple selection, single selection, yes/no, recommendation (0 to 10), and stars (1 to 5).
 
+## Event Status
+
+An event carries one of four statuses, and the event card in the admin area sets it:
+
+- `draft`: prepared, the guest page stays closed
+- `active`: the only status that collects feedback
+- `closed`: finished on purpose, the guest page is closed although the feedback window may still run
+- `archived`: out of QR code and guest page, the data stay
+
+The dynamic QR code of an organization only ever points at an active event.
+
 ## Event Preview
 
 Every event card carries a "Vorschau" button. It asks the admin API for a link that opens the guest page of that event, signed and valid for two hours:
@@ -454,7 +465,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.31.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.32.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

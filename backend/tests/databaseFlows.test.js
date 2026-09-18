@@ -175,6 +175,31 @@ describe('backend flows against PostgreSQL', () => {
     expect(await countRows("SELECT count(*)::int AS count FROM events WHERE source = 'manual'")).toBe(2);
   });
 
+  it('closes the guest page for an event that is a draft or finished', async () => {
+    const event = (await query("SELECT id, event_feedback_token FROM events WHERE slug = 'demo-nacht'")).rows[0];
+
+    for (const status of ['draft', 'closed', 'archived']) {
+      const changed = await request('PATCH', `/admin/events/${event.id}`, { cookie: ownerCookie, body: { status } });
+      expect(changed.status).toBe(200);
+      const guest = await request('GET', `/public/e/${event.event_feedback_token}`);
+      expect(guest.status).toBe(410);
+    }
+
+    const back = await request('PATCH', `/admin/events/${event.id}`, { cookie: ownerCookie, body: { status: 'active' } });
+    expect(back.status).toBe(200);
+    const open = await request('GET', `/public/e/${event.event_feedback_token}`);
+    expect(open.status).toBe(200);
+  });
+
+  it('names the statuses an event can have', async () => {
+    const event = (await query("SELECT id FROM events WHERE slug = 'demo-nacht'")).rows[0];
+
+    const refused = await request('PATCH', `/admin/events/${event.id}`, { cookie: ownerCookie, body: { status: 'halb-fertig' } });
+
+    expect(refused.status).toBe(400);
+    expect(refused.body.error).toContain('draft, active, closed, archived');
+  });
+
   it('creates another event with a name that is already taken', async () => {
     // The Free plan allows two active events; the demo event and the first own event use them up.
     await query("UPDATE organizations SET billing_override_plan = 'business'");

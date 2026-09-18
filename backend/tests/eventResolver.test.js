@@ -21,6 +21,17 @@ function event(overrides = {}) {
 }
 
 describe('EventResolver window logic', () => {
+  it('collects feedback only while the event is active', () => {
+    const during = DateTime.fromISO('2026-09-05T20:00:00+02:00');
+
+    expect(isEventFeedbackOpen(event(), during)).toBe(true);
+    expect(isEventFeedbackOpen(event({ status: 'draft' }), during)).toBe(false);
+    expect(isEventFeedbackOpen(event({ status: 'closed' }), during)).toBe(false);
+    expect(isEventFeedbackOpen(event({ status: 'archived' }), during)).toBe(false);
+    expect(rankCandidateEvents([event({ status: 'draft' }), event({ id: 'event-2' })], during).map((item) => item.id))
+      .toEqual(['event-2']);
+  });
+
   it('handles events without date_to', () => {
     const window = calculateFeedbackWindow(event({ feedback_window_days: 2 }));
     expect(window.feedbackEnd.toISO()).toContain('2026-09-07T18:00:00');

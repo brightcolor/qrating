@@ -4,6 +4,14 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.32.0] - 2026-09-18
+
+### Changed
+
+- The status of an event decides again whether the guest page is open. A draft and a finished event collect no feedback any more, and the dynamic QR code skips them. Until now only an archived event was left out.
+- The event card sets the status directly: draft, active, finished or archived. A status that does not exist is refused with a message that names the four.
+- Version bumped to `0.32.0`.
+
 ## [0.31.0] - 2026-09-18
 
 ### Fixed

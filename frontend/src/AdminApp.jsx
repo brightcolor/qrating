@@ -36,6 +36,21 @@ import { eventLabel, formatDate } from './admin/eventLabel.js';
 const SecurityCenter = React.lazy(() => import('./admin/SecurityCenter.jsx').then((module) => ({ default: module.SecurityCenter })));
 const Tenants = React.lazy(() => import('./admin/Tenants.jsx').then((module) => ({ default: module.Tenants })));
 
+// What an event can be. Only an active event collects feedback.
+const eventStatusLabels = {
+  draft: 'Entwurf',
+  active: 'Aktiv',
+  closed: 'Beendet',
+  archived: 'Archiviert'
+};
+
+const eventStatusNotices = {
+  draft: 'Das Event ist ein Entwurf und nimmt kein Feedback an.',
+  active: 'Das Event ist aktiv und nimmt Feedback an.',
+  closed: 'Das Event ist beendet. Die Gästeseite nimmt kein Feedback mehr an.',
+  archived: 'Das Event ist archiviert und fällt aus QR-Code und Gästeseite.'
+};
+
 function useAsync(fn, deps = []) {
   const [state, setState] = useState({ loading: true, data: null, error: null });
   useEffect(() => {
@@ -472,12 +487,11 @@ function EventCard({ event, onChanged }) {
       setMessage(errorNotice(err));
     }
   }
-  async function toggleArchive() {
+  async function changeStatus(status) {
     setMessage('');
-    const archived = event.status === 'archived';
     try {
-      await api(`/admin/events/${event.id}`, { method: 'PATCH', body: JSON.stringify({ status: archived ? 'active' : 'archived' }) });
-      setMessage(archived ? 'Das Event ist wieder aktiv.' : 'Das Event ist archiviert und fällt aus QR-Code und Gästeseite.');
+      await api(`/admin/events/${event.id}`, { method: 'PATCH', body: JSON.stringify({ status }) });
+      setMessage(eventStatusNotices[status] || 'Status gespeichert.');
       onChanged?.();
     } catch (err) {
       setMessage(errorNotice(err));
@@ -512,7 +526,7 @@ function EventCard({ event, onChanged }) {
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="font-semibold">{event.name}</h2>
             <span className="rounded bg-neutral-100 px-2 py-1 text-xs">{event.source}</span>
-            {event.status === 'archived' && <span className="rounded bg-amber-100 px-2 py-1 text-xs text-amber-900">archiviert</span>}
+            {event.status !== 'active' && <span className="rounded bg-amber-100 px-2 py-1 text-xs text-amber-900">{eventStatusLabels[event.status] || event.status}</span>}
           </div>
           <p className="mt-1 text-sm text-neutral-600">{formatDate(event.date_from)} · {event.location || 'Keine Location'}</p>
           <p className="mt-1 text-sm text-neutral-500">Bildquelle: {event.image_source || 'Fallback'} {event.detected_image_settings_key ? `· Key: ${event.detected_image_settings_key}` : ''}</p>
@@ -526,7 +540,13 @@ function EventCard({ event, onChanged }) {
         {event.source === 'pretix' && <button onClick={syncImage} className="button-secondary"><Image size={16} /> Bild neu laden</button>}
         <a className="button-secondary" href={`${API_BASE}/admin/events/${event.id}/qr-print`} target="_blank"><QrCode size={16} /> Druck</a>
         <button onClick={openPreview} className="button-secondary"><Eye size={16} /> Vorschau</button>
-        <button onClick={toggleArchive} className="button-secondary"><Archive size={16} /> {event.status === 'archived' ? 'Wieder aktivieren' : 'Archivieren'}</button>
+        <label className="flex items-center gap-2 rounded-md border border-neutral-200 px-3 py-2 text-sm">
+          <Archive size={16} className="text-neutral-500" />
+          <span className="sr-only">Status des Events</span>
+          <select className="bg-transparent text-sm" value={event.status || 'active'} onChange={(e) => changeStatus(e.target.value)}>
+            {Object.entries(eventStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </label>
         <button onClick={askDelete} className="button-secondary" title="Event löschen"><Trash2 size={16} /></button>
         <a className="button-blue" href={eventUrl} target="_blank"><ExternalLink size={16} /> Feedback</a>
       </div>

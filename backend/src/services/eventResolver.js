@@ -1,5 +1,9 @@
 import { DateTime } from 'luxon';
 
+// Only an active event collects feedback. A draft is not out yet, a finished or
+// archived one is done.
+export const ratingStatus = 'active';
+
 export function asDateTime(value, zone = 'UTC') {
   if (!value) return null;
   const parsed = DateTime.fromJSDate(value instanceof Date ? value : new Date(value), { zone: 'utc' });
@@ -32,7 +36,7 @@ export function calculateFeedbackWindow(event) {
 }
 
 export function isEventFeedbackOpen(event, now = DateTime.utc()) {
-  if (!event.feedback_enabled || event.status === 'archived' || event.not_found_in_source) return false;
+  if (!event.feedback_enabled || event.status !== ratingStatus || event.not_found_in_source) return false;
   const zone = event.event_timezone || 'UTC';
   const current = DateTime.isDateTime(now) ? now.setZone(zone) : asDateTime(now, zone);
   const { feedbackStart, feedbackEnd } = calculateFeedbackWindow(event);
@@ -88,7 +92,7 @@ export class EventResolver {
       `SELECT * FROM events
        WHERE organization_id = $1
          AND feedback_enabled = true
-         AND status <> 'archived'
+         AND status = 'active'
        ORDER BY date_from DESC`,
       [organization.id]
     );
