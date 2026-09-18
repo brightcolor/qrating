@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.34.1
+**Version:** 0.35.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -248,6 +248,15 @@ Workshop & Seminar, Theater, Lesung & Comedy, Emotionaler Rückblick, and Nachfa
 
 Every template creates editable questions; the panel next to the editor shows the guest flow that results from them.
 Question types: short answer, long answer, multiple selection, single selection, yes/no, recommendation (0 to 10), and stars (1 to 5).
+
+## Mark And Note
+
+Two things carry the product into the open, and an organization can switch each one off under **Branding**:
+
+- the qrating mark in the middle of every QR code. The code is written with the highest error correction and the mark covers about a fifth of its width, so it stays readable. A test decodes a code with the mark and proves it.
+- the note `qrating — ein Projekt von bright color` on the guest page, on the ticket stub of the thank-you screen and under the event on the print sheet.
+
+The website of the product carries its own line in the footer; the website content switches it with `showProductCredit`.
 
 ## Where Guests Stop
 
@@ -497,7 +506,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.34.1`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.35.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

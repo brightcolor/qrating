@@ -109,7 +109,8 @@ export class EventResolver {
   async resolveEventByToken(eventToken, now = DateTime.utc()) {
     const result = await this.db.query(
       `SELECT e.*, o.slug AS organization_slug, o.name AS organization_name, o.primary_color, o.logo_url,
-              o.privacy_text, o.footer_text, o.branding, o.anti_spam_settings, o.default_language
+              o.privacy_text, o.footer_text, o.branding, o.anti_spam_settings, o.default_language,
+              o.product_credit_enabled
        FROM events e
        JOIN organizations o ON o.id = e.organization_id
        WHERE e.event_feedback_token = $1`,

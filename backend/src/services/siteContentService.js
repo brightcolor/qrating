@@ -5,6 +5,7 @@ const legacyHeroImageUrl = '/marketing-hero.png';
 
 export const defaultSiteContent = {
   brand: 'qrating',
+  showProductCredit: true,
   eyebrow: 'QR-Feedback für Events',
   headline: 'Dein Publikum hat was zu sagen.',
   subheadline: 'Ein QR-Code auf Bändchen, Ticket oder Tresen. Deine Gäste vergeben Sterne, tippen Stichworte an und sagen, was hängen blieb. Du erfährst es, solange der Abend noch nachklingt.',
@@ -108,6 +109,7 @@ export function normalizeSiteContent(content = {}) {
   return {
     ...merged,
     brand: String(merged.brand || defaultSiteContent.brand),
+    showProductCredit: merged.showProductCredit !== false,
     eyebrow: String(merged.eyebrow || ''),
     headline: String(merged.headline || defaultSiteContent.headline),
     subheadline: String(merged.subheadline || defaultSiteContent.subheadline),

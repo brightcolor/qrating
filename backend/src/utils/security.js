@@ -1,5 +1,6 @@
 import { env } from '../config/env.js';
 import { plainText } from './localized.js';
+import { productCredit } from './qrCode.js';
 import crypto from 'crypto';
 import { httpError } from '../middleware/errors.js';
 
@@ -58,6 +59,11 @@ export function emailHash(email) {
   const normalized = String(email || '').trim().toLowerCase();
   if (!normalized) return null;
   return crypto.createHmac('sha256', env.pretixTokenSecret).update(normalized).digest('hex');
+}
+
+// The note only travels when the organization leaves it switched on.
+export function creditFor(organization = {}) {
+  return organization.product_credit_enabled === false ? null : productCredit;
 }
 
 export function publicOrganization(organization = {}) {

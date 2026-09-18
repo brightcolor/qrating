@@ -857,6 +857,7 @@ function WebsiteContent() {
 
       <Panel title="Rechtliche Seiten">
         <div className="grid gap-4 lg:grid-cols-2">
+          <label className="flex items-center gap-2 rounded-md bg-neutral-50 p-3 md:col-span-2"><input type="checkbox" checked={form.showProductCredit !== false} onChange={(e) => setForm({ ...form, showProductCredit: e.target.checked })} /> Im Fuß der Website auf bright color hinweisen</label>
           <label className="block"><span className="text-sm font-medium">Impressum</span><textarea className="input mt-1 min-h-72" value={form.imprint || ''} onChange={(e) => setForm({ ...form, imprint: e.target.value })} /></label>
           <label className="block"><span className="text-sm font-medium">Datenschutz</span><textarea className="input mt-1 min-h-72" value={form.privacy || ''} onChange={(e) => setForm({ ...form, privacy: e.target.value })} /></label>
         </div>
@@ -1097,6 +1098,8 @@ function BrandingSettings() {
       retentionLowRatingPhoneDays: data.retention_low_rating_phone_days ?? 90,
       retentionFeedbackDays: data.retention_feedback_days ?? '',
       retentionNewsletterDays: data.retention_newsletter_days ?? '',
+      qrMarkEnabled: data.qr_mark_enabled !== false,
+      productCreditEnabled: data.product_credit_enabled !== false,
       wallboardDarkMode: data.wallboard_settings?.dark_mode !== false,
       wallboardRefreshSeconds: data.wallboard_settings?.refresh_seconds ?? 15
     });
@@ -1168,6 +1171,8 @@ function BrandingSettings() {
         <label className="block"><span className="text-sm font-medium">Low-Rating-Kontaktdaten löschen nach Tagen</span><input className="input mt-1" type="number" min="1" value={form.retentionLowRatingPhoneDays} onChange={(e) => setForm({ ...form, retentionLowRatingPhoneDays: Number(e.target.value) })} /></label>
         <label className="block"><span className="text-sm font-medium">Feedback löschen nach Tagen (leer = behalten)</span><input className="input mt-1" type="number" min="1" value={form.retentionFeedbackDays} onChange={(e) => setForm({ ...form, retentionFeedbackDays: e.target.value })} /></label>
         <label className="block"><span className="text-sm font-medium">Newsletter-Opt-ins löschen nach Tagen (leer = behalten)</span><input className="input mt-1" type="number" min="1" value={form.retentionNewsletterDays} onChange={(e) => setForm({ ...form, retentionNewsletterDays: e.target.value })} /></label>
+        <label className="flex items-center gap-2 rounded-md bg-neutral-50 p-3"><input type="checkbox" checked={form.qrMarkEnabled} onChange={(e) => setForm({ ...form, qrMarkEnabled: e.target.checked })} /> qrating-Zeichen in der Mitte des QR-Codes</label>
+        <label className="flex items-center gap-2 rounded-md bg-neutral-50 p-3"><input type="checkbox" checked={form.productCreditEnabled} onChange={(e) => setForm({ ...form, productCreditEnabled: e.target.checked })} /> Hinweis auf qrating auf den öffentlichen Seiten</label>
         <label className="flex items-center gap-2 rounded-md bg-neutral-50 p-3"><input type="checkbox" checked={form.wallboardDarkMode} onChange={(e) => setForm({ ...form, wallboardDarkMode: e.target.checked })} /> Wallboard Dark Mode</label>
         <label className="block"><span className="text-sm font-medium">Wallboard Refresh (Sek.)</span><input className="input mt-1" type="number" min="5" value={form.wallboardRefreshSeconds} onChange={(e) => setForm({ ...form, wallboardRefreshSeconds: Number(e.target.value) })} /></label>
         <button className="button-primary md:col-span-2">Branding speichern</button>

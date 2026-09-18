@@ -1,5 +1,5 @@
 import express from 'express';
-import QRCode from 'qrcode';
+import { productCredit, renderQrSvg } from '../utils/qrCode.js';
 import bcrypt from 'bcryptjs';
 import { query, withTransaction } from '../db/pool.js';
 import { canAccessEvent, hasRole, requireAdmin, requireRole } from '../middleware/auth.js';
@@ -83,6 +83,12 @@ async function ensureEventAccess(req, eventId) {
   if (!(await canAccessEvent({ query }, req.admin, eventId))) {
     throw httpError(403, 'Du hast für dieses Event keine Berechtigung. Ein Event-Manager oder Admin kann dich dem Event zuweisen.');
   }
+}
+
+// Name, colour and the two switches of the organization, for QR codes and sheets.
+async function organizationLook(organizationId) {
+  const result = await query('SELECT name, primary_color, qr_mark_enabled, product_credit_enabled FROM organizations WHERE id = $1', [organizationId]);
+  return result.rows[0] || {};
 }
 
 // Downloads carry the event in their file name, so every export loads it.
@@ -736,7 +742,8 @@ adminRouter.get('/events/:id/qr', async (req, res, next) => {
     await ensureEventAccess(req, req.params.id);
     const event = await loadEvent(req, req.params.id);
     const url = `${env.feedbackAppUrl}/e/${event.event_feedback_token}`;
-    res.type('image/svg+xml').send(await QRCode.toString(url, { type: 'svg', margin: 1 }));
+    const look = await organizationLook(req.admin.organizationId);
+    res.type('image/svg+xml').send(await renderQrSvg(url, { withMark: look.qr_mark_enabled !== false }));
   } catch (error) {
     next(error);
   }
@@ -747,7 +754,8 @@ adminRouter.get('/events/:id/qr-print', async (req, res, next) => {
     await ensureEventAccess(req, req.params.id);
     const event = await loadEvent(req, req.params.id);
     const url = `${env.feedbackAppUrl}/e/${event.event_feedback_token}`;
-    const svg = await QRCode.toString(url, { type: 'svg', margin: 1 });
+    const look = await organizationLook(req.admin.organizationId);
+    const svg = await renderQrSvg(url, { withMark: look.qr_mark_enabled !== false });
     // The print dialog needs a script, and helmet's script-src 'self' blocks inline code.
     // This one response carries a stricter policy of its own that allows exactly this script.
     const nonce = randomToken(16);
@@ -755,9 +763,15 @@ adminRouter.get('/events/:id/qr-print', async (req, res, next) => {
       'content-security-policy',
       `default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'self'`
     );
-    const organization = (await query('SELECT name, primary_color FROM organizations WHERE id = $1', [req.admin.organizationId])).rows[0];
     // Event names come from admins and from the Pretix sync, so every value is escaped inside the sheet.
-    res.type('html').send(renderQrPrintSheet({ event, organizationName: organization?.name, accentColor: organization?.primary_color, qrSvg: svg, nonce }));
+    res.type('html').send(renderQrPrintSheet({
+      event,
+      organizationName: look.name,
+      accentColor: look.primary_color,
+      credit: look.product_credit_enabled === false ? null : productCredit,
+      qrSvg: svg,
+      nonce
+    }));
   } catch (error) {
     next(error);
   }
@@ -768,7 +782,7 @@ adminRouter.get('/organizations/:id/qr', async (req, res, next) => {
     const org = (await query('SELECT * FROM organizations WHERE id = $1 AND id = $2', [req.params.id, req.admin.organizationId])).rows[0];
     if (!org) throw httpError(404, 'Diese Organisation gehört nicht zu deinem Konto. Lade die Seite neu.');
     const url = `${env.feedbackAppUrl}/f/${org.slug}`;
-    res.type('image/svg+xml').send(await QRCode.toString(url, { type: 'svg', margin: 1 }));
+    res.type('image/svg+xml').send(await renderQrSvg(url, { withMark: org.qr_mark_enabled !== false }));
   } catch (error) {
     next(error);
   }
@@ -1331,6 +1345,7 @@ adminRouter.get('/branding', async (req, res, next) => {
               ticketshop_url, website_url, instagram_url, facebook_url, default_language,
               default_feedback_window_days, default_feedback_window_hours,
               default_feedback_start_mode, branding, anti_spam_settings,
+              qr_mark_enabled, product_credit_enabled,
               retention_low_rating_phone_days, retention_feedback_days, retention_newsletter_days,
               wallboard_settings
        FROM organizations WHERE id = $1`,
@@ -1361,11 +1376,14 @@ adminRouter.patch('/branding', requireRole('event_manager'), async (req, res, ne
            retention_feedback_days = $14,
            retention_newsletter_days = $15,
            wallboard_settings = COALESCE($16::jsonb, wallboard_settings),
+           qr_mark_enabled = COALESCE($17, qr_mark_enabled),
+           product_credit_enabled = COALESCE($18, product_credit_enabled),
            updated_at = now()
        WHERE id = $1
        RETURNING id, name, slug, logo_url, primary_color, footer_text, privacy_text,
          ticketshop_url, website_url, instagram_url, facebook_url, default_language, branding,
-         retention_low_rating_phone_days, retention_feedback_days, retention_newsletter_days, wallboard_settings`,
+         retention_low_rating_phone_days, retention_feedback_days, retention_newsletter_days, wallboard_settings,
+         qr_mark_enabled, product_credit_enabled`,
       [
         req.admin.organizationId,
         req.body.name,
@@ -1382,7 +1400,9 @@ adminRouter.patch('/branding', requireRole('event_manager'), async (req, res, ne
         req.body.retentionLowRatingPhoneDays === undefined ? null : Number(req.body.retentionLowRatingPhoneDays),
         req.body.retentionFeedbackDays === undefined || req.body.retentionFeedbackDays === '' ? null : Number(req.body.retentionFeedbackDays),
         req.body.retentionNewsletterDays === undefined || req.body.retentionNewsletterDays === '' ? null : Number(req.body.retentionNewsletterDays),
-        req.body.wallboardSettings ? JSON.stringify(req.body.wallboardSettings) : null
+        req.body.wallboardSettings ? JSON.stringify(req.body.wallboardSettings) : null,
+        req.body.qrMarkEnabled === undefined ? null : Boolean(req.body.qrMarkEnabled),
+        req.body.productCreditEnabled === undefined ? null : Boolean(req.body.productCreditEnabled)
       ]
     );
     res.json(result.rows[0]);

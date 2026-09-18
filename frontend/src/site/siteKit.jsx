@@ -300,7 +300,7 @@ export function SiteFooter({ site, links }) {
         <a href={`mailto:${links.email}`}>Kontakt</a>
         <a href={links.admin}>Anmelden</a>
       </nav>
-      <p className="footer-copy">© {new Date().getFullYear()} {site.brand}</p>
+      <p className="footer-copy">© {new Date().getFullYear()} {site.brand}{site.showProductCredit === false ? '' : ' · ein Projekt von bright color'}</p>
     </div>
   </footer>;
 }

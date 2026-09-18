@@ -4,6 +4,15 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.35.0] - 2026-09-18
+
+### Added
+
+- Every QR code carries the qrating mark in its middle. The code is written with the highest error correction, so scanners read it as before; a test decodes a code with the mark to prove it.
+- Public pages name where they come from: the guest page, the ticket stub and the print sheet carry a short note, and the website of the product says it in its footer.
+- Both are switches under Branding, and the note of the website sits in the website content. An organization that wants neither switches them off.
+- Version bumped to `0.35.0`.
+
 ## [0.34.1] - 2026-09-18
 
 ### Fixed

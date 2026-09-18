@@ -33,7 +33,7 @@ export function formatEventPeriod(event) {
 
 const star = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.1l2.7 5.8 6.3.8-4.7 4.3 1.3 6.3L12 17.2 6.4 20.3l1.3-6.3L3 9.7l6.3-.8z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>';
 
-export function renderQrPrintSheet({ event, organizationName, accentColor, qrSvg, nonce }) {
+export function renderQrPrintSheet({ event, organizationName, accentColor, qrSvg, nonce, credit = null }) {
   const accent = safeAccent(accentColor);
   const name = escapeHtml(event?.name ?? 'Event');
   const period = formatEventPeriod(event);
@@ -63,6 +63,7 @@ body { background: #eceef1; color: var(--ink); font-family: "Segoe UI", -apple-s
 .rule { position: absolute; top: -.6mm; left: 50%; width: 16mm; height: 1.2mm; margin-left: -8mm; border-radius: 1mm; background: var(--accent); }
 .event { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 23pt; line-height: 1.2; }
 .when { margin: 3mm 0 0; font-size: 11.5pt; color: var(--muted); }
+.credit { margin: 6mm 0 0; font-size: 8.5pt; color: var(--muted); }
 .actions { margin: 0; }
 .actions button { font: inherit; font-size: 15px; padding: 11px 24px; border: 0; border-radius: 9px; background: var(--ink); color: #fff; cursor: pointer; }
 .actions button:hover { background: #2a2d35; }
@@ -82,7 +83,8 @@ body { background: #eceef1; color: var(--ink); font-family: "Segoe UI", -apple-s
     + `<figure class="code">${qrSvg}</figure>`
     + `<ol class="steps"><li>Scannen</li><li>Bewerten</li><li>Fertig</li></ol>`
     + `</div>`
-    + `<footer class="what"><span class="rule"></span><p class="event">${name}</p>${details ? `<p class="when">${details}</p>` : ''}</footer>`
+    + `<footer class="what"><span class="rule"></span><p class="event">${name}</p>${details ? `<p class="when">${details}</p>` : ''}`
+    + `${credit ? `<p class="credit">${escapeHtml(credit)}</p>` : ''}</footer>`
     + `</article>`
     + `<p class="actions"><button type="button" id="print">Drucken</button></p>`
     + `<script nonce="${nonce}">document.getElementById('print').addEventListener('click',function(){window.print();});window.addEventListener('load',function(){window.print();});</script>`

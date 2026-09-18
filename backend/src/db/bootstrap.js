@@ -4,6 +4,7 @@ import { query, withTransaction } from './pool.js';
 import { env } from '../config/env.js';
 import { randomToken, slugify } from '../utils/crypto.js';
 import { plainText } from '../utils/localized.js';
+import { creditFor } from '../utils/security.js';
 
 export async function runMigrations() {
   const migrationsDir = path.join(process.cwd(), '..', 'database', 'migrations');
@@ -87,6 +88,7 @@ export function eventToPublic(event, organization, questions = []) {
     location: plainText(event.location) || null,
     imageUrl: event.image_url || event.cached_image_url || organization?.logo_url || null,
     imageAlt: event.image_alt || `Bild zu ${event.name}`,
+    credit: creditFor(organization),
     organization: {
       name: organization.name || event.organization_name,
       slug: organization.slug || event.organization_slug,

@@ -153,7 +153,8 @@ async function publicPayload(resolveResult, questions = [], language = null) {
     privacy_text: event.privacy_text,
     footer_text: event.footer_text,
     branding: event.branding,
-    default_language: event.default_language
+    default_language: event.default_language,
+    product_credit_enabled: event.product_credit_enabled
   };
   const requestedLanguage = language || organization.default_language || 'de';
   const texts = await loadResolvedTexts({ query }, event.organization_id, event.id, requestedLanguage, event);

@@ -286,6 +286,7 @@ export function FeedbackFlow({ event, texts, sourceType, lang = 'de', preview = 
           <h1 id="guest-thanks-title" ref={heading} tabIndex={-1} className="guest-thanks-title">{texts.thank_headline}</h1>
           <p className="guest-help">{texts.thank_text}</p>
           {footerText && <p className="guest-fine">{footerText}</p>}
+          {event.credit && <p className="guest-fine">{event.credit}</p>}
         </section>
       </div>
     </GuestStage>;
@@ -373,7 +374,7 @@ export function FeedbackFlow({ event, texts, sourceType, lang = 'de', preview = 
       </div>}
     </>;
   } else {
-    const stub = [privacyText, footerText].filter(Boolean);
+    const stub = [privacyText, footerText, event.credit].filter(Boolean);
     content = <>
       {title(texts.summary_headline)}
       <p className="guest-help">{texts.summary_text}</p>
