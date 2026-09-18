@@ -47,16 +47,17 @@ export async function markCompleted(db, { event, sessionKey, feedbackId, stepsTo
   if (!sessionKey) return null;
   const result = await db.query(
     `INSERT INTO guest_sessions (
-       organization_id, event_id, session_key, steps_total, last_step, last_step_kind,
+       organization_id, event_id, session_key, steps_total, last_step, last_step_kind, last_step_label,
        last_step_index, completed_at, feedback_response_id
      )
-     VALUES ($1,$2,$3,$4,'submitted','submitted',$5, now(), $6)
+     VALUES ($1,$2,$3,$4,'submitted','submitted','Abgeschickt',$5, now(), $6)
      ON CONFLICT (event_id, session_key) DO UPDATE SET
        completed_at = COALESCE(guest_sessions.completed_at, now()),
        feedback_response_id = COALESCE(guest_sessions.feedback_response_id, EXCLUDED.feedback_response_id),
        steps_total = GREATEST(guest_sessions.steps_total, EXCLUDED.steps_total),
        last_step = 'submitted',
        last_step_kind = 'submitted',
+       last_step_label = 'Abgeschickt',
        last_step_index = GREATEST(guest_sessions.last_step_index, EXCLUDED.last_step_index),
        last_seen_at = now(),
        updated_at = now()

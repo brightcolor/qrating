@@ -93,6 +93,7 @@ describe('how far guests get', () => {
     expect(session.completed_at).toBeTruthy();
     expect(session.feedback_response_id).toBeTruthy();
     expect(session.last_step).toBe('submitted');
+    expect(session.last_step_label).toBe('Abgeschickt');
   });
 
   it('shows in the analytics how far the guests came', async () => {

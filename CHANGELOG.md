@@ -4,6 +4,13 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.34.1] - 2026-09-18
+
+### Fixed
+
+- The last line of the drop-off view said the name of the step the guest saw last instead of "Abgeschickt".
+- Version bumped to `0.34.1`.
+
 ## [0.34.0] - 2026-09-18
 
 ### Added
