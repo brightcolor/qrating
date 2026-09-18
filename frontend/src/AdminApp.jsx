@@ -24,6 +24,7 @@ import {
   Settings,
   Star,
   Trash2,
+  UserCog,
   Webhook
 } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -35,6 +36,14 @@ import { eventLabel, formatDate } from './admin/eventLabel.js';
 
 const SecurityCenter = React.lazy(() => import('./admin/SecurityCenter.jsx').then((module) => ({ default: module.SecurityCenter })));
 const Tenants = React.lazy(() => import('./admin/Tenants.jsx').then((module) => ({ default: module.Tenants })));
+
+const roleLabels = {
+  support: 'Support',
+  analyst: 'Analyst',
+  event_manager: 'Event Manager',
+  admin: 'Admin',
+  owner: 'Owner'
+};
 
 // What an event can be. Only an active event collects feedback.
 const eventStatusLabels = {
@@ -89,6 +98,7 @@ function AdminApp() {
     ['branding', 'Branding', Image],
     ['qr', 'QR & Wallboard', QrCode],
     ['pretix', 'Pretix', Settings],
+    ['users', 'Benutzer', UserCog],
     ['notifications', 'Benachrichtigungen', Bell],
     ['operations', 'Betrieb', Activity],
     ['smtp', 'SMTP', Mail],
@@ -123,6 +133,7 @@ function AdminApp() {
         {page === 'branding' && <BrandingSettings />}
         {page === 'qr' && <QrAndWallboard />}
         {page === 'pretix' && <Pretix />}
+        {page === 'users' && <Users />}
         {page === 'notifications' && <Notifications />}
         {page === 'operations' && <Operations />}
         {page === 'smtp' && <SmtpSettings />}
@@ -1338,15 +1349,139 @@ function Pretix() {
 
 const notificationTypes = ['email', 'discord', 'slack', 'mattermost', 'teams', 'telegram', 'pushover', 'ntfy', 'gotify', 'webhook'];
 
-function Notifications() {
+function Users() {
   const [reload, setReload] = useState(0);
-  const { data: users } = useAsync(() => api('/admin/users'), [reload]);
+  const { data: users, loading, error } = useAsync(() => api('/admin/users'), [reload]);
   const { data: events } = useAsync(() => api('/admin/events'), []);
-  const { data: channels, loading, error: channelsError } = useAsync(() => api('/admin/notification-channels'), [reload]);
   const [selectedEvent, setSelectedEvent] = useState('');
   const [assignments, setAssignments] = useState([]);
-  const [message, setMessage] = useState('');
   const [invite, setInvite] = useState({ name: '', email: '', role: 'support' });
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    if (!selectedEvent && events?.[0]) setSelectedEvent(events[0].id);
+  }, [events, selectedEvent]);
+
+  useEffect(() => {
+    if (!selectedEvent) return;
+    api(`/admin/events/${selectedEvent}/assignments`)
+      .then(setAssignments)
+      .catch((err) => setMessage(errorNotice(err)));
+  }, [selectedEvent, reload]);
+
+  async function inviteUser(e) {
+    e.preventDefault();
+    try {
+      const result = await api('/admin/users/invite', { method: 'POST', body: JSON.stringify(invite) });
+      const mail = result.mail || {};
+      if (mail.error) {
+        setMessage(errorNotice({ message: `Einladung erstellt, die E-Mail ließ sich aber nicht senden. ${mail.error} Schicke der Person diesen Link: ${result.inviteUrl}` }));
+      } else if (mail.skipped) {
+        setMessage(`Einladung erstellt. Der E-Mail-Versand ist ausgeschaltet, schicke der Person diesen Link: ${result.inviteUrl}`);
+      } else {
+        setMessage(`Einladung an ${invite.email} verschickt. Der Link gilt 7 Tage: ${result.inviteUrl}`);
+      }
+      setInvite({ name: '', email: '', role: 'support' });
+      setReload(reload + 1);
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
+  }
+
+  async function changeRole(user, role) {
+    try {
+      await api(`/admin/users/${user.id}`, { method: 'PATCH', body: JSON.stringify({ role }) });
+      setMessage('Rolle aktualisiert.');
+      setReload(reload + 1);
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
+  }
+
+  async function changeStatus(user, status) {
+    try {
+      await api(`/admin/users/${user.id}`, { method: 'PATCH', body: JSON.stringify({ status }) });
+      setMessage('Benutzerstatus aktualisiert.');
+      setReload(reload + 1);
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
+  }
+
+  async function saveAssignments() {
+    setMessage('');
+    try {
+      await api(`/admin/events/${selectedEvent}/assignments`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          assignments: assignments.map((item) => ({
+            userId: item.user_id,
+            assigned: item.assigned,
+            notifyLowRating: item.notify_low_rating
+          }))
+        })
+      });
+      setMessage('Zuweisungen gespeichert.');
+      setReload(reload + 1);
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
+  }
+
+  return <div>
+    <Header title="Benutzer" />
+    {loading && <p>Lade Benutzer ...</p>}
+    {error && <ErrorBox error={error} />}
+    <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_1fr]">
+      <Panel title="Person einladen">
+        <form onSubmit={inviteUser} className="grid gap-3 md:grid-cols-2">
+          <input className="input" placeholder="Name" value={invite.name} onChange={(e) => setInvite({ ...invite, name: e.target.value })} />
+          <input className="input" type="email" placeholder="E-Mail" value={invite.email} onChange={(e) => setInvite({ ...invite, email: e.target.value })} required />
+          <select className="input" value={invite.role} onChange={(e) => setInvite({ ...invite, role: e.target.value })}>
+            {Object.entries(roleLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+          <button className="button-primary"><Send size={16} /> Einladung senden</button>
+          <p className="text-sm text-neutral-500 md:col-span-2">Die Einladung geht per E-Mail raus, sobald SMTP eingerichtet ist. Sonst steht der Link hier und du schickst ihn selbst.</p>
+        </form>
+      </Panel>
+      <Panel title="Event-Zuweisungen">
+        <select className="input" value={selectedEvent} onChange={(e) => setSelectedEvent(e.target.value)}>
+          {events?.map((event) => <option key={event.id} value={event.id}>{eventLabel(event)}</option>)}
+        </select>
+        <div className="mt-4 space-y-2">
+          {assignments.map((assignment, index) => <div key={assignment.user_id} className="grid gap-2 rounded-md bg-neutral-50 p-3 md:grid-cols-[1fr_auto_auto]">
+            <div><strong>{assignment.name}</strong><p className="text-sm text-neutral-500">{assignment.email}</p></div>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={assignment.assigned} onChange={(e) => setAssignments(assignments.map((item, i) => i === index ? { ...item, assigned: e.target.checked } : item))} /> zuweisen</label>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={assignment.notify_low_rating} onChange={(e) => setAssignments(assignments.map((item, i) => i === index ? { ...item, notify_low_rating: e.target.checked } : item))} /> Low-Rating</label>
+          </div>)}
+        </div>
+        <button onClick={saveAssignments} className="button-primary mt-4">Zuweisungen speichern</button>
+      </Panel>
+    </div>
+    <Notice message={message} />
+    <Panel title="Rollen & Rechte" className="mt-6">
+      <div className="grid gap-3">
+        {users?.map((user) => <div key={user.id} className="grid gap-2 rounded-md border border-neutral-200 p-3 md:grid-cols-[1fr_180px_180px]">
+          <div><strong>{user.name}</strong><p className="text-sm text-neutral-500">{user.email} · {user.status || 'active'} · letzter Login: {user.last_login_at ? formatDate(user.last_login_at) : '-'}</p></div>
+          <select className="input" value={user.role} onChange={(e) => changeRole(user, e.target.value)}>
+            {Object.entries(roleLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+          <select className="input" value={user.status || 'active'} onChange={(e) => changeStatus(user, e.target.value)}>
+            <option value="invited">Eingeladen</option>
+            <option value="active">Aktiv</option>
+            <option value="disabled">Deaktiviert</option>
+          </select>
+        </div>)}
+      </div>
+    </Panel>
+  </div>;
+}
+
+function Notifications() {
+  const [reload, setReload] = useState(0);
+  const { data: users } = useAsync(() => api('/admin/users'), []);
+  const { data: channels, loading, error: channelsError } = useAsync(() => api('/admin/notification-channels'), [reload]);
+  const [message, setMessage] = useState('');
   const [form, setForm] = useState({
     userId: '',
     channelType: 'email',
@@ -1359,17 +1494,6 @@ function Notifications() {
   useEffect(() => {
     if (!form.userId && users?.[0]) setForm((old) => ({ ...old, userId: users[0].id }));
   }, [users, form.userId]);
-
-  useEffect(() => {
-    if (!selectedEvent && events?.[0]) setSelectedEvent(events[0].id);
-  }, [events, selectedEvent]);
-
-  useEffect(() => {
-    if (!selectedEvent) return;
-    api(`/admin/events/${selectedEvent}/assignments`)
-      .then(setAssignments)
-      .catch((error) => setMessage(errorNotice(error)));
-  }, [selectedEvent, reload]);
 
   async function createChannel(e) {
     e.preventDefault();
@@ -1401,26 +1525,6 @@ function Notifications() {
     }
   }
 
-  async function saveAssignments() {
-    setMessage('');
-    try {
-      await api(`/admin/events/${selectedEvent}/assignments`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          assignments: assignments.map((assignment) => ({
-            userId: assignment.user_id,
-            assigned: assignment.assigned,
-            notifyLowRating: assignment.notify_low_rating
-          }))
-        })
-      });
-      setMessage('Event-Zuweisungen gespeichert.');
-      setReload(reload + 1);
-    } catch (err) {
-      setMessage(errorNotice(err));
-    }
-  }
-
   async function deleteChannel(channel) {
     setMessage('');
     try {
@@ -1435,46 +1539,7 @@ function Notifications() {
   async function testChannel(id) {
     try {
       await api(`/admin/notification-channels/${id}/test`, { method: 'POST', body: '{}' });
-      setMessage('Testbenachrichtigung gesendet.');
-      setReload(reload + 1);
-    } catch (err) {
-      setMessage(errorNotice(err));
-    }
-  }
-
-  async function changeRole(user, role) {
-    try {
-      await api(`/admin/users/${user.id}`, { method: 'PATCH', body: JSON.stringify({ role }) });
-      setMessage('Rolle aktualisiert.');
-      setReload(reload + 1);
-    } catch (err) {
-      setMessage(errorNotice(err));
-    }
-  }
-
-  async function changeStatus(user, status) {
-    try {
-      await api(`/admin/users/${user.id}`, { method: 'PATCH', body: JSON.stringify({ status }) });
-      setMessage('Benutzerstatus aktualisiert.');
-      setReload(reload + 1);
-    } catch (err) {
-      setMessage(errorNotice(err));
-    }
-  }
-
-  async function inviteUser(e) {
-    e.preventDefault();
-    try {
-      const result = await api('/admin/users/invite', { method: 'POST', body: JSON.stringify(invite) });
-      const mail = result.mail || {};
-      if (mail.error) {
-        setMessage(errorNotice({ message: `Einladung erstellt, die E-Mail ließ sich aber nicht senden. ${mail.error} Schicke der Person diesen Link: ${result.inviteUrl}` }));
-      } else if (mail.skipped) {
-        setMessage(`Einladung erstellt. Der E-Mail-Versand ist ausgeschaltet, schicke der Person diesen Link: ${result.inviteUrl}`);
-      } else {
-        setMessage(`Einladung an ${invite.email} verschickt. Der Link gilt 7 Tage: ${result.inviteUrl}`);
-      }
-      setInvite({ name: '', email: '', role: 'support' });
+      setMessage('Testnachricht verschickt.');
       setReload(reload + 1);
     } catch (err) {
       setMessage(errorNotice(err));
@@ -1483,68 +1548,21 @@ function Notifications() {
 
   return <div>
     <Header title="Benachrichtigungen" />
-    <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_1fr]">
-      <Panel title="User einladen">
-        <form onSubmit={inviteUser} className="grid gap-3 md:grid-cols-2">
-          <input className="input" placeholder="Name" value={invite.name} onChange={(e) => setInvite({ ...invite, name: e.target.value })} />
-          <input className="input" type="email" placeholder="E-Mail" value={invite.email} onChange={(e) => setInvite({ ...invite, email: e.target.value })} required />
-          <select className="input" value={invite.role} onChange={(e) => setInvite({ ...invite, role: e.target.value })}>
-            <option value="support">Support</option>
-            <option value="analyst">Analyst</option>
-            <option value="event_manager">Event Manager</option>
-            <option value="admin">Admin</option>
-            <option value="owner">Owner</option>
-          </select>
-          <button className="button-primary">Einladung senden</button>
-        </form>
-      </Panel>
-      <Panel title="Persönlichen Kanal anlegen">
-        <form onSubmit={createChannel} className="grid gap-3 md:grid-cols-2">
-          <label className="block"><span className="text-sm font-medium">User</span><select className="input mt-1" value={form.userId} onChange={(e) => setForm({ ...form, userId: e.target.value })}>{users?.map((user) => <option key={user.id} value={user.id}>{user.name} ({user.email})</option>)}</select></label>
-          <label className="block"><span className="text-sm font-medium">Kanal</span><select className="input mt-1" value={form.channelType} onChange={(e) => setForm({ ...form, channelType: e.target.value, label: e.target.value })}>{notificationTypes.map((type) => <option key={type}>{type}</option>)}</select></label>
-          <label className="block"><span className="text-sm font-medium">Label</span><input className="input mt-1" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} /></label>
-          <label className="block"><span className="text-sm font-medium">Auslösen bis Bewertung</span><input className="input mt-1" type="number" min="1" max="5" value={form.minRating} onChange={(e) => setForm({ ...form, minRating: Number(e.target.value) })} /></label>
-          <label className="block md:col-span-2"><span className="text-sm font-medium">Secret / Token / Webhook-URL</span><input className="input mt-1" type="password" value={form.secret} onChange={(e) => setForm({ ...form, secret: e.target.value })} placeholder={channelSecretPlaceholder(form.channelType)} /></label>
-          <label className="block md:col-span-2"><span className="text-sm font-medium">Config JSON</span><textarea className="input mt-1 min-h-24" value={form.configText} onChange={(e) => setForm({ ...form, configText: e.target.value })} /></label>
-          <p className="text-sm text-neutral-500 md:col-span-2">{channelHelp(form.channelType)}</p>
-          <button className="button-primary md:col-span-2"><Bell size={16} /> Kanal speichern</button>
-        </form>
-      </Panel>
-      <Panel title="Event-Zuweisungen">
-        <select className="input" value={selectedEvent} onChange={(e) => setSelectedEvent(e.target.value)}>
-          {events?.map((event) => <option key={event.id} value={event.id}>{eventLabel(event)}</option>)}
-        </select>
-        <div className="mt-4 space-y-2">
-          {assignments.map((assignment, index) => <div key={assignment.user_id} className="grid gap-2 rounded-md bg-neutral-50 p-3 md:grid-cols-[1fr_auto_auto]">
-            <div><strong>{assignment.name}</strong><p className="text-sm text-neutral-500">{assignment.email}</p></div>
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={assignment.assigned} onChange={(e) => setAssignments(assignments.map((item, i) => i === index ? { ...item, assigned: e.target.checked } : item))} /> zuweisen</label>
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={assignment.notify_low_rating} onChange={(e) => setAssignments(assignments.map((item, i) => i === index ? { ...item, notify_low_rating: e.target.checked } : item))} /> Low-Rating</label>
-          </div>)}
-        </div>
-        <button onClick={saveAssignments} className="button-primary mt-4">Zuweisungen speichern</button>
-      </Panel>
-    </div>
-    <Notice message={message} />
-    <Panel title="Rollen & Rechte">
-      <div className="grid gap-3">
-        {users?.map((user) => <div key={user.id} className="grid gap-2 rounded-md border border-neutral-200 p-3 md:grid-cols-[1fr_180px_180px]">
-          <div><strong>{user.name}</strong><p className="text-sm text-neutral-500">{user.email} · {user.status || 'active'} · letzter Login: {user.last_login_at ? formatDate(user.last_login_at) : '-'}</p></div>
-          <select className="input" value={user.role} onChange={(e) => changeRole(user, e.target.value)}>
-            <option value="support">Support</option>
-            <option value="analyst">Analyst</option>
-            <option value="event_manager">Event Manager</option>
-            <option value="admin">Admin</option>
-            <option value="owner">Owner</option>
-          </select>
-          <select className="input" value={user.status || 'active'} onChange={(e) => changeStatus(user, e.target.value)}>
-            <option value="invited">Eingeladen</option>
-            <option value="active">Aktiv</option>
-            <option value="disabled">Deaktiviert</option>
-          </select>
-        </div>)}
-      </div>
+    <Panel title="Persönlichen Kanal anlegen">
+      <form onSubmit={createChannel} className="grid gap-3 md:grid-cols-2">
+        <label className="block"><span className="text-sm font-medium">User</span><select className="input mt-1" value={form.userId} onChange={(e) => setForm({ ...form, userId: e.target.value })}>{users?.map((user) => <option key={user.id} value={user.id}>{user.name} ({user.email})</option>)}</select></label>
+        <label className="block"><span className="text-sm font-medium">Kanal</span><select className="input mt-1" value={form.channelType} onChange={(e) => setForm({ ...form, channelType: e.target.value, label: e.target.value })}>{notificationTypes.map((type) => <option key={type}>{type}</option>)}</select></label>
+        <label className="block"><span className="text-sm font-medium">Label</span><input className="input mt-1" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} /></label>
+        <label className="block"><span className="text-sm font-medium">Auslösen bis Bewertung</span><input className="input mt-1" type="number" min="1" max="5" value={form.minRating} onChange={(e) => setForm({ ...form, minRating: Number(e.target.value) })} /></label>
+        <label className="block md:col-span-2"><span className="text-sm font-medium">Secret / Token / Webhook-URL</span><input className="input mt-1" type="password" value={form.secret} onChange={(e) => setForm({ ...form, secret: e.target.value })} placeholder={channelSecretPlaceholder(form.channelType)} /></label>
+        <label className="block md:col-span-2"><span className="text-sm font-medium">Config JSON</span><textarea className="input mt-1 min-h-24" value={form.configText} onChange={(e) => setForm({ ...form, configText: e.target.value })} /></label>
+        <p className="text-sm text-neutral-500 md:col-span-2">{channelHelp(form.channelType)}</p>
+        <p className="text-sm text-neutral-500 md:col-span-2">Personen, Rollen und die Zuständigkeit je Event stehen unter <strong>Benutzer</strong>.</p>
+        <button className="button-primary md:col-span-2"><Bell size={16} /> Kanal speichern</button>
+      </form>
     </Panel>
-    <Panel title="Aktive Kanäle">
+    <Notice message={message} />
+    <Panel title="Aktive Kanäle" className="mt-6">
       {loading && <p>Lade Kanäle ...</p>}
       {channelsError && <ErrorBox error={channelsError} />}
       <div className="grid gap-3">
@@ -1864,8 +1882,8 @@ function Header({ title, action }) {
   return <div className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-3xl font-semibold">{title}</h1>{action}</div>;
 }
 
-function Panel({ title, children }) {
-  return <section className="rounded-lg bg-white p-5 shadow-sm">{title && <h2 className="mb-4 font-semibold">{title}</h2>}{children}</section>;
+function Panel({ title, children, className = '' }) {
+  return <section className={`rounded-lg bg-white p-5 shadow-sm ${className}`.trim()}>{title && <h2 className="mb-4 font-semibold">{title}</h2>}{children}</section>;
 }
 
 function Stat({ title, value }) {

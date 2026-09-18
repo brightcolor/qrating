@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.32.0
+**Version:** 0.33.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -319,6 +319,8 @@ An event picture can also be set by hand in the admin area. The event card takes
 
 Low ratings can create a workflow case and notify only users who are allowed to access the affected event.
 
+People, their roles and who is responsible for which event live in the admin area under **Benutzer**. The area **Benachrichtigungen** holds the channels.
+
 Notification channels are configured per user:
 
 - email through the organization SMTP settings
@@ -465,7 +467,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.32.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.33.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

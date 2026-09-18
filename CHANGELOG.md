@@ -4,6 +4,14 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.33.0] - 2026-09-18
+
+### Changed
+
+- People, roles and the responsibility for an event have their own area now: **Benutzer**. Until now they sat on the notifications page, where nobody looked for them.
+- The notifications page keeps the personal channels and says where the people are.
+- Version bumped to `0.33.0`.
+
 ## [0.32.0] - 2026-09-18
 
 ### Changed
