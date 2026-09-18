@@ -4,6 +4,14 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.38.0] - 2026-09-18
+
+### Added
+
+- A coming event carries a link to the ticket shop, and only while tickets can be bought: the sale has started, has not ended, and the shop is public. An event outside that window shows its date without a link.
+- Every event can switch that link off, next to the settings for the pointer itself.
+- Version bumped to `0.38.0`.
+
 ## [0.37.0] - 2026-09-18
 
 ### Added

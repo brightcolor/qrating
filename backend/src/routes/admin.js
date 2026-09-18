@@ -383,6 +383,7 @@ adminRouter.patch('/events/:id', async (req, res, next) => {
         feedback_window_hours = $10,
         resolver_priority = COALESCE($11, resolver_priority),
         upcoming_enabled = COALESCE($16, upcoming_enabled),
+        ticket_link_enabled = COALESCE($18, ticket_link_enabled),
         upcoming_event_ids = COALESCE($17::jsonb, upcoming_event_ids),
         image_url = CASE WHEN $12::text = 'keep' THEN image_url WHEN $12::text = 'clear' THEN null ELSE $13::text END,
         image_alt = CASE WHEN $12::text = 'clear' THEN null WHEN $14::boolean THEN $15::text ELSE image_alt END,
@@ -407,7 +408,8 @@ adminRouter.patch('/events/:id', async (req, res, next) => {
         image.altProvided,
         image.alt,
         req.body.upcomingEnabled === undefined ? null : Boolean(req.body.upcomingEnabled),
-        req.body.upcomingEventIds === undefined ? null : JSON.stringify(cleanEventIds(req.body.upcomingEventIds))
+        req.body.upcomingEventIds === undefined ? null : JSON.stringify(cleanEventIds(req.body.upcomingEventIds)),
+        req.body.ticketLinkEnabled === undefined ? null : Boolean(req.body.ticketLinkEnabled)
       ]
     );
     if (!result.rows[0]) throw httpError(404, 'Dieses Event gibt es nicht mehr oder es gehört zu einer anderen Organisation. Lade die Liste neu.');

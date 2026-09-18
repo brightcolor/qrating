@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.37.0
+**Version:** 0.38.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -276,7 +276,7 @@ Each event decides for itself, on its card in the admin area:
 - `upcomingEnabled`: whether guests see the pointer at all
 - `upcomingEventIds`: up to five events chosen by hand; without a choice the next ones by date follow
 
-The shop link of an entry comes from the Pretix address of that event, otherwise from the ticket shop of the organization.
+The shop link of an entry comes from the Pretix address of that event, otherwise from the ticket shop of the organization. It only appears while tickets can really be bought: Pretix says whether the shop is public (`live`) and when the sale runs (`presale_start`, `presale_end`), and an event that is out of that window shows no link. `ticketLinkEnabled` switches the link off for an event even while the sale runs.
 
 ## Mark And Note
 
@@ -535,7 +535,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.37.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.38.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

@@ -465,7 +465,8 @@ function EventCard({ event, events = [], onChanged }) {
   const [upcomingOpen, setUpcomingOpen] = useState(false);
   const [upcomingForm, setUpcomingForm] = useState({
     enabled: event.upcoming_enabled !== false,
-    ids: Array.isArray(event.upcoming_event_ids) ? event.upcoming_event_ids : []
+    ids: Array.isArray(event.upcoming_event_ids) ? event.upcoming_event_ids : [],
+    tickets: event.ticket_link_enabled !== false
   });
 
   async function saveUpcoming() {
@@ -473,7 +474,7 @@ function EventCard({ event, events = [], onChanged }) {
     try {
       await api(`/admin/events/${event.id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ upcomingEnabled: upcomingForm.enabled, upcomingEventIds: upcomingForm.ids })
+        body: JSON.stringify({ upcomingEnabled: upcomingForm.enabled, upcomingEventIds: upcomingForm.ids, ticketLinkEnabled: upcomingForm.tickets })
       });
       setMessage(upcomingForm.enabled
         ? (upcomingForm.ids.length ? `Gäste sehen nach dem Feedback ${upcomingForm.ids.length} ausgewählte Events.` : 'Gäste sehen nach dem Feedback die nächsten Events.')
@@ -605,7 +606,8 @@ function EventCard({ event, events = [], onChanged }) {
     </div>}
     {upcomingOpen && <div className="mt-4 border-t border-neutral-100 pt-4">
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={upcomingForm.enabled} onChange={(e) => setUpcomingForm({ ...upcomingForm, enabled: e.target.checked })} /> Nach dem Feedback auf kommende Events hinweisen</label>
-      <p className="mt-2 text-sm text-neutral-500">Ohne Auswahl zeigt qrating die nächsten Events nach Datum. Wähle bis zu fünf aus, wenn es bestimmte sein sollen.</p>
+      <label className="mt-2 flex items-center gap-2 text-sm"><input type="checkbox" checked={upcomingForm.tickets} onChange={(e) => setUpcomingForm({ ...upcomingForm, tickets: e.target.checked })} /> Ticketlink zeigen, solange der Vorverkauf läuft</label>
+      <p className="mt-2 text-sm text-neutral-500">Ohne Auswahl zeigt qrating die nächsten Events nach Datum. Wähle bis zu fünf aus, wenn es bestimmte sein sollen. Der Ticketlink erscheint nur, wenn Pretix den Verkauf offen meldet.</p>
       <div className="mt-3 grid gap-2 md:grid-cols-2">
         {events.filter((item) => item.id !== event.id).map((item) => <label key={item.id} className="flex items-center gap-2 rounded-md bg-neutral-50 p-2 text-sm">
           <input type="checkbox" checked={upcomingForm.ids.includes(item.id)} onChange={() => toggleUpcoming(item.id)} disabled={!upcomingForm.enabled} />

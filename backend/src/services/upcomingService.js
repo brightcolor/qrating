@@ -5,8 +5,33 @@ import { upcomingEvents } from './eventResolver.js';
 
 const defaultCount = 3;
 
+// Pretix says when a sale runs. A link that leads to a closed shop helps nobody,
+// so it only appears while tickets can really be bought.
+export function ticketsAvailable(event, now = new Date()) {
+  if (!event || event.ticket_link_enabled === false) return false;
+  const raw = typeof event.raw_source_payload === 'string'
+    ? safeJson(event.raw_source_payload)
+    : event.raw_source_payload;
+  if (raw && raw.live === false) return false;
+  const start = raw?.presale_start ? new Date(raw.presale_start) : null;
+  const end = raw?.presale_end ? new Date(raw.presale_end) : null;
+  if (start && !Number.isNaN(start.getTime()) && now < start) return false;
+  if (end && !Number.isNaN(end.getTime()) && now > end) return false;
+  return true;
+}
+
+function safeJson(value) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
 // One entry as the guest page needs it: name, date, place and where tickets live.
-export function publicUpcoming(event, organization = {}) {
+export function publicUpcoming(event, organization = {}, now = new Date()) {
+  const shopUrl = event.pretix_public_url || organization.ticketshop_url || null;
+  const sale = Boolean(shopUrl) && ticketsAvailable(event, now);
   return {
     id: event.id,
     name: event.name,
@@ -14,7 +39,8 @@ export function publicUpcoming(event, organization = {}) {
     dateTo: event.date_to,
     location: plainText(event.location) || null,
     imageUrl: event.image_url || event.cached_image_url || null,
-    shopUrl: event.pretix_public_url || organization.ticketshop_url || null
+    ticketsAvailable: sale,
+    shopUrl: sale ? shopUrl : null
   };
 }
 
@@ -37,11 +63,13 @@ export async function upcomingFor(db, event, organization = {}, { limit = defaul
   const picked = chosen.length
     ? chosen.map((id) => byId.get(id)).filter(Boolean)
     : upcomingEvents(rows.filter((row) => row.id !== event.id), undefined, limit);
-  return picked.filter((row) => row.id !== event.id).slice(0, limit).map((row) => publicUpcoming(row, organization));
+  const now = new Date();
+  return picked.filter((row) => row.id !== event.id).slice(0, limit).map((row) => publicUpcoming(row, organization, now));
 }
 
 // The page of an organization without an open round: everything that is still to come.
 export async function upcomingForOrganization(db, organization, { limit = 5 } = {}) {
   const rows = await organizationEvents(db, organization.id);
-  return upcomingEvents(rows, undefined, limit).map((row) => publicUpcoming(row, organization));
+  const now = new Date();
+  return upcomingEvents(rows, undefined, limit).map((row) => publicUpcoming(row, organization, now));
 }
