@@ -1260,9 +1260,10 @@
 .guest-waiting-poster img {
   display: block;
   width: 100%;
-  max-height: 30vh;
-  object-fit: cover;
-  aspect-ratio: 16 / 9;
+  height: auto;
+  /* A flyer carries its date and its names at the edges, so it stays whole. */
+  max-height: 34vh;
+  object-fit: contain;
 }
 
 .guest-waiting {

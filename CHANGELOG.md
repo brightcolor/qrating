@@ -4,6 +4,13 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.44.1] - 2026-09-18
+
+### Fixed
+
+- The picture on the waiting page stays whole. A flyer carries its date and its names at the edges, and the crop cut them off.
+- Version bumped to `0.44.1`.
+
 ## [0.44.0] - 2026-09-18
 
 ### Added
