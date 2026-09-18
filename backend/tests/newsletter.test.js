@@ -176,7 +176,7 @@ describe('newsletter connection to MailWizz', () => {
     const result = await newsletter.syncOptin(job.payload.optinId);
 
     expect(result).toEqual({ status: 'created' });
-    expect(calls).toEqual([{ EMAIL: 'gast@example.com', VERANSTALTUNG: pretixName, QUELLE: 'qrating', ANGEBOTE: 'nein' }]);
+    expect(calls).toEqual([{ EMAIL: 'gast@example.com', VERANSTALTUNG: pretixName, QUELLE: 'qrating' }]);
 
     const optin = (await query('SELECT * FROM newsletter_optins WHERE id = $1', [job.payload.optinId])).rows[0];
     expect(optin.sync_status).toBe('created');
@@ -218,7 +218,7 @@ describe('newsletter connection to MailWizz', () => {
 
     const calls = await syncNewest();
 
-    expect(calls).toEqual([{ EMAIL: 'bargast@example.com', VERANSTALTUNG: pretixName, QUELLE: 'Bar', ANGEBOTE: 'nein' }]);
+    expect(calls).toEqual([{ EMAIL: 'bargast@example.com', VERANSTALTUNG: pretixName, QUELLE: 'Bar' }]);
   });
 
   it('keeps the fixed value while the QR source is switched off', async () => {
@@ -228,7 +228,7 @@ describe('newsletter connection to MailWizz', () => {
 
     const calls = await syncNewest();
 
-    expect(calls).toEqual([{ EMAIL: 'barzwei@example.com', VERANSTALTUNG: pretixName, QUELLE: 'qrating', ANGEBOTE: 'nein' }]);
+    expect(calls).toEqual([{ EMAIL: 'barzwei@example.com', VERANSTALTUNG: pretixName, QUELLE: 'qrating' }]);
     await query('UPDATE newsletter_connections SET source_field_use_qr = true');
   });
 
@@ -247,7 +247,7 @@ describe('newsletter connection to MailWizz', () => {
     const newsletter = new NewsletterService({ query }, { createClient: () => recordingClient(calls) });
     await newsletter.syncOptin(job.payload.optinId);
 
-    expect(calls).toEqual([{ EMAIL: 'vierter@example.com', VERANSTALTUNG: pretixName, ANGEBOTE: 'nein' }]);
+    expect(calls).toEqual([{ EMAIL: 'vierter@example.com', VERANSTALTUNG: pretixName }]);
 
     const back = await request('PUT', '/admin/newsletter', {
       cookie: ownerCookie,
@@ -269,53 +269,6 @@ describe('newsletter connection to MailWizz', () => {
 
     const optin = (await query("SELECT consent_text FROM newsletter_optins ORDER BY consent_given_at DESC LIMIT 1")).rows[0];
     expect(optin.consent_text).toBe(consent);
-  });
-
-  it('carries the second wish as a plain word', async () => {
-    const wanted = await request('POST', `/public/events/${event.event_feedback_token}/feedback`, {
-      body: { rating: 5, newsletterOptin: true, newsletterEmail: 'angebote@example.com', newsletterOffers: true }
-    });
-    expect(wanted.status).toBe(201);
-
-    const optin = (await query('SELECT * FROM newsletter_optins ORDER BY consent_given_at DESC LIMIT 1')).rows[0];
-    expect(optin.offers_optin).toBe(true);
-    expect(optin.offers_consent_text).toContain('Vorverkaufsstarts');
-
-    const calls = await syncNewest();
-    expect(calls[0]).toMatchObject({ ANGEBOTE: 'ja' });
-  });
-
-  it('says so just as plainly when the second wish stays open', async () => {
-    const plain = await submitFeedback('nurevents@example.com');
-    expect(plain.status).toBe(201);
-
-    const optin = (await query('SELECT * FROM newsletter_optins ORDER BY consent_given_at DESC LIMIT 1')).rows[0];
-    expect(optin.offers_optin).toBe(false);
-    expect(optin.offers_consent_text).toBe(null);
-
-    const calls = await syncNewest();
-    expect(calls[0]).toMatchObject({ ANGEBOTE: 'nein' });
-  });
-
-  it('takes an own tag for the second wish', async () => {
-    const saved = await request('PUT', '/admin/newsletter', {
-      cookie: ownerCookie,
-      body: { apiUrl: 'https://news.example.com/api', apiKey: 'schluessel', listUid: 'liste-1', offersFieldTag: 'extras' }
-    });
-
-    expect(saved.status).toBe(200);
-    expect(saved.body.offers_field_tag).toBe('EXTRAS');
-
-    await request('POST', `/public/events/${event.event_feedback_token}/feedback`, {
-      body: { rating: 4, newsletterOptin: true, newsletterEmail: 'extras@example.com', newsletterOffers: true }
-    });
-    const calls = await syncNewest();
-    expect(calls[0]).toMatchObject({ EXTRAS: 'ja' });
-
-    await request('PUT', '/admin/newsletter', {
-      cookie: ownerCookie,
-      body: { apiUrl: 'https://news.example.com/api', apiKey: 'schluessel', listUid: 'liste-1' }
-    });
   });
 
   it('collects the entries that are still open', async () => {

@@ -766,30 +766,7 @@
   background: var(--accent);
 }
 
-/* A second, optional wish next to the consent, and the link into the fine print. */
-.guest-check {
-  display: flex;
-  align-items: flex-start;
-  gap: 11px;
-  margin-top: 14px;
-  padding: 13px 15px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--veil);
-  font-size: 0.95rem;
-  line-height: 1.45;
-  cursor: pointer;
-}
-
-.guest-check input {
-  flex: none;
-  width: 21px;
-  height: 21px;
-  margin: 1px 0 0;
-  accent-color: var(--fill);
-  cursor: pointer;
-}
-
+/* The link into the fine print under the consent. */
 .guest-fine-link {
   color: var(--accent);
   font-weight: 650;

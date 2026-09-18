@@ -61,8 +61,7 @@ export function emptyAnswers() {
     contactPhone: '',
     contactNote: '',
     newsletter: null,
-    newsletterEmail: '',
-    newsletterOffers: false
+    newsletterEmail: ''
   };
 }
 
@@ -162,7 +161,6 @@ export function buildPayload(state, { questions = [], sourceType, startedAt, hon
     generalComment: '',
     newsletterOptin,
     newsletterEmail: newsletterOptin ? state.newsletterEmail.trim() : '',
-    newsletterOffers: newsletterOptin && state.newsletterOffers === true,
     contactRequested: Boolean(contactPhone),
     contactPhone,
     contactNote: lowRating ? state.contactNote.trim() : '',
@@ -261,8 +259,7 @@ export function loadDraft(token, now = Date.now()) {
         answers: saved.answers && typeof saved.answers === 'object' && !Array.isArray(saved.answers) ? saved.answers : {},
         commentPositive: typeof saved.commentPositive === 'string' ? saved.commentPositive : '',
         commentImprovement: typeof saved.commentImprovement === 'string' ? saved.commentImprovement : '',
-        newsletter: typeof saved.newsletter === 'boolean' ? saved.newsletter : null,
-        newsletterOffers: saved.newsletterOffers === true
+        newsletter: typeof saved.newsletter === 'boolean' ? saved.newsletter : null
       }
     };
   } catch {
@@ -272,12 +269,12 @@ export function loadDraft(token, now = Date.now()) {
 
 export function saveDraft(token, { state, stepId, startedAt }, now = Date.now()) {
   try {
-    const { rating, answers, commentPositive, commentImprovement, newsletter, newsletterOffers } = state;
+    const { rating, answers, commentPositive, commentImprovement, newsletter } = state;
     globalThis.sessionStorage?.setItem(draftPrefix + token, JSON.stringify({
       savedAt: now,
       stepId,
       startedAt,
-      state: { rating, answers, commentPositive, commentImprovement, newsletter, newsletterOffers }
+      state: { rating, answers, commentPositive, commentImprovement, newsletter }
     }));
   } catch {
     // Private windows may refuse storage; the flow works without it.

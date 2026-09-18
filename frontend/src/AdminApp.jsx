@@ -1853,7 +1853,7 @@ function SmtpSettings() {
 function Newsletter() {
   const [reload, setReload] = useState(0);
   const { data, loading, error } = useAsync(() => api('/admin/newsletter'), [reload]);
-  const [form, setForm] = useState({ apiUrl: '', apiKey: '', listUid: '', eventFieldTag: 'VERANSTALTUNG', sourceFieldTag: 'QUELLE', sourceFieldValue: 'qrating', sourceFieldUseQr: true, offersFieldTag: 'ANGEBOTE', enabled: true });
+  const [form, setForm] = useState({ apiUrl: '', apiKey: '', listUid: '', eventFieldTag: 'VERANSTALTUNG', sourceFieldTag: 'QUELLE', sourceFieldValue: 'qrating', sourceFieldUseQr: true, enabled: true });
   const [message, setMessage] = useState('');
   const connection = data?.connection;
 
@@ -1866,7 +1866,6 @@ function Newsletter() {
         eventFieldTag: connection.event_field_tag || 'VERANSTALTUNG',
         sourceFieldTag: connection.source_field_tag || 'QUELLE',
         sourceFieldValue: connection.source_field_value ?? 'qrating',
-        offersFieldTag: connection.offers_field_tag || 'ANGEBOTE',
         sourceFieldUseQr: connection.source_field_use_qr !== false,
         enabled: Boolean(connection.enabled)
       });
@@ -1915,7 +1914,7 @@ function Newsletter() {
     setMessage('Lösche Verbindung …');
     try {
       await api('/admin/newsletter', { method: 'DELETE' });
-      setForm({ apiUrl: '', apiKey: '', listUid: '', eventFieldTag: 'VERANSTALTUNG', sourceFieldTag: 'QUELLE', sourceFieldValue: 'qrating', sourceFieldUseQr: true, offersFieldTag: 'ANGEBOTE', enabled: true });
+      setForm({ apiUrl: '', apiKey: '', listUid: '', eventFieldTag: 'VERANSTALTUNG', sourceFieldTag: 'QUELLE', sourceFieldValue: 'qrating', sourceFieldUseQr: true, enabled: true });
       setMessage('Verbindung gelöscht.');
       setReload(reload + 1);
     } catch (err) {
@@ -1935,10 +1934,9 @@ function Newsletter() {
         <label className="block"><span className="text-sm font-medium">Feldkürzel für die Veranstaltung</span><input className="input mt-1" value={form.eventFieldTag} onChange={(e) => setForm({ ...form, eventFieldTag: e.target.value.toUpperCase() })} placeholder="VERANSTALTUNG" required /></label>
         <label className="block"><span className="text-sm font-medium">Feldkürzel für den Weg</span><input className="input mt-1" value={form.sourceFieldTag} onChange={(e) => setForm({ ...form, sourceFieldTag: e.target.value.toUpperCase() })} placeholder="QUELLE" required /></label>
         <label className="block"><span className="text-sm font-medium">Wert für den Weg, wenn keine QR-Quelle bekannt ist</span><input className="input mt-1" value={form.sourceFieldValue} onChange={(e) => setForm({ ...form, sourceFieldValue: e.target.value })} placeholder="qrating" /></label>
-        <label className="block md:col-span-2"><span className="text-sm font-medium">Feldkürzel für Angebote</span><input className="input mt-1" value={form.offersFieldTag} onChange={(e) => setForm({ ...form, offersFieldTag: e.target.value.toUpperCase() })} placeholder="ANGEBOTE" required /></label>
         <label className="flex items-center gap-2 rounded-md bg-neutral-50 p-3 md:col-span-2"><input type="checkbox" checked={form.sourceFieldUseQr} onChange={(e) => setForm({ ...form, sourceFieldUseQr: e.target.checked })} /> Name der QR-Quelle eintragen, wenn die Anmeldung über eine kam</label>
         <label className="flex items-center gap-2 rounded-md bg-neutral-50 p-3 md:col-span-2"><input type="checkbox" checked={form.enabled} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} /> Anmeldungen an MailWizz übergeben</label>
-        <p className="text-sm text-neutral-500 md:col-span-2">Jede Anmeldung geht mit ihrer E-Mail-Adresse an die Liste. Beide Feldkürzel müssen in MailWizz als Custom Fields dieser Liste angelegt sein: In das erste trägt qrating den Namen der Veranstaltung laut Pretix ein, in das zweite den Weg, über den die Anmeldung kam: den Namen der QR-Quelle, etwa „Bändchen“ oder „Bar“. Ist keine QR-Quelle bekannt, steht dort der Wert aus dem Feld daneben. Bleibt auch der leer, geht das Feld nicht mit. Ins dritte Feld trägt qrating „ja“ oder „nein“ ein, je nachdem, ob der Gast auch Frühbucher, Verlosungen und Exklusives wollte — daraus baust du in MailWizz ein Segment. Die Übergabe an MailWizz steht auf der Datenschutzseite deiner Gästeseite.</p>
+        <p className="text-sm text-neutral-500 md:col-span-2">Jede Anmeldung geht mit ihrer E-Mail-Adresse an die Liste. Beide Feldkürzel müssen in MailWizz als Custom Fields dieser Liste angelegt sein: In das erste trägt qrating den Namen der Veranstaltung laut Pretix ein, in das zweite den Weg, über den die Anmeldung kam: den Namen der QR-Quelle, etwa „Bändchen“ oder „Bar“. Ist keine QR-Quelle bekannt, steht dort der Wert aus dem Feld daneben. Bleibt auch der leer, geht das Feld nicht mit. Die Übergabe an MailWizz steht auf der Datenschutzseite deiner Gästeseite.</p>
         <div className="flex flex-wrap gap-2 md:col-span-2">
           <button className="button-primary"><Send size={16} /> Speichern</button>
           <button type="button" onClick={test} className="button-secondary"><RefreshCw size={16} /> Verbindung testen</button>

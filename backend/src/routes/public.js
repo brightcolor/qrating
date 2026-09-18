@@ -288,7 +288,6 @@ const feedbackSchema = Joi.object({
   commentImprovement: Joi.string().max(3000).allow('', null),
   generalComment: Joi.string().max(3000).allow('', null),
   newsletterOptin: Joi.boolean().default(false),
-  newsletterOffers: Joi.boolean().default(false),
   newsletterEmail: Joi.string().email().allow('', null),
   contactRequested: Joi.boolean().default(false),
   contactPhone: Joi.string().max(80).pattern(/^[0-9+()\-\s/]*$/).allow('', null),
@@ -395,9 +394,9 @@ publicRouter.post('/events/:eventToken/feedback', feedbackLimiter, async (req, r
       const optin = (await query(
         `INSERT INTO newsletter_optins (
           organization_id, event_id, feedback_response_id, email, email_encrypted, email_hash, email_domain,
-          consent_text, source, offers_optin, offers_consent_text
+          consent_text, source
         )
-         VALUES ($1,$2,$3,null,$4,$5,$6,$7,'feedback',$8,$9)
+         VALUES ($1,$2,$3,null,$4,$5,$6,$7,'feedback')
          RETURNING id`,
         [
           event.organization_id,
@@ -406,9 +405,7 @@ publicRouter.post('/events/:eventToken/feedback', feedbackLimiter, async (req, r
           encryptSecret(normalizedEmail),
           emailHash(normalizedEmail),
           emailDomain(normalizedEmail),
-          texts.newsletter_label,
-          Boolean(value.newsletterOffers),
-          value.newsletterOffers ? texts.newsletter_offers_label : null
+          texts.newsletter_label
         ]
       )).rows[0];
       // The handover to the newsletter system runs in the background, so the guest waits for nothing.

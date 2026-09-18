@@ -201,17 +201,6 @@ describe('draft storage', () => {
     expect(loadDraft('token-2').state).toMatchObject({ contactPhone: '', contactNote: '', newsletterEmail: '' });
   });
 
-  it('carries the second wish only together with the opt-in', () => {
-    const base = { ...emptyAnswers(), rating: 5, newsletter: true, newsletterEmail: 'gast@example.de', newsletterOffers: true };
-
-    expect(buildPayload(base, { questions: [] })).toMatchObject({ newsletterOptin: true, newsletterOffers: true });
-    expect(buildPayload({ ...base, newsletterOffers: false }, { questions: [] }).newsletterOffers).toBe(false);
-    expect(buildPayload({ ...base, newsletter: false }, { questions: [] })).toMatchObject({
-      newsletterOptin: false,
-      newsletterOffers: false
-    });
-  });
-
   it('forgets drafts of earlier guests', () => {
     const start = Date.parse('2026-09-17T18:00:00.000Z');
     saveDraft('token-3', { state: { ...emptyAnswers(), rating: 5 }, stepId: 'rating', startedAt: null }, start);

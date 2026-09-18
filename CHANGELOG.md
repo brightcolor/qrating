@@ -4,6 +4,14 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.41.0] - 2026-09-18
+
+### Changed
+
+- The newsletter step asks once. The separate second question fell away again; what a guest agrees to now stands in the consent text itself, so one yes covers tickets before they go public, prize draws and invitations.
+- The wording of the step speaks about the evenings instead of about a newsletter.
+- Version bumped to `0.41.0`.
+
 ## [0.40.0] - 2026-09-18
 
 ### Added

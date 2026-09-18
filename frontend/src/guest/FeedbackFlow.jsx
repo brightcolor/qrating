@@ -376,11 +376,6 @@ export function FeedbackFlow({ event, texts, sourceType, lang = 'de', preview = 
       </div>
       {state.newsletter === true && <div className="guest-optin">
         <p className="guest-consent"><Check size={18} strokeWidth={2.6} aria-hidden="true" /><span>{texts.newsletter_label}</span></p>
-        {texts.newsletter_offers_label && <label className="guest-check">
-          <input type="checkbox" checked={state.newsletterOffers === true}
-            onChange={(changeEvent) => update({ newsletterOffers: changeEvent.target.checked })} />
-          <span>{texts.newsletter_offers_label}</span>
-        </label>}
         <label className="guest-field">
           <span>{texts.newsletter_email_label}</span>
           <input className="guest-input" type="email" inputMode="email" autoComplete="email" autoCapitalize="none"
@@ -619,10 +614,7 @@ function SummaryRow({ step, state, texts, lang, onEdit }) {
     value = state[step.field].trim() || null;
   } else if (step.kind === 'newsletter') {
     label = texts.summary_newsletter_label;
-    if (state.newsletter === true) {
-      value = [texts.newsletter_yes, state.newsletterEmail.trim()].filter(Boolean).join(': ');
-      if (state.newsletterOffers === true && texts.newsletter_offers_summary) value += ` \u00b7 ${texts.newsletter_offers_summary}`;
-    }
+    if (state.newsletter === true) value = [texts.newsletter_yes, state.newsletterEmail.trim()].filter(Boolean).join(': ');
     if (state.newsletter === false) value = texts.newsletter_no;
   }
   const empty = value === null && !detail;
