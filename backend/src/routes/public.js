@@ -14,9 +14,10 @@ import { markCompleted, recordProgress } from '../services/guestSessionService.j
 import { upcomingFor, upcomingForOrganization } from '../services/upcomingService.js';
 import { encryptSecret } from '../utils/crypto.js';
 import { getSiteContent } from '../services/siteContentService.js';
-import { emailDomain, emailHash, publicEventStatus, publicOrganization } from '../utils/security.js';
+import { creditFor, emailDomain, emailHash, publicEventStatus, publicOrganization } from '../utils/security.js';
 import { describeWait } from '../middleware/errors.js';
 import { verifyPreviewToken } from '../utils/previewLink.js';
+import { privacyPage } from '../services/privacyService.js';
 
 export const publicRouter = express.Router();
 
@@ -40,6 +41,23 @@ function feedbackValidationMessage(error) {
   return feedbackFieldMessages[field]
     || 'Einige Angaben sind ungültig. Bitte prüfe deine Eingaben und sende das Feedback erneut.';
 }
+
+// What happens with the data of a guest, written from the settings of this organization.
+publicRouter.get('/privacy/:slug', async (req, res, next) => {
+  try {
+    const organization = (await query('SELECT * FROM organizations WHERE slug = $1', [req.params.slug])).rows[0];
+    if (!organization) {
+      return res.status(404).json({
+        status: 'organization_not_found',
+        message: 'Zu dieser Adresse gibt es keine Datenschutzseite. Prüfe den Link oder den QR-Code.'
+      });
+    }
+    const newsletter = await new NewsletterService({ query }).connectionFor(organization.id);
+    res.json({ status: 'ok', credit: creditFor(organization), ...privacyPage(organization, { newsletter }) });
+  } catch (error) {
+    next(error);
+  }
+});
 
 publicRouter.get('/site', async (req, res, next) => {
   try {
@@ -270,6 +288,7 @@ const feedbackSchema = Joi.object({
   commentImprovement: Joi.string().max(3000).allow('', null),
   generalComment: Joi.string().max(3000).allow('', null),
   newsletterOptin: Joi.boolean().default(false),
+  newsletterOffers: Joi.boolean().default(false),
   newsletterEmail: Joi.string().email().allow('', null),
   contactRequested: Joi.boolean().default(false),
   contactPhone: Joi.string().max(80).pattern(/^[0-9+()\-\s/]*$/).allow('', null),
@@ -376,9 +395,9 @@ publicRouter.post('/events/:eventToken/feedback', feedbackLimiter, async (req, r
       const optin = (await query(
         `INSERT INTO newsletter_optins (
           organization_id, event_id, feedback_response_id, email, email_encrypted, email_hash, email_domain,
-          consent_text, source
+          consent_text, source, offers_optin, offers_consent_text
         )
-         VALUES ($1,$2,$3,null,$4,$5,$6,$7,'feedback')
+         VALUES ($1,$2,$3,null,$4,$5,$6,$7,'feedback',$8,$9)
          RETURNING id`,
         [
           event.organization_id,
@@ -387,7 +406,9 @@ publicRouter.post('/events/:eventToken/feedback', feedbackLimiter, async (req, r
           encryptSecret(normalizedEmail),
           emailHash(normalizedEmail),
           emailDomain(normalizedEmail),
-          texts.newsletter_label
+          texts.newsletter_label,
+          Boolean(value.newsletterOffers),
+          value.newsletterOffers ? texts.newsletter_offers_label : null
         ]
       )).rows[0];
       // The handover to the newsletter system runs in the background, so the guest waits for nothing.

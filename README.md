@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.39.1
+**Version:** 0.40.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -284,6 +284,12 @@ The guest page follows the system setting of the phone. A button in the corner â
 
 The stage colors swap through `data-theme` on the guest container. The brand color of an organization is recalculated for the ground it stands on: `guestPalette(color, 'light' | 'dark')` moves it toward the ink on a light page and toward the white on a dark one, until buttons reach a contrast of 3 and text 4.5. A test walks eight brand colors through both grounds.
 
+## The Newsletter Opt-In And Its Privacy Page
+
+A guest who says yes to event news sees a second, empty checkbox below the consent: presale starts ahead of everyone else, prize draws and evenings that stay off the open programme. It is a wish of its own â€” the address travels either way, the wish only when the box is ticked. Both stand in the texts (`newsletter_offers_label`, `newsletter_offers_summary`) and both reach MailWizz: the connection carries a third tag, `offersFieldTag` (default `ANGEBOTE`), and qrating writes `ja` or `nein` into it, so a campaign can address exactly the audience that asked for offers.
+
+Under the checkbox stands what happens with the address and a link to `/datenschutz/<slug>` on the guest domain. That page is written by `backend/src/services/privacyService.js` out of the settings of the organization: the deletion periods come from the retention fields, the newsletter system is named only while a connection exists, and the responsible party comes from `legalName`, `legalAddress` and `legalEmail` under **Branding**. As long as one of the three is missing, the page says so at the top instead of pretending to be complete.
+
 ## Mark And Note
 
 Two things carry the product into the open, and an organization can switch each one off under **Branding**:
@@ -541,7 +547,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.39.1`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.40.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

@@ -704,6 +704,99 @@
   color: var(--accent);
 }
 
+/* The page that explains what happens with the data of a guest. */
+.guest-privacy {
+  justify-content: flex-start;
+  padding: 10px 0 40px;
+}
+
+.guest-privacy-own {
+  margin: 18px 0 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--veil);
+  font-size: 0.96rem;
+  line-height: 1.55;
+}
+
+.guest-privacy-part {
+  margin-top: 28px;
+}
+
+.guest-privacy-part h2 {
+  margin: 0 0 10px;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 400;
+  line-height: 1.25;
+}
+
+.guest-privacy-text {
+  margin: 0 0 10px;
+  color: var(--haze);
+  font-size: 0.98rem;
+  line-height: 1.6;
+  white-space: pre-line;
+}
+
+.guest-privacy-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.guest-privacy-list li {
+  position: relative;
+  padding: 0 0 0 20px;
+  margin-bottom: 9px;
+  color: var(--haze);
+  font-size: 0.98rem;
+  line-height: 1.6;
+}
+
+.guest-privacy-list li::before {
+  content: '';
+  position: absolute;
+  top: 0.62em;
+  left: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* A second, optional wish next to the consent, and the link into the fine print. */
+.guest-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  margin-top: 14px;
+  padding: 13px 15px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--veil);
+  font-size: 0.95rem;
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.guest-check input {
+  flex: none;
+  width: 21px;
+  height: 21px;
+  margin: 1px 0 0;
+  accent-color: var(--fill);
+  cursor: pointer;
+}
+
+.guest-fine-link {
+  color: var(--accent);
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 /* Actions */
 
 .guest-actions {

@@ -4,6 +4,15 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.40.0] - 2026-09-18
+
+### Added
+
+- The newsletter step asks a second question: whether a guest also wants presale starts, prize draws and evenings outside the open programme. The box starts empty, and the answer travels to the newsletter system in a field of its own, so a campaign can address exactly that audience.
+- Public pages carry a privacy page under `/datenschutz/<slug>`. It is written from the settings of the organization: deletion periods, the connected newsletter system and the responsible party. While the responsible party is missing, the page says at the top that it is incomplete.
+- Branding gained the three fields the privacy page names: responsible party, address and an email address for privacy requests.
+- Version bumped to `0.40.0`.
+
 ## [0.39.1] - 2026-09-18
 
 ### Fixed

@@ -37,6 +37,10 @@ export const textLabels = {
   newsletter_yes: ['Antwort Zustimmung'],
   newsletter_no: ['Antwort Ablehnung'],
   newsletter_label: ['Einwilligungstext über dem E-Mail-Feld'],
+  newsletter_offers_label: ['Zweites Häkchen: Frühbucher, Verlosungen, Exklusives'],
+  newsletter_offers_summary: ['Kurzform davon in der Zusammenfassung'],
+  newsletter_privacy_note: ['Zeile zur Weitergabe der Daten'],
+  newsletter_privacy_link: ['Beschriftung des Verweises zur Datenschutzseite'],
   newsletter_email_label: ['Feld für die E-Mail-Adresse'],
   email_invalid: ['Meldung bei ungültiger E-Mail-Adresse'],
   summary_headline: ['Überschrift der Zusammenfassung'],
@@ -84,6 +88,7 @@ export const textGroups = [
   ]],
   ['Infos zu kommenden Events', [
     'newsletter_question', 'newsletter_help', 'newsletter_yes', 'newsletter_no', 'newsletter_label',
+    'newsletter_offers_label', 'newsletter_offers_summary', 'newsletter_privacy_note', 'newsletter_privacy_link',
     'newsletter_email_label', 'email_invalid'
   ]],
   ['Zusammenfassung und Dank', [

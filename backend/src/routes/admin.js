@@ -1396,7 +1396,7 @@ adminRouter.get('/branding', async (req, res, next) => {
               ticketshop_url, website_url, instagram_url, facebook_url, default_language,
               default_feedback_window_days, default_feedback_window_hours,
               default_feedback_start_mode, branding, anti_spam_settings,
-              qr_mark_enabled, product_credit_enabled,
+              qr_mark_enabled, product_credit_enabled, legal_name, legal_address, legal_email,
               retention_low_rating_phone_days, retention_feedback_days, retention_newsletter_days,
               wallboard_settings
        FROM organizations WHERE id = $1`,
@@ -1429,12 +1429,15 @@ adminRouter.patch('/branding', requireRole('event_manager'), async (req, res, ne
            wallboard_settings = COALESCE($16::jsonb, wallboard_settings),
            qr_mark_enabled = COALESCE($17, qr_mark_enabled),
            product_credit_enabled = COALESCE($18, product_credit_enabled),
+           legal_name = COALESCE($19, legal_name),
+           legal_address = COALESCE($20, legal_address),
+           legal_email = COALESCE($21, legal_email),
            updated_at = now()
        WHERE id = $1
        RETURNING id, name, slug, logo_url, primary_color, footer_text, privacy_text,
          ticketshop_url, website_url, instagram_url, facebook_url, default_language, branding,
          retention_low_rating_phone_days, retention_feedback_days, retention_newsletter_days, wallboard_settings,
-         qr_mark_enabled, product_credit_enabled`,
+         qr_mark_enabled, product_credit_enabled, legal_name, legal_address, legal_email`,
       [
         req.admin.organizationId,
         req.body.name,
@@ -1453,7 +1456,10 @@ adminRouter.patch('/branding', requireRole('event_manager'), async (req, res, ne
         req.body.retentionNewsletterDays === undefined || req.body.retentionNewsletterDays === '' ? null : Number(req.body.retentionNewsletterDays),
         req.body.wallboardSettings ? JSON.stringify(req.body.wallboardSettings) : null,
         req.body.qrMarkEnabled === undefined ? null : Boolean(req.body.qrMarkEnabled),
-        req.body.productCreditEnabled === undefined ? null : Boolean(req.body.productCreditEnabled)
+        req.body.productCreditEnabled === undefined ? null : Boolean(req.body.productCreditEnabled),
+        req.body.legalName === undefined ? null : String(req.body.legalName).trim(),
+        req.body.legalAddress === undefined ? null : String(req.body.legalAddress).trim(),
+        req.body.legalEmail === undefined ? null : String(req.body.legalEmail).trim()
       ]
     );
     res.json(result.rows[0]);
@@ -1834,11 +1840,12 @@ function newsletterInput(body, existing) {
   const sourceTag = mailwizzFieldTag(body.sourceFieldTag, 'QUELLE');
   const sourceValue = String(body.sourceFieldValue ?? 'qrating').trim().slice(0, 100);
   const sourceUseQr = body.sourceFieldUseQr === undefined ? true : Boolean(body.sourceFieldUseQr);
+  const offersTag = mailwizzFieldTag(body.offersFieldTag, 'ANGEBOTE');
   const apiKeyProvided = typeof body.apiKey === 'string' && body.apiKey.trim().length > 0;
   if (!apiKeyProvided && !existing?.api_key_encrypted) {
     throw httpError(400, 'Der API-Schlüssel fehlt. Lege ihn in MailWizz unter „API keys“ an und trage ihn hier ein.');
   }
-  return { apiUrl, listUid, fieldTag, sourceTag, sourceValue, sourceUseQr, apiKeyProvided, apiKey: apiKeyProvided ? body.apiKey.trim() : null };
+  return { apiUrl, listUid, fieldTag, sourceTag, sourceValue, sourceUseQr, offersTag, apiKeyProvided, apiKey: apiKeyProvided ? body.apiKey.trim() : null };
 }
 
 adminRouter.get('/newsletter', requireRole('admin'), async (req, res, next) => {
@@ -1866,18 +1873,19 @@ adminRouter.put('/newsletter', requireRole('admin'), async (req, res, next) => {
     const result = await query(
       `INSERT INTO newsletter_connections (
          organization_id, provider, api_url, api_key_encrypted, list_uid, event_field_tag,
-         source_field_tag, source_field_value, source_field_use_qr, enabled
+         source_field_tag, source_field_value, source_field_use_qr, offers_field_tag, enabled
        )
-       VALUES ($1,'mailwizz',$2,$3,$4,$5,$6,$7,$8,$9)
+       VALUES ($1,'mailwizz',$2,$3,$4,$5,$6,$7,$8,$9,$10)
        ON CONFLICT (organization_id)
        DO UPDATE SET
          api_url = EXCLUDED.api_url,
-         api_key_encrypted = CASE WHEN $10::boolean THEN EXCLUDED.api_key_encrypted ELSE newsletter_connections.api_key_encrypted END,
+         api_key_encrypted = CASE WHEN $11::boolean THEN EXCLUDED.api_key_encrypted ELSE newsletter_connections.api_key_encrypted END,
          list_uid = EXCLUDED.list_uid,
          event_field_tag = EXCLUDED.event_field_tag,
          source_field_tag = EXCLUDED.source_field_tag,
          source_field_value = EXCLUDED.source_field_value,
          source_field_use_qr = EXCLUDED.source_field_use_qr,
+         offers_field_tag = EXCLUDED.offers_field_tag,
          enabled = EXCLUDED.enabled,
          updated_at = now()
        RETURNING *`,
@@ -1890,6 +1898,7 @@ adminRouter.put('/newsletter', requireRole('admin'), async (req, res, next) => {
         input.sourceTag,
         input.sourceValue,
         input.sourceUseQr,
+        input.offersTag,
         req.body.enabled === undefined ? true : Boolean(req.body.enabled),
         input.apiKeyProvided
       ]
@@ -1900,7 +1909,7 @@ adminRouter.put('/newsletter', requireRole('admin'), async (req, res, next) => {
       action: 'integration.newsletter.saved',
       entityType: 'newsletter_connection',
       entityId: result.rows[0].id,
-      metadata: { provider: 'mailwizz', listUid: input.listUid, eventFieldTag: input.fieldTag, sourceFieldTag: input.sourceTag }
+      metadata: { provider: 'mailwizz', listUid: input.listUid, eventFieldTag: input.fieldTag, sourceFieldTag: input.sourceTag, offersFieldTag: input.offersTag }
     });
     res.json(newsletterConnectionForAdmin(result.rows[0]));
   } catch (error) {

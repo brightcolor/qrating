@@ -4,7 +4,7 @@ import './styles/index.css';
 
 function loadApp(path) {
   if (path.startsWith('/admin')) return import('./AdminApp.jsx');
-  if (path.startsWith('/e/') || path.startsWith('/f/')) return import('./PublicApp.jsx');
+  if (path.startsWith('/e/') || path.startsWith('/f/') || path.startsWith('/datenschutz/')) return import('./PublicApp.jsx');
   return import('./site/SiteApp.jsx');
 }
 

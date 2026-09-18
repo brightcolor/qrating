@@ -112,6 +112,8 @@ export function FeedbackFlow({ event, texts, sourceType, lang = 'de', preview = 
   const image = eventImage(event);
   const logo = event.organization?.logoUrl ? assetUrl(event.organization.logoUrl) : null;
   const privacyText = event.organization?.privacyText || texts.privacy_short;
+  // The page that explains what happens with the data of a guest.
+  const privacyUrl = event.organization?.slug ? `/datenschutz/${event.organization.slug}` : null;
   const footerText = event.organization?.footerText;
 
   useEffect(() => {
@@ -374,12 +376,21 @@ export function FeedbackFlow({ event, texts, sourceType, lang = 'de', preview = 
       </div>
       {state.newsletter === true && <div className="guest-optin">
         <p className="guest-consent"><Check size={18} strokeWidth={2.6} aria-hidden="true" /><span>{texts.newsletter_label}</span></p>
+        {texts.newsletter_offers_label && <label className="guest-check">
+          <input type="checkbox" checked={state.newsletterOffers === true}
+            onChange={(changeEvent) => update({ newsletterOffers: changeEvent.target.checked })} />
+          <span>{texts.newsletter_offers_label}</span>
+        </label>}
         <label className="guest-field">
           <span>{texts.newsletter_email_label}</span>
           <input className="guest-input" type="email" inputMode="email" autoComplete="email" autoCapitalize="none"
             spellCheck={false} maxLength={254} autoFocus={focusEmail} value={state.newsletterEmail}
             onChange={(changeEvent) => update({ newsletterEmail: changeEvent.target.value })} onKeyDown={onEnter} />
         </label>
+        <p className="guest-fine">
+          {texts.newsletter_privacy_note}
+          {privacyUrl && <>{' '}<a className="guest-fine-link" href={privacyUrl} target="_blank" rel="noreferrer">{texts.newsletter_privacy_link}</a></>}
+        </p>
         {privacyText && <p className="guest-fine">{privacyText}</p>}
       </div>}
     </>;
@@ -608,7 +619,10 @@ function SummaryRow({ step, state, texts, lang, onEdit }) {
     value = state[step.field].trim() || null;
   } else if (step.kind === 'newsletter') {
     label = texts.summary_newsletter_label;
-    if (state.newsletter === true) value = [texts.newsletter_yes, state.newsletterEmail.trim()].filter(Boolean).join(': ');
+    if (state.newsletter === true) {
+      value = [texts.newsletter_yes, state.newsletterEmail.trim()].filter(Boolean).join(': ');
+      if (state.newsletterOffers === true && texts.newsletter_offers_summary) value += ` \u00b7 ${texts.newsletter_offers_summary}`;
+    }
     if (state.newsletter === false) value = texts.newsletter_no;
   }
   const empty = value === null && !detail;

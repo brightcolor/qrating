@@ -119,6 +119,8 @@ export class NewsletterService {
     if (eventName) fields[connection.event_field_tag] = eventName;
     const source = await this.sourceValueFor(optin, connection);
     if (connection.source_field_tag && source) fields[connection.source_field_tag] = source;
+    // The second wish travels as a plain word, so a campaign can pick exactly that audience.
+    if (connection.offers_field_tag) fields[connection.offers_field_tag] = optin.offers_optin ? 'ja' : 'nein';
     return fields;
   }
 

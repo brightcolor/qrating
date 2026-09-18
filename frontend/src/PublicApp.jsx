@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api } from './lib/api.js';
 import { FeedbackFlow, GuestScreen, GuestStage, eventImage } from './guest/FeedbackFlow.jsx';
 import { WaitingScreen } from './guest/Upcoming.jsx';
+import { PrivacyPage } from './guest/Privacy.jsx';
 import { formatDateTime } from './guest/flow.js';
 
 // The website has its own bundle; main.jsx usually loads it directly.
@@ -78,6 +79,31 @@ function PublicFeedback({ mode, identifier, source }) {
   return <FeedbackFlow event={data.event} texts={data.texts} upcoming={data.upcoming || []} sourceType={source || mode} lang={lang} preview={Boolean(data.preview)} />;
 }
 
+// The page that says what happens with the data of a guest.
+function PublicPrivacy({ slug }) {
+  const { loading, data, error } = useAsync(() => api(`/public/privacy/${slug}`), [slug]);
+  const lang = new URLSearchParams(window.location.search).get('lang') === 'en' ? 'en' : 'de';
+
+  if (loading) {
+    return <GuestScreen lang={lang} loading>
+      <p>Datenschutzhinweise werden geladen …</p>
+    </GuestScreen>;
+  }
+  if (error || data?.status !== 'ok') {
+    const message = error?.body?.message || error?.message
+      || 'Zu dieser Adresse gibt es keine Datenschutzseite. Prüfe den Link oder den QR-Code.';
+    return <GuestScreen lang={lang}>
+      <h1>Diese Seite gibt es nicht.</h1>
+      <p>{message}</p>
+    </GuestScreen>;
+  }
+  return <GuestStage brandColor={data.organization?.primaryColor} lang={lang}>
+    <div className="guest-frame">
+      <PrivacyPage page={data} credit={data.credit || null} />
+    </div>
+  </GuestStage>;
+}
+
 // Headline and text for guest pages without an open feedback round.
 function closedNotice(closed, lang) {
   const texts = closed.texts || {};
@@ -109,6 +135,7 @@ function closedNotice(closed, lang) {
 
 export default function PublicApp() {
   const path = window.location.pathname;
+  if (path.startsWith('/datenschutz/')) return <PublicPrivacy slug={path.split('/')[2]} />;
   if (path.startsWith('/e/')) return <PublicFeedback mode="event" identifier={path.split('/')[2]} source={new URLSearchParams(window.location.search).get('source')} />;
   if (path.startsWith('/f/')) {
     const parts = path.split('/').filter(Boolean);
