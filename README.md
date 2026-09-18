@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.43.1
+**Version:** 0.44.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -270,6 +270,8 @@ Two kinds of sheet exist:
 ## Before And After The Round
 
 A guest who scans early sees what the code is for: the event, its date, a countdown in days, hours, minutes and seconds, and five quiet stars, with the moment the rating opens. The last day drops the day segment and the three remaining ones take the room. When the countdown reaches zero the page loads itself again, so the rating stands there without a tap. The page of an organization shows the event that comes next the same way, and the ones after it as a list with a link to the ticket shop.
+
+The picture of an event is on the page, not only behind it: the evening a guest waits for shows it above its name, and every entry in the list carries its own as a small poster behind the date.
 
 While a round runs nothing stands in the way: the guest goes straight into the rating. The events that follow appear after the feedback, on the thank-you screen.
 
@@ -551,7 +553,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.43.1`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.44.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

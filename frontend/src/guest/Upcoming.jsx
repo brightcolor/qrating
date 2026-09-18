@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Star } from 'lucide-react';
 import { formatDay } from './flow.js';
 import { countdownParts, countdownSegments } from './countdown.js';
+import { assetUrl } from '../lib/api.js';
 import { ProductCredit } from '../lib/credit.jsx';
 
 // Day and month as a small calendar tile, next to name and place.
@@ -67,8 +68,12 @@ export function UpcomingList({ items = [], locale = 'de-DE', headline, shopLabel
     <ul className="guest-upcoming-list">
       {items.map((item) => {
         const parts = dayParts(item.dateFrom, locale);
+        const picture = assetUrl(item.imageUrl);
         return <li key={item.id} className="guest-upcoming-row">
-          <span className="guest-upcoming-date" aria-hidden="true"><b>{parts.day}</b><span>{parts.month}</span></span>
+          <span className={`guest-upcoming-date${picture ? ' has-image' : ''}`} aria-hidden="true"
+            style={picture ? { backgroundImage: `url(${picture})` } : undefined}>
+            <b>{parts.day}</b><span>{parts.month}</span>
+          </span>
           <span className="guest-upcoming-text">
             <strong>{item.name}</strong>
             <span>{timeAndPlace(item, locale)}</span>
@@ -96,6 +101,14 @@ function reloadPage() {
 }
 
 // The page before a round starts: what will be rated here, and what comes after it.
+function WaitingPoster({ url, name }) {
+  const picture = assetUrl(url);
+  if (!picture) return null;
+  return <figure className="guest-waiting-poster">
+    <img src={picture} alt={name ? `Bild zu ${name}` : ''} loading="lazy" />
+  </figure>;
+}
+
 export function WaitingScreen({ organization, event, texts = {}, upcoming = [], opensAt, lang = 'de', credit = null, onOpen = reloadPage }) {
   const locale = lang === 'en' ? 'en-GB' : 'de-DE';
   const lead = event || upcoming[0] || null;
@@ -107,6 +120,7 @@ export function WaitingScreen({ organization, event, texts = {}, upcoming = [], 
     : texts.no_event_text || 'Schau gerne später noch einmal vorbei.';
 
   return <section className="guest-step guest-waiting">
+    <WaitingPoster url={lead?.imageUrl} name={lead?.name} />
     {organization?.name && <p className="guest-waiting-kicker">{organization.name}</p>}
     <h1 className="guest-question">{event ? event.name : (texts.upcoming_headline || 'Als Nächstes')}</h1>
     {event

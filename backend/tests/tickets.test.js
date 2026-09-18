@@ -64,6 +64,15 @@ describe('the ticket link of a coming event', () => {
     expect(ticketsAvailable(asText, now)).toBe(false);
   });
 
+  it('carries the picture of the event, also the one the sync cached', () => {
+    const own = pretixEvent({ live: true }, { image_url: '/storage/event-images/eigen.jpg' });
+    const synced = pretixEvent({ live: true }, { image_url: null, cached_image_url: '/storage/event-images/abgeglichen.jpg' });
+
+    expect(publicUpcoming(own, {}, now).imageUrl).toBe('/storage/event-images/eigen.jpg');
+    expect(publicUpcoming(synced, {}, now).imageUrl).toBe('/storage/event-images/abgeglichen.jpg');
+    expect(publicUpcoming(pretixEvent({ live: true }), {}, now).imageUrl).toBe(null);
+  });
+
   it('says nothing about tickets without any address', () => {
     const noShop = { id: 'event-3', name: 'Offene Bühne', date_from: '2026-10-01T18:00:00.000Z' };
 

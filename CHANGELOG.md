@@ -4,6 +4,13 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.44.0] - 2026-09-18
+
+### Added
+
+- The picture of an event is visible on the waiting page instead of only blurred in the background, and every event in the list of what comes next carries its own as a small poster behind the date.
+- Version bumped to `0.44.0`.
+
 ## [0.43.1] - 2026-09-18
 
 ### Changed

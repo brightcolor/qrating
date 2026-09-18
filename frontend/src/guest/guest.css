@@ -1249,6 +1249,22 @@
 }
 
 /* Waiting page and the pointer to the next events */
+.guest-waiting-poster {
+  margin: 0 0 16px;
+  overflow: hidden;
+  border-radius: 20px;
+  background: var(--stage-raised);
+  box-shadow: var(--shadow-poster);
+}
+
+.guest-waiting-poster img {
+  display: block;
+  width: 100%;
+  max-height: 30vh;
+  object-fit: cover;
+  aspect-ratio: 16 / 9;
+}
+
 .guest-waiting {
   justify-content: center;
   padding-top: 8px;
@@ -1310,12 +1326,36 @@
 }
 
 .guest-upcoming-date {
+  position: relative;
   flex: 0 0 54px;
+  overflow: hidden;
   text-align: center;
   border-radius: 12px;
   background: var(--stage-raised);
   border: 1px solid var(--line);
   padding: 7px 0;
+}
+
+/* With a picture the tile becomes a small poster and the date moves on top of it. */
+.guest-upcoming-date.has-image {
+  background-size: cover;
+  background-position: center;
+  border-color: transparent;
+  color: #ffffff;
+}
+
+.guest-upcoming-date.has-image::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(20, 15, 28, 0.3), rgba(20, 15, 28, 0.72));
+}
+
+.guest-upcoming-date.has-image b,
+.guest-upcoming-date.has-image span {
+  position: relative;
+  color: #ffffff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
 }
 
 .guest-upcoming-date b {
