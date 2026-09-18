@@ -4,6 +4,13 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.45.2] - 2026-09-18
+
+### Fixed
+
+- Deleting an event failed once two low ratings had been announced over the same channel. The record of an announcement stayed behind without its rating, and two such leftovers collided. They now go with the rating they announced.
+- Version bumped to `0.45.2`.
+
 ## [0.45.1] - 2026-09-18
 
 ### Fixed
