@@ -615,8 +615,10 @@ adminRouter.get('/events/:id/report.pdf', async (req, res, next) => {
        LIMIT 50`,
       [event.id]
     );
+    const reportOrganization = (await query('SELECT name, primary_color FROM organizations WHERE id = $1', [req.admin.organizationId])).rows[0];
     const pdf = buildEventReportPdf({
       event,
+      organization: reportOrganization,
       summary: summaryResult.rows[0],
       distribution: distribution.rows,
       timeline: timeline.rows,

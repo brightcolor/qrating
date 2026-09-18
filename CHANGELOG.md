@@ -4,6 +4,14 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.30.0] - 2026-09-18
+
+### Changed
+
+- The event report as PDF has a layout now: a coloured header with event, date, place and organization, the key figures as cards, the ratings as a bar chart, the course of the evening, the own questions and the voices of the guests.
+- The accent colour of the report comes from the organization settings, and every page carries a footer with the event, the moment of creation and the page number.
+- Version bumped to `0.30.0`.
+
 ## [0.29.0] - 2026-09-18
 
 ### Security

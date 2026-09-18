@@ -121,7 +121,8 @@ export class JobWorker {
     const timeline = await this.db.query(`SELECT date_trunc('hour', submitted_at) AS bucket, count(*)::int AS count, round(avg(rating)::numeric, 2) AS average_rating FROM feedback_responses WHERE event_id = $1 GROUP BY bucket ORDER BY bucket`, [event.id]);
     const questionStats = await this.db.query(`SELECT q.label, q.question_type, fa.answer_value, count(*)::int AS count FROM feedback_answers fa JOIN feedback_questions q ON q.id = fa.feedback_question_id JOIN feedback_responses fr ON fr.id = fa.feedback_response_id WHERE fr.event_id = $1 AND q.show_in_dashboard = true GROUP BY q.label, q.question_type, fa.answer_value ORDER BY q.label, count DESC`, [event.id]);
     const comments = await this.db.query(`SELECT rating, comment_positive, comment_improvement, general_comment, submitted_at FROM feedback_responses WHERE event_id = $1 ORDER BY submitted_at DESC LIMIT 50`, [event.id]);
-    const pdf = buildEventReportPdf({ event, summary: summary.rows[0], distribution: distribution.rows, timeline: timeline.rows, questionStats: questionStats.rows, comments: comments.rows });
+    const organization = (await this.db.query('SELECT name, primary_color FROM organizations WHERE id = $1', [event.organization_id])).rows[0];
+    const pdf = buildEventReportPdf({ event, organization, summary: summary.rows[0], distribution: distribution.rows, timeline: timeline.rows, questionStats: questionStats.rows, comments: comments.rows });
     const notification = new NotificationService(this.db);
     const sent = await notification.smtpService.sendMail(event.organization_id, {
       to: user.email,
