@@ -4,6 +4,13 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.30.1] - 2026-09-18
+
+### Fixed
+
+- Pretix answers with translated fields, and the place of an event arrived as JSON. Guest page, print sheet, report and notifications showed that JSON instead of the address. Every one of them reads the German text now, the sync stores it that way, and migration `018` cleans the places of events that were imported earlier.
+- Version bumped to `0.30.1`.
+
 ## [0.30.0] - 2026-09-18
 
 ### Changed

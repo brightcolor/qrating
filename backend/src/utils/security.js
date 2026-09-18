@@ -1,4 +1,5 @@
 import { env } from '../config/env.js';
+import { plainText } from './localized.js';
 import crypto from 'crypto';
 import { httpError } from '../middleware/errors.js';
 
@@ -83,7 +84,7 @@ export function publicEventStatus(event = {}) {
     name: event.name,
     dateFrom: event.date_from,
     dateTo: event.date_to,
-    location: event.location,
+    location: plainText(event.location) || null,
     imageUrl: event.image_url || event.cached_image_url || null,
     imageAlt: event.image_alt || (event.name ? `Bild zu ${event.name}` : null),
     organization: publicOrganization({

@@ -2,6 +2,7 @@
 // so there is nothing left to type.
 import { DateTime } from 'luxon';
 import { escapeHtml } from './html.js';
+import { plainText } from './localized.js';
 
 const fallbackAccent = '#2563eb';
 
@@ -36,7 +37,7 @@ export function renderQrPrintSheet({ event, organizationName, accentColor, qrSvg
   const accent = safeAccent(accentColor);
   const name = escapeHtml(event?.name ?? 'Event');
   const period = formatEventPeriod(event);
-  const place = String(event?.location ?? '').trim();
+  const place = plainText(event?.location);
   const details = [period, place].filter(Boolean).map((part) => escapeHtml(part)).join(' · ');
   const host = String(organizationName ?? '').trim();
 

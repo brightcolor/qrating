@@ -1,4 +1,5 @@
 import { httpError } from '../middleware/errors.js';
+import { plainText } from '../utils/localized.js';
 import { fetchService, openSecret } from '../utils/serviceErrors.js';
 import { SmtpService } from './smtpService.js';
 
@@ -50,7 +51,7 @@ function notificationEvent(event) {
     name: event.name,
     dateFrom: event.date_from,
     dateTo: event.date_to,
-    location: event.location
+    location: plainText(event.location) || null
   };
 }
 

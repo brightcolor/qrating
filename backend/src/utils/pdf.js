@@ -2,6 +2,7 @@
 // a rating chart, the course of the evening, own questions and sample comments.
 import { DateTime } from 'luxon';
 import { safeAccent } from './printSheet.js';
+import { plainText } from './localized.js';
 
 // Helvetica with WinAnsiEncoding covers umlauts, ß, € and typographic quotes.
 const winAnsiExtras = new Map([
@@ -190,7 +191,7 @@ function header(doc, event, organization, zone) {
   doc.text('FEEDBACK-BERICHT', margin, top + height - 34, { size: 8, bold: true, fill: light });
   const title = wrapText(event?.name || 'Event', 21, contentWidth, true)[0];
   doc.text(title, margin, top + height - 62, { size: 21, bold: true, fill: light });
-  const place = String(event?.location || '').trim();
+  const place = plainText(event?.location);
   doc.text([eventPeriod(event, zone), place].filter(Boolean).join('  •  '), margin, top + height - 82, { size: 9.5, fill: light });
   if (organization?.name) {
     doc.text(organization.name, margin, top + height - 82, { size: 9.5, fill: light, align: 'right', width: contentWidth });

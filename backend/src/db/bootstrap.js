@@ -3,6 +3,7 @@ import path from 'path';
 import { query, withTransaction } from './pool.js';
 import { env } from '../config/env.js';
 import { randomToken, slugify } from '../utils/crypto.js';
+import { plainText } from '../utils/localized.js';
 
 export async function runMigrations() {
   const migrationsDir = path.join(process.cwd(), '..', 'database', 'migrations');
@@ -83,7 +84,7 @@ export function eventToPublic(event, organization, questions = []) {
     name: event.name,
     dateFrom: event.date_from,
     dateTo: event.date_to,
-    location: event.location,
+    location: plainText(event.location) || null,
     imageUrl: event.image_url || event.cached_image_url || organization?.logo_url || null,
     imageAlt: event.image_alt || `Bild zu ${event.name}`,
     organization: {
@@ -106,7 +107,7 @@ export function normalizeEventInput(body, organization) {
     slug: slugify(body.slug || name),
     date_from: body.dateFrom || body.date_from,
     date_to: body.dateTo || body.date_to || null,
-    location: body.location || null,
+    location: plainText(body.location) || null,
     event_timezone: body.eventTimezone || body.event_timezone || 'Europe/Berlin',
     feedback_window_days: Number(body.feedbackWindowDays ?? organization.default_feedback_window_days ?? 3),
     feedback_window_hours: body.feedbackWindowHours ? Number(body.feedbackWindowHours) : null,

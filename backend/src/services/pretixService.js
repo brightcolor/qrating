@@ -1,5 +1,6 @@
 import { PretixImageResolver, normalizeSettings, extractImageCandidates, chooseBestImage } from './pretixImageResolver.js';
 import { randomToken, slugify } from '../utils/crypto.js';
+import { plainText } from '../utils/localized.js';
 import { fetchService, openSecret } from '../utils/serviceErrors.js';
 
 // Pretix answers for the organizer event list.
@@ -122,7 +123,7 @@ export class PretixService {
         pretixEvent.date_to || null,
         pretixEvent.date_admission || null,
         pretixEvent.timezone || 'Europe/Berlin',
-        pretixEvent.location || null,
+        plainText(pretixEvent.location) || null,
         3,
         pretixEvent
       ]
