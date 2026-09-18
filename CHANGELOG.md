@@ -4,6 +4,13 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.45.1] - 2026-09-18
+
+### Fixed
+
+- Times in an alert are written in the zone of the evening and the way people read them, instead of a raw timestamp in UTC.
+- Version bumped to `0.45.1`.
+
 ## [0.45.0] - 2026-09-18
 
 ### Changed

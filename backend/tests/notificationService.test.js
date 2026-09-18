@@ -65,6 +65,9 @@ describe('NotificationService', () => {
     expect(mail.text).toContain('+491234');
     expect(mail.text).toContain('Bitte anrufen');
     expect(mail.text).toContain('1 Stern');
+    // Die Zeit steht in der Zone des Abends, nicht als roher Zeitstempel.
+    expect(mail.text).toContain('1. Januar 2026 um 13:00');
+    expect(mail.text).not.toContain('GMT');
   });
 
   it('keeps the guest out of a push, which lands on a lock screen', async () => {

@@ -1,3 +1,4 @@
+import { DateTime } from 'luxon';
 import { httpError } from '../middleware/errors.js';
 import { env } from '../config/env.js';
 import { decryptSecret } from '../utils/crypto.js';
@@ -42,7 +43,7 @@ function lowRatingMessage(event, feedback) {
     `qrating: niedrige Bewertung (${stars(feedback.rating)})`,
     '',
     `Event: ${event.name}`,
-    `Zeitpunkt: ${feedback.submitted_at}`,
+    `Zeitpunkt: ${moment(feedback.submitted_at, event.event_timezone) || feedback.submitted_at}`,
     contactPhone,
     contactNote,
     '',
@@ -60,6 +61,14 @@ function openStored(value) {
   }
 }
 
+// Times belong in the zone of the evening, written the way people read them.
+function moment(value, zone) {
+  if (!value) return null;
+  const parsed = DateTime.fromJSDate(value instanceof Date ? value : new Date(value), { zone: 'utc' });
+  if (!parsed.isValid) return null;
+  return parsed.setZone(zone || 'Europe/Berlin').setLocale('de').toFormat("ccc, d. LLLL yyyy 'um' HH:mm");
+}
+
 function block(label, value) {
   const text = String(value ?? '').trim();
   return text ? `${label}:\n${text}` : null;
@@ -69,13 +78,14 @@ export function lowRatingDetailMessage(event, feedback) {
   const item = feedback.low_rating_case || {};
   const phone = openStored(item.contact_phone_encrypted) || feedback.contact_phone || null;
   const note = openStored(item.contact_note_encrypted) || item.contact_note || feedback.contact_note || null;
-  const when = [event.date_from, plainText(event.location)].filter(Boolean).join(' · ');
+  const zone = event.event_timezone || 'Europe/Berlin';
+  const when = [moment(event.date_from, zone), plainText(event.location)].filter(Boolean).join(' · ');
   return [
     `Ein Gast hat ${stars(feedback.rating)} gegeben.`,
     '',
     `Event: ${event.name}`,
     when ? `Wann und wo: ${when}` : null,
-    `Abgegeben: ${feedback.submitted_at}`,
+    `Abgegeben: ${moment(feedback.submitted_at, zone) || feedback.submitted_at}`,
     '',
     phone ? `Rückrufnummer: ${phone}` : 'Rückruf: nicht gewünscht.',
     block('Anliegen', note),
