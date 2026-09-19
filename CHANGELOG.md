@@ -4,6 +4,20 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.48.0] - 2026-09-19
+
+### Added
+
+- The evaluation of an event shows the whole way from the scan to the sent form: how many people scanned during the round, how many opened the rating, where each guest stopped and how many sent something off.
+- Scans that happen outside the round are counted and shown on their own: before the start and after the end, with the note that those guests never had a form in front of them.
+- Each QR source names the same three numbers, so a spot that only ever gets scanned too early becomes visible.
+
+### Fixed
+
+- A scan of the tenant code before the round used to be counted nowhere at all, and an early scan of an event code landed on the counter that is meant to say "was there while it ran". Each phase now has its own counter.
+- A scan after the round is recorded instead of being dropped.
+- Version bumped to `0.48.0`.
+
 ## [0.47.0] - 2026-09-19
 
 ### Fixed

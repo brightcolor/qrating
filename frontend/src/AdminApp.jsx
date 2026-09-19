@@ -638,32 +638,54 @@ function EventCard({ event, events = [], onChanged }) {
   </article>;
 }
 
-// Wie weit die Gäste im Fragebogen kommen: Aufrufe, Abschlüsse und der Schritt, an dem Schluss war.
+// Der Weg vom Scan bis zum Abschicken: wer zu früh oder zu spät kam, wer die Bewertung
+// öffnete und an welchem Schritt Schluss war.
 function Funnel({ funnel }) {
-  if (!funnel || !funnel.sessions) {
-    return <Panel title="Wie weit die Gäste kommen">
-      <p className="text-sm text-neutral-500">Für dieses Event ist noch kein Aufruf der Gästeseite gezählt.</p>
+  const outsideRound = (funnel?.scansBefore || 0) + (funnel?.scansAfter || 0);
+  if (!funnel || (!funnel.sessions && !funnel.scanned && !outsideRound)) {
+    return <Panel title="Vom Scan bis zum Abschicken">
+      <p className="text-sm text-neutral-500">Für dieses Event ist noch kein Scan und kein Aufruf der Gästeseite gezählt.</p>
     </Panel>;
   }
+  const basis = funnel.scansCounted ? funnel.scanned : funnel.sessions;
+  const scanQuote = funnel.scanned ? Math.round((funnel.completed / funnel.scanned) * 100) : null;
   return <div className="grid gap-6">
     <div className="grid gap-4 md:grid-cols-4">
-      <Stat title="Aufrufe der Gästeseite" value={funnel.sessions} />
+      <Stat title="Scans in der Runde" value={funnel.scanned || 0} />
+      <Stat title="Bewertung geöffnet" value={funnel.sessions} />
       <Stat title="Abgeschickt" value={funnel.completed} />
-      <Stat title="Abgebrochen" value={funnel.dropped} />
       <Stat title="Abschlussquote" value={`${funnel.completionRate} %`} />
     </div>
-    <Panel title="Wie weit die Gäste kommen">
+    {outsideRound > 0 && <Panel title="Scans außerhalb der Runde">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Stat title="Vor dem Start gescannt" value={funnel.scansBefore || 0} />
+        <Stat title="Nach dem Ende gescannt" value={funnel.scansAfter || 0} />
+      </div>
+      <p className="mt-3 text-sm text-neutral-500">
+        Diese Gäste sahen die Warteseite oder den Hinweis, dass die Runde vorbei ist. Sie konnten nichts bewerten.
+      </p>
+    </Panel>}
+    <Panel title="Vom Scan bis zum Abschicken">
       <div className="space-y-2">
-        {funnel.steps.map((step) => <div key={`${step.position}-${step.step}`} className="rounded-md bg-neutral-50 p-3">
+        {funnel.steps.map((step, position) => <div key={`${step.position}-${step.step}`} className="rounded-md bg-neutral-50 p-3">
           <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
-            <strong>{step.position + 1}. {step.label || stepNames[step.kind] || step.step}</strong>
-            <span className="text-neutral-600">{step.reached} von {funnel.sessions} · {step.share} %{step.dropped ? ` · ${step.dropped} hier aufgehört` : ''}</span>
+            <strong>{position + 1}. {step.label || stepNames[step.kind] || step.step}</strong>
+            <span className="text-neutral-600">
+              {step.reached} von {basis} · {step.share} %
+              {step.dropped ? ` · ${step.dropped} ${step.kind === 'scan' ? 'öffneten die Bewertung nie' : 'hier aufgehört'}` : ''}
+            </span>
           </div>
           <div className="mt-2 h-2 rounded-full bg-neutral-200">
-            <div className="h-2 rounded-full bg-blue-600" style={{ width: `${step.share}%` }} />
+            <div className={`h-2 rounded-full ${step.kind === 'scan' ? 'bg-neutral-500' : 'bg-blue-600'}`} style={{ width: `${step.share}%` }} />
           </div>
         </div>)}
       </div>
+      {funnel.scansCounted && scanQuote !== null && <p className="mt-4 text-sm text-neutral-600">
+        Von {funnel.scanned} Scans in der Runde kamen {funnel.completed} Bewertungen an — {scanQuote} %.
+      </p>}
+      {!funnel.scansCounted && funnel.sessions > 0 && <p className="mt-4 text-sm text-neutral-500">
+        Für diesen Zeitraum liegen weniger gezählte Scans als Aufrufe vor, deshalb beginnt der Weg hier beim Öffnen der Bewertung.
+      </p>}
       {Number(funnel.dropped_seconds) > 0 && <p className="mt-4 text-sm text-neutral-500">
         Wer abbricht, ist im Schnitt {funnel.dropped_seconds} Sekunden auf der Seite; wer abschickt, {funnel.completed_seconds || '-'} Sekunden.
       </p>}
@@ -672,6 +694,7 @@ function Funnel({ funnel }) {
 }
 
 const stepNames = {
+  scan: 'QR-Code gescannt',
   rating: 'Bewertung',
   question: 'Frage',
   comment: 'Freitext',
@@ -1349,7 +1372,12 @@ function QrAndWallboard() {
     <Panel title="QR-Quellen-Auswertung">
       <select className="input max-w-md" value={selectedEvent} onChange={(e) => setSelectedEvent(e.target.value)}>{events?.map((event) => <option key={event.id} value={event.id}>{eventLabel(event)}</option>)}</select>
       <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-        {qrAnalytics?.bySource?.map((row) => <div key={row.source_slug} className="rounded-md border border-neutral-200 p-3 text-sm"><strong>{row.label}</strong><p>Scans: {row.scans_count || 0} · Feedbacks: {row.feedback_count || 0}</p><p>Ø {row.average_rating || '-'} · Newsletter {row.newsletter_optins || 0} · Low {row.low_ratings || 0}</p></div>)}
+        {qrAnalytics?.bySource?.map((row) => <div key={row.source_slug} className="rounded-md border border-neutral-200 p-3 text-sm">
+          <strong>{row.label}</strong>
+          <p>Scans: {row.scans_count || 0} · Feedbacks: {row.feedback_count || 0}</p>
+          <p className="text-neutral-500">Vor der Runde: {row.scans_before || 0} · danach: {row.scans_after || 0}</p>
+          <p>Ø {row.average_rating || '-'} · Newsletter {row.newsletter_optins || 0} · Low {row.low_ratings || 0}</p>
+        </div>)}
         {qrAnalytics?.bySource?.length === 0 && <p className="text-sm text-neutral-500">Noch keine QR-Quellen-Daten für dieses Event.</p>}
       </div>
     </Panel>

@@ -114,3 +114,41 @@ export function buildFunnel(rows = []) {
     steps: funnel
   };
 }
+
+// The way from the scan to the sent form. Scans of the running round sit above the visits:
+// whoever scanned and never saw the first question stopped before the flow even began.
+// Scans before and after the round stand beside it, because those guests never had a form.
+export function scanFunnel(funnel = {}, scans = {}) {
+  const scanned = Number(scans.live) || 0;
+  const sessions = Number(funnel.sessions) || 0;
+  // Rounds that ran before the scans were counted show fewer scans than visits.
+  // Their numbers would turn the top of the funnel into a lie, so it stays off.
+  const scansCounted = scanned > 0 && scanned >= sessions;
+  const base = {
+    ...funnel,
+    scanned,
+    scansBefore: Number(scans.before) || 0,
+    scansAfter: Number(scans.after) || 0,
+    scansCounted
+  };
+  if (!scansCounted) return base;
+
+  const opening = {
+    position: -1,
+    step: 'scan',
+    kind: 'scan',
+    label: null,
+    reached: scanned,
+    dropped: scanned - sessions,
+    completed: 0,
+    share: 100
+  };
+  return {
+    ...base,
+    // Every share now counts against the scans, so the steps keep one common base.
+    steps: [opening, ...(funnel.steps || []).map((step) => ({
+      ...step,
+      share: Math.round((step.reached / scanned) * 100)
+    }))]
+  };
+}

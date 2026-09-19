@@ -124,23 +124,53 @@ async function findQrSource(event, sourceSlug) {
   return result.rows[0] || null;
 }
 
-async function trackQrScan(event, sourceSlug, qrSource = null, sourceType = 'unknown') {
+// A scan belongs to the phase it happened in: before the round, inside it, or after it.
+// Each phase keeps its own column, so someone who scanned the poster in the afternoon
+// stays countable without looking like a guest of the running round.
+const SCAN_PHASES = ['before', 'live', 'after'];
+
+function scanFailed(error, phase) {
+  // The guest page works either way, but a counter that quietly stays at zero
+  // would make the whole view look like nobody ever scanned.
+  console.warn(`Ein Scan (${phase}) liess sich nicht zaehlen: ${error.message}`);
+}
+
+async function trackQrScan(event, sourceSlug, qrSource = null, sourceType = 'unknown', phase = 'live') {
+  // Before the round the tenant code knows the event people wait for; without one there is nothing to count on.
+  if (!event?.id) return null;
+  const round = SCAN_PHASES.includes(phase) ? phase : 'live';
   const source = qrSource || await findQrSource(event, sourceSlug);
-  await query(
-    `UPDATE qr_sources
-     SET scans_count = scans_count + 1, updated_at = now()
-     WHERE id = $1`,
-    [source?.id]
-  ).catch(() => {});
+  if (round === 'live') {
+    // The counter on the source itself answers "how often did this spot bring someone
+    // into a running round", so only those scans land there.
+    await query(
+      `UPDATE qr_sources
+       SET scans_count = scans_count + 1, updated_at = now()
+       WHERE id = $1`,
+      [source?.id]
+    ).catch((error) => scanFailed(error, round));
+  }
   await query(
     `INSERT INTO qr_source_daily_stats (
-      organization_id, event_id, qr_source_id, source_type, day, scans_count
+      organization_id, event_id, qr_source_id, source_type, day, scans_count, scans_before, scans_after
     )
-    VALUES ($1,$2,$3,$4,current_date,1)
+    VALUES ($1,$2,$3,$4,current_date,$5,$6,$7)
     ON CONFLICT (organization_id, event_id, qr_source_id, source_type, day)
-    DO UPDATE SET scans_count = qr_source_daily_stats.scans_count + 1, updated_at = now()`,
-    [event.organization_id, event.id, source?.id || null, sourceSlug || sourceType]
-  ).catch(() => {});
+    DO UPDATE SET
+      scans_count = qr_source_daily_stats.scans_count + EXCLUDED.scans_count,
+      scans_before = qr_source_daily_stats.scans_before + EXCLUDED.scans_before,
+      scans_after = qr_source_daily_stats.scans_after + EXCLUDED.scans_after,
+      updated_at = now()`,
+    [
+      event.organization_id,
+      event.id,
+      source?.id || null,
+      sourceSlug || sourceType,
+      round === 'live' ? 1 : 0,
+      round === 'before' ? 1 : 0,
+      round === 'after' ? 1 : 0
+    ]
+  ).catch((error) => scanFailed(error, round));
   return source;
 }
 
@@ -205,6 +235,8 @@ publicRouter.get('/f/:organizationSlug/:sourceSlug?', async (req, res, next) => 
         req.query.lang || resolved.organization.default_language || 'de',
         {}
       );
+      // Somebody scanned before the round. It belongs to the event they are waiting for.
+      await trackQrScan(resolved.upcoming?.[0], req.params.sourceSlug, resolved.qrSource, 'dynamic', 'before');
       return res.json({
         status: 'waiting',
         texts,
@@ -242,13 +274,15 @@ publicRouter.get('/e/:eventToken', async (req, res, next) => {
       }
       const feedbackWindow = resolved.event ? calculateFeedbackWindow(resolved.event) : null;
       if (resolved.status === 'not_yet') {
-        await trackQrScan(resolved.event, req.query.source, null, 'event_specific');
+        await trackQrScan(resolved.event, req.query.source, null, 'event_specific', 'before');
         return res.json({
           status: 'waiting',
           ...(await publicPayload({ event: resolved.event }, await activeQuestions(resolved.event.id), req.query.lang)),
           feedback: { opensAt: feedbackWindow?.feedbackStart?.toISO(), closesAt: feedbackWindow?.feedbackEnd?.toISO() }
         });
       }
+      // The round is over and the page stays closed. The scan still says someone tried.
+      await trackQrScan(resolved.event, req.query.source, null, 'event_specific', 'after');
       return res.status(410).json({
         status: resolved.status,
         texts: systemTexts(req.query.lang),

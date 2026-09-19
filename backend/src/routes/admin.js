@@ -16,7 +16,7 @@ import { defaultTexts, defaultTextsByLanguage } from '../services/textService.js
 import { buildEventReportPdf } from '../utils/pdf.js';
 import { isSheetDesign, renderQrPrintSheet, sheetDesigns } from '../utils/printSheet.js';
 import { NewsletterService } from '../services/newsletterService.js';
-import { buildFunnel } from '../services/guestSessionService.js';
+import { buildFunnel, scanFunnel } from '../services/guestSessionService.js';
 import { attachmentHeader } from '../utils/downloadName.js';
 import { SmtpService } from '../services/smtpService.js';
 import { NotificationService, publicChannel } from '../services/notificationService.js';
@@ -486,13 +486,29 @@ adminRouter.get('/events/:id/analytics', async (req, res, next) => {
        FROM guest_sessions WHERE event_id = $1`,
       [req.params.id]
     );
+    // The scans carry the top of the funnel and say how many people came at the wrong time.
+    const scans = await query(
+      `SELECT coalesce(sum(scans_count), 0)::int AS live,
+              coalesce(sum(scans_before), 0)::int AS before_round,
+              coalesce(sum(scans_after), 0)::int AS after_round
+       FROM qr_source_daily_stats WHERE event_id = $1`,
+      [req.params.id]
+    );
+    const counted = scans.rows[0] || {};
     res.json({
       summary: summary.rows[0],
       distribution: distribution.rows,
       comments: comments.rows,
       questionStats: questionStats.rows,
       timeline: timeline.rows,
-      funnel: { ...buildFunnel(funnelRows.rows), ...duration.rows[0] }
+      funnel: {
+        ...scanFunnel(buildFunnel(funnelRows.rows), {
+          live: counted.live,
+          before: counted.before_round,
+          after: counted.after_round
+        }),
+        ...duration.rows[0]
+      }
     });
   } catch (error) {
     next(error);
@@ -506,6 +522,8 @@ adminRouter.get('/events/:id/qr-analytics', async (req, res, next) => {
       `SELECT COALESCE(qs.label, qds.source_type) AS label,
               COALESCE(qs.source_slug, qds.source_type) AS source_slug,
               sum(qds.scans_count)::int AS scans_count,
+              sum(qds.scans_before)::int AS scans_before,
+              sum(qds.scans_after)::int AS scans_after,
               sum(qds.feedback_count)::int AS feedback_count,
               round(avg(qds.average_rating)::numeric, 2) AS average_rating,
               sum(qds.newsletter_optins)::int AS newsletter_optins,
@@ -518,7 +536,11 @@ adminRouter.get('/events/:id/qr-analytics', async (req, res, next) => {
       [req.params.id]
     );
     const timeline = await query(
-      `SELECT day, sum(scans_count)::int AS scans_count, sum(feedback_count)::int AS feedback_count
+      `SELECT day,
+              sum(scans_count)::int AS scans_count,
+              sum(scans_before)::int AS scans_before,
+              sum(scans_after)::int AS scans_after,
+              sum(feedback_count)::int AS feedback_count
        FROM qr_source_daily_stats
        WHERE event_id = $1
        GROUP BY day
