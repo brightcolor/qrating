@@ -4,6 +4,18 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.50.0] - 2026-09-19
+
+### Added
+
+- The evaluation lists the visits that gave something and never sent it off: the stars, the answers of the form in its own words, the free text, the step they stopped on and when that was.
+- What a guest has answered travels with every step and once more when they leave the page, so the answer of the step someone stops on is there too.
+
+### Changed
+
+- The privacy page says that answers are kept even when a rating is abandoned, why, and that the callback number, the request and the email address stay out of it. Those three are dropped by the server, whatever a page sends.
+- Version bumped to `0.50.0`.
+
 ## [0.49.0] - 2026-09-19
 
 ### Added

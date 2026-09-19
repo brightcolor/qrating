@@ -16,7 +16,7 @@ import { defaultTexts, defaultTextsByLanguage } from '../services/textService.js
 import { buildEventReportPdf } from '../utils/pdf.js';
 import { isSheetDesign, renderQrPrintSheet, sheetDesigns } from '../utils/printSheet.js';
 import { NewsletterService } from '../services/newsletterService.js';
-import { buildFunnel, scanFunnel } from '../services/guestSessionService.js';
+import { abandonedEntries, buildFunnel, scanFunnel } from '../services/guestSessionService.js';
 import { attachmentHeader } from '../utils/downloadName.js';
 import { SmtpService } from '../services/smtpService.js';
 import { NotificationService, publicChannel } from '../services/notificationService.js';
@@ -495,7 +495,37 @@ adminRouter.get('/events/:id/analytics', async (req, res, next) => {
       [req.params.id]
     );
     const counted = scans.rows[0] || {};
+    // Visits that gave something and never sent it off.
+    const stopped = await query(
+      `SELECT id, started_at, last_seen_at, last_step, last_step_kind, last_step_label,
+              last_step_index, steps_total, draft
+       FROM guest_sessions
+       WHERE event_id = $1 AND completed_at IS NULL AND draft IS NOT NULL
+       ORDER BY last_seen_at DESC
+       LIMIT 200`,
+      [req.params.id]
+    );
+    const questionLabels = await query(
+      `SELECT q.internal_name, q.label
+       FROM feedback_questions q
+       JOIN feedback_forms f ON f.id = q.feedback_form_id
+       WHERE f.event_id = $1`,
+      [req.params.id]
+    );
+    const abandoned = stopped.rows.map((row) => ({
+      id: row.id,
+      startedAt: row.started_at,
+      lastSeenAt: row.last_seen_at,
+      step: row.last_step,
+      stepKind: row.last_step_kind,
+      stepLabel: row.last_step_label,
+      stepIndex: row.last_step_index,
+      stepsTotal: row.steps_total,
+      rating: Number(row.draft?.rating) || 0,
+      entries: abandonedEntries(row.draft, questionLabels.rows)
+    }));
     res.json({
+      abandoned,
       summary: summary.rows[0],
       distribution: distribution.rows,
       comments: comments.rows,

@@ -316,6 +316,17 @@ const progressLimiter = rateLimit({
   message: { error: 'Von diesem Anschluss kamen gerade sehr viele Anfragen. Bitte lade die Seite in einem Moment neu.' }
 });
 
+// What a guest answered on the way. The shape is closed on purpose: a phone number, a
+// note or a newsletter address never belongs to a form nobody sent, so even a page that
+// offered them would have them dropped here. The privacy page says the same.
+const draftSchema = Joi.object({
+  rating: Joi.number().integer().min(0).max(5).default(0),
+  answers: Joi.object().unknown(true).max(60).default({}),
+  commentPositive: Joi.string().max(3000).allow('', null),
+  commentImprovement: Joi.string().max(3000).allow('', null),
+  newsletter: Joi.boolean().allow(null)
+});
+
 const progressSchema = Joi.object({
   sessionKey: Joi.string().max(64).required(),
   step: Joi.string().max(80).required(),
@@ -323,7 +334,8 @@ const progressSchema = Joi.object({
   stepLabel: Joi.string().max(160).allow('', null),
   stepIndex: Joi.number().integer().min(0).max(200).default(0),
   stepsTotal: Joi.number().integer().min(1).max(200).default(1),
-  sourceType: Joi.string().max(80).allow('', null)
+  sourceType: Joi.string().max(80).allow('', null),
+  draft: draftSchema.allow(null)
 });
 
 const feedbackSchema = Joi.object({

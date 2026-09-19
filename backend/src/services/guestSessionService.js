@@ -7,10 +7,13 @@ export async function recordProgress(db, { event, qrSource, progress, userAgent,
   const result = await db.query(
     `INSERT INTO guest_sessions (
        organization_id, event_id, session_key, source_type, qr_source_id, steps_total,
-       last_step, last_step_kind, last_step_label, last_step_index, user_agent_hash, ip_hash
+       last_step, last_step_kind, last_step_label, last_step_index, user_agent_hash, ip_hash, draft
      )
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
      ON CONFLICT (event_id, session_key) DO UPDATE SET
+       -- A guest only ever adds to their answers, so the newest report is the fullest one.
+       -- A report without answers leaves what is already there alone.
+       draft = COALESCE(EXCLUDED.draft, guest_sessions.draft),
        steps_total = GREATEST(guest_sessions.steps_total, EXCLUDED.steps_total),
        last_step = CASE WHEN EXCLUDED.last_step_index >= guest_sessions.last_step_index
                         THEN EXCLUDED.last_step ELSE guest_sessions.last_step END,
@@ -36,7 +39,8 @@ export async function recordProgress(db, { event, qrSource, progress, userAgent,
       progress.stepLabel ? String(progress.stepLabel).slice(0, 160) : null,
       Number(progress.stepIndex) || 0,
       hashValue(userAgent),
-      hashValue(ip)
+      hashValue(ip),
+      progress.draft ? JSON.stringify(progress.draft) : null
     ]
   );
   return result.rows[0];
@@ -113,6 +117,31 @@ export function buildFunnel(rows = []) {
     completionRate: sessions ? Math.round((completed / sessions) * 100) : 0,
     steps: funnel
   };
+}
+
+export function formatDraftValue(value) {
+  if (Array.isArray(value)) return value.join(', ');
+  if (typeof value === 'boolean') return value ? 'Ja' : 'Nein';
+  if (value === null || value === undefined) return '';
+  return String(value);
+}
+
+// What a visit gave before it ended, in the words of the form. The answers arrive under
+// the internal name of a question; without its label nobody could read them back.
+export function abandonedEntries(draft, questions = []) {
+  if (!draft) return [];
+  const labels = new Map(questions.map((question) => [question.internal_name, question.label]));
+  const entries = [];
+  for (const [name, value] of Object.entries(draft.answers || {})) {
+    const text = formatDraftValue(value);
+    if (text !== '') entries.push({ label: labels.get(name) || name, value: text });
+  }
+  if (draft.commentPositive) entries.push({ label: 'Was war gut', value: draft.commentPositive });
+  if (draft.commentImprovement) entries.push({ label: 'Was darf besser werden', value: draft.commentImprovement });
+  if (draft.newsletter === true || draft.newsletter === false) {
+    entries.push({ label: 'Newsletter', value: draft.newsletter ? 'Ja' : 'Nein' });
+  }
+  return entries;
 }
 
 // The way from the scan to the sent form. Scans of the running round sit above the visits:

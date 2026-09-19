@@ -801,6 +801,38 @@ function Funnel({ funnel }) {
   </div>;
 }
 
+// Was Gäste unterwegs schon gesagt hatten, als sie aufhörten.
+function Abandoned({ abandoned = [] }) {
+  if (!abandoned.length) {
+    return <Panel title="Angefangen und nicht abgeschickt">
+      <p className="text-sm text-neutral-500">Bisher hat niemand unterwegs etwas eingegeben und dann aufgehört.</p>
+    </Panel>;
+  }
+  return <Panel title={`Angefangen und nicht abgeschickt (${abandoned.length})`}>
+    <p className="mb-4 text-sm text-neutral-500">
+      Diese Gäste haben unterwegs schon etwas gesagt und die Bewertung dann verlassen. Rufnummer, Anliegen und
+      E-Mail-Adresse stehen hier nie — die gehören dem Gast, bis er abschickt.
+    </p>
+    <div className="space-y-3">
+      {abandoned.map((visit) => <div key={visit.id} className="rounded-md border border-neutral-200 p-3 text-sm">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <strong>{visit.rating ? `${visit.rating} von 5 Sternen` : 'Ohne Bewertung'}</strong>
+          <span className="text-neutral-500">
+            {formatDate(visit.lastSeenAt)} · aufgehört bei {visit.stepLabel || stepNames[visit.stepKind] || visit.step}
+            {visit.stepsTotal ? ` (Schritt ${visit.stepIndex + 1} von ${visit.stepsTotal})` : ''}
+          </span>
+        </div>
+        {visit.entries?.length > 0 && <dl className="mt-2 space-y-1">
+          {visit.entries.map((entry, position) => <div key={`${visit.id}-${position}`} className="flex flex-wrap gap-x-2">
+            <dt className="text-neutral-500">{entry.label}:</dt>
+            <dd className="font-medium">{entry.value}</dd>
+          </div>)}
+        </dl>}
+      </div>)}
+    </div>
+  </Panel>;
+}
+
 const stepNames = {
   scan: 'QR-Code gescannt',
   rating: 'Bewertung',
@@ -855,6 +887,7 @@ function Analytics() {
         <Panel title="Verlauf"><div className="h-72"><ResponsiveContainer><LineChart data={data.timeline}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="bucket" tickFormatter={(v) => new Date(v).getHours()} /><YAxis allowDecimals={false} /><Tooltip /><Line type="monotone" dataKey="count" stroke="#2563eb" strokeWidth={2} /></LineChart></ResponsiveContainer></div></Panel>
       </div>
       <Funnel funnel={data.funnel} />
+      <Abandoned abandoned={data.abandoned} />
       <Panel title="Eigene Fragen">{data.questionStats.length ? <div className="space-y-2">{data.questionStats.slice(0, 20).map((row, idx) => <div key={`${row.id}-${idx}`} className="flex justify-between rounded-md bg-neutral-50 p-3 text-sm"><span>{row.label}: {JSON.stringify(row.answer_value)}</span><strong>{row.count}</strong></div>)}</div> : <p className="text-sm text-neutral-500">Noch keine auswertbaren Antworten.</p>}</Panel>
       <Panel title="Kommentare">{data.comments.map((comment) => <div key={comment.id} className="border-b border-neutral-100 py-3 text-sm"><strong>{comment.rating} Sterne</strong><p>{comment.comment_positive || comment.comment_improvement || comment.general_comment || 'Kein Text'}</p></div>)}</Panel>
     </div>}

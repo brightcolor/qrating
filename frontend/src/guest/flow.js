@@ -217,9 +217,40 @@ export function sessionKeyFor(token, make = () => globalThis.crypto?.randomUUID?
   return key;
 }
 
+// What a guest has said so far. It travels with every step, so a visit that ends
+// halfway still shows what was answered up to that point.
+// The phone number, the note and the newsletter address stay here: they are contact
+// details, and someone who never pressed send has not handed them over.
+export function draftAnswers(state = {}, questions = []) {
+  const answers = {};
+  for (const question of questions) {
+    const value = state.answers?.[question.internal_name];
+    if (hasValue(value)) answers[question.internal_name] = value;
+  }
+  const newsletter = state.newsletter === true || state.newsletter === false ? state.newsletter : null;
+  return {
+    rating: Number(state.rating) || 0,
+    answers,
+    commentPositive: (state.commentPositive || '').trim(),
+    commentImprovement: (state.commentImprovement || '').trim(),
+    newsletter
+  };
+}
+
+// True once the guest has actually given something; an empty draft is worth no request.
+export function draftHasContent(draft) {
+  if (!draft) return false;
+  return Boolean(draft.rating)
+    || Object.keys(draft.answers || {}).length > 0
+    || Boolean(draft.commentPositive)
+    || Boolean(draft.commentImprovement)
+    || draft.newsletter !== null;
+}
+
 // What the guest page reports after every step.
-export function progressPayload({ steps = [], index = 0, sessionKey, sourceType, texts = {} }) {
+export function progressPayload({ steps = [], index = 0, sessionKey, sourceType, texts = {}, state = null, questions = [] }) {
   const step = steps[index] || { id: 'rating', kind: 'rating' };
+  const draft = state ? draftAnswers(state, questions) : null;
   return {
     sessionKey,
     step: step.id,
@@ -227,7 +258,8 @@ export function progressPayload({ steps = [], index = 0, sessionKey, sourceType,
     stepLabel: stepLabel(step, texts),
     stepIndex: index,
     stepsTotal: steps.length || 1,
-    sourceType
+    sourceType,
+    ...(draftHasContent(draft) ? { draft } : {})
   };
 }
 

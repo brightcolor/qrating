@@ -3,7 +3,7 @@ import { ArrowRight, Check, ChevronLeft, Pencil, Plus, Send, Star } from 'lucide
 import '@fontsource-variable/hanken-grotesk';
 import '@fontsource/paytone-one';
 import './guest.css';
-import { api, assetUrl } from '../lib/api.js';
+import { API_BASE, api, assetUrl } from '../lib/api.js';
 import { guestPalette, paletteStyle } from './colors.js';
 import { useGuestTheme } from './theme.js';
 import { ThemeContext, ThemeSwitch } from './ThemeSwitch.jsx';
@@ -107,7 +107,7 @@ export function FeedbackFlow({ event, texts, sourceType, lang = 'de', preview = 
   const found = steps.findIndex((item) => item.id === stepId);
   const index = found === -1 ? 0 : found;
   const step = steps[index];
-  position.current = { steps, index };
+  position.current = { steps, index, state };
 
   const brandColor = event.organization?.primaryColor;
   const image = eventImage(event);
@@ -160,17 +160,50 @@ export function FeedbackFlow({ event, texts, sourceType, lang = 'de', preview = 
     if (!done) saveDraft(event.token, { state, stepId: step.id, startedAt });
   }, [event.token, state, step.id, startedAt, done]);
 
-  // Every step travels to the server once, so the admin area sees how far guests get.
+  // Every step travels to the server once, so the admin area sees how far guests get
+  // and what they had already answered by then.
   useEffect(() => {
     if (preview || !sessionKey || done) return;
-    const payload = progressPayload({ steps, index, sessionKey, sourceType, texts });
+    const payload = progressPayload({ steps, index, sessionKey, sourceType, texts, state, questions });
     const mark = `${payload.step}:${payload.stepIndex}`;
     if (reported.current === mark) return;
     reported.current = mark;
     api(`/public/events/${event.token}/progress`, { method: 'POST', body: JSON.stringify(payload) }).catch(() => {
       // A visit that nobody counts still gets its feedback through.
     });
+    // `state` stays out of the dependencies on purpose: one report per step, and the
+    // answer of the step a guest stops on travels with the farewell below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [event.token, index, steps, sessionKey, sourceType, texts, preview, done]);
+
+  // Wer weggeht, hat den Schritt, auf dem Schluss ist, meist schon ausgefüllt.
+  // Beim Verlassen geht der Stand deshalb noch einmal raus, sonst fehlt genau die
+  // Antwort, an der die Bewertung abgebrochen wurde.
+  useEffect(() => {
+    if (preview || !sessionKey || done) return undefined;
+    function farewell() {
+      const { steps: currentSteps, index: currentIndex, state: given } = position.current;
+      const payload = progressPayload({
+        steps: currentSteps, index: currentIndex, sessionKey, sourceType, texts, state: given, questions
+      });
+      if (!payload.draft) return;
+      const address = `${API_BASE}/public/events/${event.token}/progress`;
+      const body = JSON.stringify(payload);
+      // sendBeacon übersteht das Schliessen der Seite; keepalive ist der Rückfall.
+      const sent = navigator.sendBeacon?.(address, new Blob([body], { type: 'application/json' }));
+      if (sent) return;
+      fetch(address, { method: 'POST', headers: { 'content-type': 'application/json' }, body, keepalive: true }).catch(() => {});
+    }
+    function onHidden() {
+      if (document.visibilityState === 'hidden') farewell();
+    }
+    window.addEventListener('pagehide', farewell);
+    document.addEventListener('visibilitychange', onHidden);
+    return () => {
+      window.removeEventListener('pagehide', farewell);
+      document.removeEventListener('visibilitychange', onHidden);
+    };
+  }, [event.token, sessionKey, sourceType, texts, questions, preview, done]);
 
   function goTo(id, nextDirection = 'forward') {
     clearTimeout(timer.current);

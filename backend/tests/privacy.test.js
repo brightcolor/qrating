@@ -98,6 +98,15 @@ describe('the page that says what happens with the data', () => {
     expect(textOf(withOne.body)).toContain('news.example.com');
   });
 
+  it('says that an abandoned rating is kept, and what is left out of it', async () => {
+    const page = await request('GET', `/public/privacy/${slug}`);
+    const collected = page.body.sections.find((section) => section.id === 'erhoben').items.join(' ');
+
+    // The software stores answers of people who never pressed send, so the page says so.
+    expect(collected).toMatch(/auch dann, wenn du die Bewertung abbrichst/i);
+    expect(collected).toMatch(/Rufnummer, Anliegen und E-Mail-Adresse sind davon ausgenommen/i);
+  });
+
   it('claims no confirmation mail it never sends', async () => {
     const page = await request('GET', `/public/privacy/${slug}`);
 
