@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { adminPages, menuMounted, menuShown, navFor, nextMenuState, pageTitle } from './navigation.js';
+import {
+  adminPages,
+  menuMounted,
+  menuShown,
+  navFor,
+  nextMenuState,
+  pageFromPath,
+  pageTitle,
+  pathFor,
+  reservedPaths
+} from './navigation.js';
 
 describe('the admin navigation', () => {
   it('keeps the tenant list for the platform role', () => {
@@ -27,6 +37,57 @@ describe('the admin navigation', () => {
     const ids = adminPages.map((page) => page.id);
 
     expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe('the address of an admin page', () => {
+  it('builds and reads back the address of every page', () => {
+    for (const page of adminPages) {
+      const address = pathFor(page.id);
+      expect(address.startsWith('/admin/')).toBe(true);
+      expect(pageFromPath(address)).toBe(page.id);
+    }
+  });
+
+  it('gives every page its own name', () => {
+    const slugs = adminPages.map((page) => page.slug);
+
+    expect(new Set(slugs).size).toBe(slugs.length);
+    // A page must never take the address of the invite or the password flow.
+    expect(slugs.filter((slug) => reservedPaths.includes(slug))).toEqual([]);
+  });
+
+  it('carries what a page shows beside its name', () => {
+    expect(pathFor('analytics', { event: 'abc-123' })).toBe('/admin/auswertung?event=abc-123');
+    expect(pageFromPath('/admin/auswertung', '?event=abc-123')).toBe('analytics');
+    // An empty value belongs in no address.
+    expect(pathFor('qr', { event: '' })).toBe('/admin/qr');
+    expect(pathFor('qr', { event: null })).toBe('/admin/qr');
+  });
+
+  it('reads the bare area as the dashboard', () => {
+    expect(pageFromPath('/admin')).toBe('dashboard');
+    expect(pageFromPath('/admin/')).toBe('dashboard');
+  });
+
+  it('keeps the links the website already sends', () => {
+    // The site points at the plan with a query, from before the pages had addresses.
+    expect(pageFromPath('/admin', '?plan')).toBe('billing');
+    expect(pageFromPath('/admin', '?billing=1')).toBe('billing');
+  });
+
+  it('names no page for an invite or a password reset', () => {
+    // Those two render their own screen; treating them as a page would swallow the token.
+    expect(pageFromPath('/admin/accept-invite', '?token=xyz')).toBe(null);
+    expect(pageFromPath('/admin/reset-password', '?token=xyz')).toBe(null);
+  });
+
+  it('names no page for an address nobody knows', () => {
+    expect(pageFromPath('/admin/gibt-es-nicht')).toBe(null);
+    expect(pageFromPath('/admin/auswertung/noch-was')).toBe(null);
+    expect(pageFromPath('/f/hsp-events')).toBe(null);
+    expect(pageFromPath('/administration')).toBe(null);
+    expect(pageFromPath('')).toBe('dashboard');
   });
 });
 

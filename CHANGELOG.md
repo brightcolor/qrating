@@ -4,6 +4,19 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.51.0] - 2026-09-19
+
+### Added
+
+- Every page of the admin area has its own address: `/admin/auswertung`, `/admin/events`, `/admin/qr` and so on. A link leads straight to the page, the back and forward buttons of the browser walk through it, and a reload stays where it was.
+- The evaluation and the QR page keep the chosen event in the address, so a link points at exactly that evaluation.
+
+### Changed
+
+- An address that names no page shows the dashboard and corrects itself, rather than leaving an address that contradicts the page. The same happens for an event that no longer exists.
+- Links the website already sends, `/admin?plan` and `/admin?billing`, keep working and land on `/admin/plan`.
+- Version bumped to `0.51.0`.
+
 ## [0.50.0] - 2026-09-19
 
 ### Added

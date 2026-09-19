@@ -35,7 +35,7 @@ import { API_BASE, api, assetUrl } from './lib/api.js';
 import { FormBuilder } from './admin/FormBuilder.jsx';
 import { groupTextKeys, textLabels } from './admin/textCatalog.js';
 import { eventLabel, formatDate } from './admin/eventLabel.js';
-import { menuMounted, menuShown, navFor, nextMenuState, pageTitle } from './admin/navigation.js';
+import { menuMounted, menuShown, navFor, nextMenuState, pageFromPath, pageTitle, pathFor } from './admin/navigation.js';
 
 const SecurityCenter = React.lazy(() => import('./admin/SecurityCenter.jsx').then((module) => ({ default: module.SecurityCenter })));
 const Tenants = React.lazy(() => import('./admin/Tenants.jsx').then((module) => ({ default: module.Tenants })));
@@ -80,14 +80,39 @@ function useAsync(fn, deps = []) {
 
 function AdminApp() {
   const [authenticated, setAuthenticated] = useState(false);
-  const [page, setPage] = useState(() => new URLSearchParams(window.location.search).has('plan') || new URLSearchParams(window.location.search).has('billing') ? 'billing' : 'dashboard');
+  const [page, setPage] = useState(() => pageFromPath(window.location.pathname, window.location.search) || 'dashboard');
   const { data: me } = useAsync(() => (authenticated ? api('/admin/me') : Promise.resolve(null)), [authenticated]);
+
+  // Zurück und Vorwärts im Browser sollen durch den Adminbereich führen wie über Links.
+  useEffect(() => {
+    function onPopState() {
+      setPage(pageFromPath(window.location.pathname, window.location.search) || 'dashboard');
+    }
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  // Eine Adresse, die auf keine Seite zeigt, bliebe sonst stehen und widerspräche dem,
+  // was zu sehen ist. Was eine Seite selbst an die Adresse hängt, bleibt unberührt.
+  useEffect(() => {
+    if (!authenticated) return;
+    if (window.location.pathname === pathFor(page)) return;
+    window.history.replaceState({ ...(window.history.state || {}) }, '', pathFor(page));
+  }, [authenticated, page]);
+
   const path = window.location.pathname;
   const query = new URLSearchParams(window.location.search);
   if (!authenticated && path.includes('/accept-invite')) return <AcceptInvite token={query.get('token')} onLogin={() => setAuthenticated(true)} />;
   if (!authenticated && path.includes('/reset-password')) return <ResetPassword token={query.get('token')} onLogin={() => setAuthenticated(true)} />;
   if (!authenticated) return <AuthGate onLogin={() => setAuthenticated(true)} />;
   const nav = navFor({ platformAdmin: me?.platformAdmin });
+  // Jeder Seitenwechsel ist ein Schritt in der Chronik, damit Zurück funktioniert
+  // und die Adresse teilbar bleibt.
+  function goTo(id) {
+    if (id === page) return;
+    window.history.pushState({}, '', pathFor(id));
+    setPage(id);
+  }
   async function logout() {
     await api('/admin/logout', { method: 'POST', body: JSON.stringify({}) }).catch(() => null);
     setAuthenticated(false);
@@ -97,11 +122,11 @@ function AdminApp() {
       <div className="text-xl font-semibold">qrating</div>
       <TenantBadge me={me} />
       <nav className="mt-6 space-y-1">
-        {nav.map(({ id, label }) => <NavButton key={id} icon={pageIcons[id]} label={label} active={page === id} onClick={() => setPage(id)} />)}
+        {nav.map(({ id, label }) => <NavButton key={id} icon={pageIcons[id]} label={label} active={page === id} onClick={() => goTo(id)} />)}
       </nav>
       <button className="absolute bottom-5 flex items-center gap-2 text-sm text-neutral-600" onClick={logout}><LogOut size={16} /> Abmelden</button>
     </aside>
-    <MobileNav nav={nav} page={page} onPick={setPage} me={me} onLogout={logout} />
+    <MobileNav nav={nav} page={page} onPick={goTo} me={me} onLogout={logout} />
     <main className="lg:pl-64">
       <div className="mx-auto max-w-7xl p-4 sm:p-8">
         <ActingBanner me={me} />
@@ -846,11 +871,22 @@ const stepNames = {
 
 function Analytics() {
   const { data: events, loading, error: eventsError } = useAsync(() => api('/admin/events'), []);
-  const [eventId, setEventId] = useState('');
+  const [eventId, setEventId] = useState(() => new URLSearchParams(window.location.search).get('event') || '');
   const [message, setMessage] = useState('');
+  // Auch ein Link auf ein Event, das es nicht mehr gibt, muss zu einer Seite führen.
   useEffect(() => {
-    if (!eventId && events?.[0]) setEventId(events[0].id);
+    if (!events?.length) return;
+    if (events.some((event) => event.id === eventId)) return;
+    setEventId(events[0].id);
   }, [events, eventId]);
+  // Das gewählte Event gehört in die Adresse, damit sich genau diese Auswertung
+  // verschicken lässt. Ersetzen statt anhängen: eine Auswahl ist kein eigener Schritt.
+  useEffect(() => {
+    if (!eventId) return;
+    const address = pathFor('analytics', { event: eventId });
+    if (`${window.location.pathname}${window.location.search}` === address) return;
+    window.history.replaceState({ ...(window.history.state || {}) }, '', address);
+  }, [eventId]);
   const { data, error } = useAsync(() => eventId ? api(`/admin/events/${eventId}/analytics`) : Promise.resolve(null), [eventId]);
   async function sendReport() {
     if (!eventId) return;
@@ -1463,14 +1499,22 @@ function Texts() {
 function QrAndWallboard() {
   const { data: dashboard } = useAsync(() => api('/admin/dashboard'), []);
   const { data: events, error: eventsError } = useAsync(() => api('/admin/events'), []);
-  const [selectedEvent, setSelectedEvent] = useState('');
+  const [selectedEvent, setSelectedEvent] = useState(() => new URLSearchParams(window.location.search).get('event') || '');
   const [source, setSource] = useState({ sourceSlug: 'ausgang', label: 'Ausgang', type: 'dynamic_organization' });
   const { data: designs } = useAsync(() => api('/admin/print-designs'), []);
   const [design, setDesign] = useState('klassik');
   const [message, setMessage] = useState('');
   useEffect(() => {
-    if (!selectedEvent && events?.[0]) setSelectedEvent(events[0].id);
+    if (!events?.length) return;
+    if (events.some((event) => event.id === selectedEvent)) return;
+    setSelectedEvent(events[0].id);
   }, [events, selectedEvent]);
+  useEffect(() => {
+    if (!selectedEvent) return;
+    const address = pathFor('qr', { event: selectedEvent });
+    if (`${window.location.pathname}${window.location.search}` === address) return;
+    window.history.replaceState({ ...(window.history.state || {}) }, '', address);
+  }, [selectedEvent]);
   const { data: qrAnalytics } = useAsync(() => selectedEvent ? api(`/admin/events/${selectedEvent}/qr-analytics`) : Promise.resolve(null), [selectedEvent]);
   async function createSource(e) {
     e.preventDefault();
