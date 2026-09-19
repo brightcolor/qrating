@@ -4,6 +4,18 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.49.0] - 2026-09-19
+
+### Added
+
+- The admin area carries a real navigation drawer on a phone: a header with the name of the current page, a menu that slides in over the page, and a dark backdrop. It closes on the backdrop, on Escape and on picking an entry, and the keyboard lands back on the button it came from.
+
+### Changed
+
+- The pile of nineteen buttons that used to sit above every admin page on a phone is gone. The pages themselves start at the top of the screen again.
+- The list of admin pages lives in one place, so a new page is added once and appears in the sidebar, in the drawer and in the header title.
+- Version bumped to `0.49.0`.
+
 ## [0.48.0] - 2026-09-19
 
 ### Added

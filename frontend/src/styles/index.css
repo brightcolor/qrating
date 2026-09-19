@@ -35,3 +35,34 @@ button, input, textarea, select {
 .button-secondary {
   @apply inline-flex items-center justify-center gap-2 rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-200 focus:outline-none focus:ring-2 focus:ring-neutral-500 focus:ring-offset-2;
 }
+
+/* Die Navigationsschublade im Adminbereich fährt herein und wieder hinaus.
+   Als Animation statt als Übergang: läuft sie nicht, steht die Schublade einfach da. */
+@keyframes drawer-in {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes drawer-out {
+  from { transform: translateX(0); }
+  to { transform: translateX(-100%); }
+}
+
+@keyframes scrim-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scrim-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.drawer { animation: drawer-in 200ms ease-out; }
+.drawer-closing { animation: drawer-out 200ms ease-in forwards; }
+.scrim { animation: scrim-in 200ms ease-out; }
+.scrim-closing { animation: scrim-out 200ms ease-in forwards; }
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer, .drawer-closing, .scrim, .scrim-closing { animation-duration: 1ms; }
+}

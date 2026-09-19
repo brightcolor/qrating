@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useRef, useState } from 'react';
 import {
   BarChart3,
   Bell,
@@ -16,6 +16,7 @@ import {
   Languages,
   LogOut,
   Mail,
+  Menu,
   Plus,
   QrCode,
   RefreshCw,
@@ -25,7 +26,8 @@ import {
   Star,
   Trash2,
   UserCog,
-  Webhook
+  Webhook,
+  X
 } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import './styles/index.css';
@@ -33,6 +35,7 @@ import { API_BASE, api, assetUrl } from './lib/api.js';
 import { FormBuilder } from './admin/FormBuilder.jsx';
 import { groupTextKeys, textLabels } from './admin/textCatalog.js';
 import { eventLabel, formatDate } from './admin/eventLabel.js';
+import { menuMounted, menuShown, navFor, nextMenuState, pageTitle } from './admin/navigation.js';
 
 const SecurityCenter = React.lazy(() => import('./admin/SecurityCenter.jsx').then((module) => ({ default: module.SecurityCenter })));
 const Tenants = React.lazy(() => import('./admin/Tenants.jsx').then((module) => ({ default: module.Tenants })));
@@ -84,41 +87,23 @@ function AdminApp() {
   if (!authenticated && path.includes('/accept-invite')) return <AcceptInvite token={query.get('token')} onLogin={() => setAuthenticated(true)} />;
   if (!authenticated && path.includes('/reset-password')) return <ResetPassword token={query.get('token')} onLogin={() => setAuthenticated(true)} />;
   if (!authenticated) return <AuthGate onLogin={() => setAuthenticated(true)} />;
-  const nav = [
-    ...(me?.platformAdmin ? [['tenants', 'Mandanten', Building2]] : []),
-    ['dashboard', 'Dashboard', BarChart3],
-    ['security', 'Sicherheit', ShieldCheck],
-    ['events', 'Events', CalendarDays],
-    ['forms', 'Formulare', FileText],
-    ['analytics', 'Auswertung', BarChart3],
-    ['low-ratings', 'Low-Rating', Bell],
-    ['texts', 'Texte', Languages],
-    ['website', 'Website', Globe2],
-    ['billing', 'Plan & Billing', CreditCard],
-    ['branding', 'Branding', Image],
-    ['qr', 'QR & Wallboard', QrCode],
-    ['pretix', 'Pretix', Settings],
-    ['users', 'Benutzer', UserCog],
-    ['notifications', 'Benachrichtigungen', Bell],
-    ['operations', 'Betrieb', Activity],
-    ['smtp', 'SMTP', Mail],
-    ['newsletter', 'Newsletter', Send],
-    ['webhooks', 'Webhooks', Webhook]
-  ];
+  const nav = navFor({ platformAdmin: me?.platformAdmin });
+  async function logout() {
+    await api('/admin/logout', { method: 'POST', body: JSON.stringify({}) }).catch(() => null);
+    setAuthenticated(false);
+  }
   return <div className="min-h-screen bg-neutral-100">
     <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-neutral-200 bg-white p-5 lg:block">
       <div className="text-xl font-semibold">qrating</div>
       <TenantBadge me={me} />
       <nav className="mt-6 space-y-1">
-        {nav.map(([id, label, Icon]) => <NavButton key={id} icon={Icon} label={label} active={page === id} onClick={() => setPage(id)} />)}
+        {nav.map(({ id, label }) => <NavButton key={id} icon={pageIcons[id]} label={label} active={page === id} onClick={() => setPage(id)} />)}
       </nav>
-      <button className="absolute bottom-5 flex items-center gap-2 text-sm text-neutral-600" onClick={async () => { await api('/admin/logout', { method: 'POST', body: JSON.stringify({}) }).catch(() => null); setAuthenticated(false); }}><LogOut size={16} /> Abmelden</button>
+      <button className="absolute bottom-5 flex items-center gap-2 text-sm text-neutral-600" onClick={logout}><LogOut size={16} /> Abmelden</button>
     </aside>
+    <MobileNav nav={nav} page={page} onPick={setPage} me={me} onLogout={logout} />
     <main className="lg:pl-64">
       <div className="mx-auto max-w-7xl p-4 sm:p-8">
-        <div className="mb-5 flex flex-wrap gap-2 lg:hidden">
-          {nav.map(([id, label]) => <button key={id} onClick={() => setPage(id)} className="rounded-md bg-white px-3 py-2 text-sm">{label}</button>)}
-        </div>
         <ActingBanner me={me} />
         {page === 'tenants' && <React.Suspense fallback={<p>Lade Mandanten ...</p>}><Tenants /></React.Suspense>}
         {page === 'dashboard' && <Dashboard />}
@@ -174,6 +159,129 @@ function ActingBanner({ me }) {
       <button onClick={leave} className="button-secondary"><LogOut size={16} /> Zurück zu {me.home_organization_name}</button>
     </div>
   </div>;
+}
+
+const pageIcons = {
+  tenants: Building2,
+  dashboard: BarChart3,
+  security: ShieldCheck,
+  events: CalendarDays,
+  forms: FileText,
+  analytics: BarChart3,
+  'low-ratings': Bell,
+  texts: Languages,
+  website: Globe2,
+  billing: CreditCard,
+  branding: Image,
+  qr: QrCode,
+  pretix: Settings,
+  users: UserCog,
+  notifications: Bell,
+  operations: Activity,
+  smtp: Mail,
+  newsletter: Send,
+  webhooks: Webhook
+};
+
+// Auf dem Handy trägt eine Kopfzeile den Seitennamen; die Navigation fährt als
+// Schublade von links herein und legt sich über die Seite.
+function MobileNav({ nav, page, onPick, me, onLogout }) {
+  const [state, setState] = useState('closed');
+  const opener = useRef(null);
+  const panel = useRef(null);
+  const mounted = menuMounted(state);
+  const shown = menuShown(state);
+
+  useEffect(() => {
+    if (state !== 'closing') return undefined;
+    const timer = setTimeout(() => setState((current) => nextMenuState(current, 'gone')), 200);
+    return () => clearTimeout(timer);
+  }, [state]);
+
+  useEffect(() => {
+    if (!mounted) return undefined;
+    // Die Schublade liegt über der Seite, dahinter wird nicht gescrollt.
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (event) => {
+      if (event.key !== 'Escape') return;
+      setState((current) => nextMenuState(current, 'close'));
+      // Ohne das landet die Tastatur nach dem Schliessen am Seitenanfang.
+      opener.current?.focus();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = previous;
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [mounted]);
+
+  useEffect(() => {
+    if (shown) panel.current?.focus();
+  }, [shown]);
+
+  function close() {
+    setState((current) => nextMenuState(current, 'close'));
+    opener.current?.focus();
+  }
+
+  function pick(id) {
+    onPick(id);
+    close();
+  }
+
+  return <>
+    <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-neutral-200 bg-white px-4 py-3 lg:hidden">
+      <button
+        ref={opener}
+        type="button"
+        className="focus-ring -ml-1 rounded-md p-2 text-neutral-700 hover:bg-neutral-100"
+        aria-label="Menü öffnen"
+        aria-expanded={shown}
+        aria-controls="admin-menu"
+        onClick={() => setState((current) => nextMenuState(current, 'open'))}
+      >
+        <Menu size={22} />
+      </button>
+      <div className="min-w-0">
+        <div className="truncate font-semibold leading-tight">{pageTitle(page)}</div>
+        {me?.organization_name && <div className="truncate text-xs text-neutral-500">{me.organization_name}</div>}
+      </div>
+    </header>
+
+    {mounted && <div className="fixed inset-0 z-50 lg:hidden">
+      <div
+        className={`absolute inset-0 bg-neutral-950/50 ${shown ? 'scrim' : 'scrim-closing'}`}
+        onClick={close}
+        aria-hidden="true"
+      />
+      <div
+        id="admin-menu"
+        ref={panel}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Navigation"
+        tabIndex={-1}
+        className={`absolute inset-y-0 left-0 flex w-72 max-w-[85%] flex-col bg-white shadow-2xl ${shown ? 'drawer' : 'drawer-closing'}`}
+      >
+        <div className="flex items-start justify-between gap-3 border-b border-neutral-200 p-4">
+          <div className="min-w-0">
+            <div className="text-xl font-semibold">qrating</div>
+            <TenantBadge me={me} />
+          </div>
+          <button type="button" className="focus-ring rounded-md p-2 text-neutral-700 hover:bg-neutral-100" aria-label="Menü schließen" onClick={close}>
+            <X size={20} />
+          </button>
+        </div>
+        <nav className="flex-1 space-y-1 overflow-y-auto p-3">
+          {nav.map(({ id, label }) => <NavButton key={id} icon={pageIcons[id]} label={label} active={page === id} onClick={() => pick(id)} />)}
+        </nav>
+        <div className="border-t border-neutral-200 p-4">
+          <button className="flex items-center gap-2 text-sm text-neutral-600" onClick={onLogout}><LogOut size={16} /> Abmelden</button>
+        </div>
+      </div>
+    </div>}
+  </>;
 }
 
 function NavButton({ icon: Icon, label, active, onClick }) {
