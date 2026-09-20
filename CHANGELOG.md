@@ -4,6 +4,13 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.51.1] - 2026-09-20
+
+### Fixed
+
+- Asking for the report of an event while working inside another tenant answered "this user account no longer exists". The account of a platform administrator lives in its home organization, and the check looked for it in the tenant being visited. The report now reaches the person who asked for it, while every other account still has to belong to the tenant.
+- Version bumped to `0.51.1`.
+
 ## [0.51.0] - 2026-09-19
 
 ### Added

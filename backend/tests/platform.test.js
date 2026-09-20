@@ -177,4 +177,52 @@ describe('platform administration', () => {
     expect(list.status).toBe(403);
     expect(list.body.error).toContain('Plattform-Verwaltung');
   });
+
+  it('sends the report of a visited tenant to the platform account itself', async () => {
+    const entered = await request('POST', `/admin/platform/organizations/${secondOrganizationId}/enter`, { cookie: platformCookie });
+    const visiting = entered.cookie;
+    const organization = (await query("SELECT id FROM organizations WHERE slug = 'stadthalle-wismar'")).rows[0];
+    const event = (await query(
+      `INSERT INTO events (organization_id, source, name, slug, event_feedback_token, date_from, event_timezone, status)
+       VALUES ($1, 'manual', 'Abend im Haus', 'abend-im-haus', 'token-abend', now(), 'Europe/Berlin', 'active')
+       RETURNING id`,
+      [organization.id]
+    )).rows[0];
+    await query(
+      `INSERT INTO smtp_settings (organization_id, host, port, from_email, enabled)
+       VALUES ($1, 'mail.example.com', 587, 'feedback@example.com', true)
+       ON CONFLICT (organization_id) DO UPDATE SET enabled = true`,
+      [organization.id]
+    );
+
+    const sent = await request('POST', `/admin/events/${event.id}/report-email`, { cookie: visiting, body: {} });
+
+    // The account of a platform admin lives in its home organization, never in the visited one.
+    expect(sent.status).toBe(202);
+    const job = (await query("SELECT payload FROM background_jobs WHERE job_type = 'report.email' ORDER BY created_at DESC LIMIT 1")).rows[0];
+    const platformUser = (await query("SELECT id FROM users WHERE email = 'platform@example.test'")).rows[0];
+    expect(job.payload.userId).toBe(platformUser.id);
+  });
+
+  it('refuses the report for an account of some other tenant', async () => {
+    const entered = await request('POST', `/admin/platform/organizations/${secondOrganizationId}/enter`, { cookie: platformCookie });
+    const organization = (await query("SELECT id FROM organizations WHERE slug = 'stadthalle-wismar'")).rows[0];
+    const event = (await query('SELECT id FROM events WHERE organization_id = $1 LIMIT 1', [organization.id])).rows[0];
+    const home = (await query("SELECT id FROM organizations WHERE slug = 'hsp-events'")).rows[0];
+    const stranger = (await query(
+      `INSERT INTO users (organization_id, name, email, password_hash, role, status)
+       VALUES ($1, 'Fremd', 'fremd@example.test', 'x', 'owner', 'active') RETURNING id`,
+      [home.id]
+    )).rows[0];
+
+    const sent = await request('POST', `/admin/events/${event.id}/report-email`, {
+      cookie: entered.cookie,
+      body: { userId: stranger.id }
+    });
+
+    // Only the own account reaches across; everyone else stays inside the visited tenant.
+    expect(sent.status).toBe(404);
+    expect(sent.body.message || sent.body.error).toMatch(/Benutzerkonto/);
+  });
+
 });

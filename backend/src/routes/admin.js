@@ -751,9 +751,17 @@ adminRouter.post('/events/:id/report-email', async (req, res, next) => {
     if (!hasRole(req.admin.role, 'event_manager') && targetUserId !== req.admin.sub) {
       throw httpError(403, 'Du kannst Reports nur an dich selbst schicken.');
     }
+    // Wer als anderer Mandant arbeitet, hat sein eigenes Konto weiterhin zu Hause.
+    // Den Report an sich selbst muss er trotzdem bekommen. Für jedes andere Konto
+    // bleibt es beim Mandanten, in dem gerade gearbeitet wird.
+    const ownAccount = targetUserId === req.admin.sub;
+    const homeOrganizationId = req.admin.homeOrganizationId || req.admin.organizationId;
+    const allowedOrganizations = ownAccount
+      ? [...new Set([req.admin.organizationId, homeOrganizationId])]
+      : [req.admin.organizationId];
     const targetUser = (await query(
-      'SELECT id FROM users WHERE id = $1 AND organization_id = $2',
-      [targetUserId, req.admin.organizationId]
+      'SELECT id FROM users WHERE id = $1 AND organization_id = ANY($2::uuid[])',
+      [targetUserId, allowedOrganizations]
     )).rows[0];
     if (!targetUser) throw httpError(404, 'Dieses Benutzerkonto gibt es nicht mehr. Lade die Seite neu.');
     const smtpEnabled = (await query(
