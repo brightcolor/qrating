@@ -135,10 +135,10 @@ export class NotificationService {
     const result = await this.db.query(
       `SELECT nc.*, u.name AS user_name, u.email AS user_email
        FROM notification_channels nc
-       JOIN users u ON u.id = nc.user_id
+       LEFT JOIN users u ON u.id = nc.user_id
        WHERE nc.organization_id = $1
          AND ($2::uuid IS NULL OR nc.user_id = $2)
-       ORDER BY u.name, nc.created_at DESC`,
+       ORDER BY nc.user_id IS NOT NULL, u.name, nc.created_at DESC`,
       [organizationId, userId]
     );
     return result.rows.map(publicChannel);
@@ -146,15 +146,27 @@ export class NotificationService {
 
   async dispatchLowRating(event, feedback) {
     const result = await this.db.query(
+      // A channel of the organization reaches every event of that organization. A
+      // channel of a person reaches the events that person is on the team of. Both
+      // have to sit in the organization the event belongs to, so the alerting of one
+      // tenant stays inside that tenant.
       `SELECT nc.*, u.email AS user_email, u.name AS user_name
-       FROM user_event_assignments uea
-       JOIN users u ON u.id = uea.user_id
-       JOIN notification_channels nc ON nc.user_id = u.id
-       WHERE uea.event_id = $1
-         AND uea.organization_id = $2
-         AND uea.notify_low_rating = true
+       FROM notification_channels nc
+       LEFT JOIN users u ON u.id = nc.user_id
+       WHERE nc.organization_id = $2
          AND nc.enabled = true
-         AND nc.min_rating >= $3`,
+         AND nc.min_rating >= $3
+         AND (
+           nc.user_id IS NULL
+           OR EXISTS (
+             SELECT 1 FROM user_event_assignments uea
+             WHERE uea.event_id = $1
+               AND uea.organization_id = $2
+               AND uea.user_id = nc.user_id
+               AND uea.notify_low_rating = true
+           )
+         )
+       ORDER BY nc.created_at`,
       [event.id, event.organization_id, feedback.rating]
     );
     const payload = {
@@ -205,8 +217,13 @@ export class NotificationService {
     const secret = channel.secret_encrypted ? openSecret(channel.secret_encrypted, 'Das gespeicherte Secret dieses Kanals') : null;
     const type = channel.channel_type;
     if (type === 'email') {
+      // A channel of the organization carries no mailbox of its own, so its config says where to write.
+      const to = config.to || channel.user_email;
+      if (!to) {
+        throw httpError(400, 'Diesem Kanal fehlt die Empfängeradresse. Trage sie in der Config unter „to“ ein, zum Beispiel {"to":"person@example.com"}.');
+      }
       const result = await this.smtpService.sendMail(channel.organization_id, {
-        to: config.to || channel.user_email,
+        to,
         subject: payload.title,
         text: source ? lowRatingDetailMessage(source.event, source.feedback) : payload.text
       });

@@ -1810,7 +1810,7 @@ function Notifications() {
   const { data: channels, loading, error: channelsError } = useAsync(() => api('/admin/notification-channels'), [reload]);
   const [message, setMessage] = useState('');
   const [form, setForm] = useState({
-    userId: '',
+    userId: null,
     channelType: 'email',
     label: 'E-Mail',
     minRating: 2,
@@ -1818,8 +1818,10 @@ function Notifications() {
     configText: '{}'
   });
 
+  // Until the accounts have arrived the choice is open. It is made once, so picking
+  // the organization afterwards stays picked.
   useEffect(() => {
-    if (!form.userId && users?.[0]) setForm((old) => ({ ...old, userId: users[0].id }));
+    if (form.userId === null && users) setForm((old) => ({ ...old, userId: users[0]?.id || '' }));
   }, [users, form.userId]);
 
   async function createChannel(e) {
@@ -1875,16 +1877,16 @@ function Notifications() {
 
   return <div>
     <Header title="Benachrichtigungen" />
-    <Panel title="Persönlichen Kanal anlegen">
+    <Panel title="Kanal anlegen">
       <form onSubmit={createChannel} className="grid gap-3 md:grid-cols-2">
-        <label className="block"><span className="text-sm font-medium">User</span><select className="input mt-1" value={form.userId} onChange={(e) => setForm({ ...form, userId: e.target.value })}>{users?.map((user) => <option key={user.id} value={user.id}>{user.name} ({user.email})</option>)}</select></label>
+        <label className="block"><span className="text-sm font-medium">Kanal gehört</span><select className="input mt-1" value={form.userId ?? ''} onChange={(e) => setForm({ ...form, userId: e.target.value })}><option value="">Ganze Organisation</option>{users?.map((user) => <option key={user.id} value={user.id}>{user.name} ({user.email})</option>)}</select></label>
         <label className="block"><span className="text-sm font-medium">Kanal</span><select className="input mt-1" value={form.channelType} onChange={(e) => setForm({ ...form, channelType: e.target.value, label: e.target.value })}>{notificationTypes.map((type) => <option key={type}>{type}</option>)}</select></label>
         <label className="block"><span className="text-sm font-medium">Label</span><input className="input mt-1" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} /></label>
         <label className="block"><span className="text-sm font-medium">Auslösen bis Bewertung</span><input className="input mt-1" type="number" min="1" max="5" value={form.minRating} onChange={(e) => setForm({ ...form, minRating: Number(e.target.value) })} /></label>
         <label className="block md:col-span-2"><span className="text-sm font-medium">Secret / Token / Webhook-URL</span><input className="input mt-1" type="password" value={form.secret} onChange={(e) => setForm({ ...form, secret: e.target.value })} placeholder={channelSecretPlaceholder(form.channelType)} /></label>
         <label className="block md:col-span-2"><span className="text-sm font-medium">Config JSON</span><textarea className="input mt-1 min-h-24" value={form.configText} onChange={(e) => setForm({ ...form, configText: e.target.value })} /></label>
         <p className="text-sm text-neutral-500 md:col-span-2">{channelHelp(form.channelType)}</p>
-        <p className="text-sm text-neutral-500 md:col-span-2">Personen, Rollen und die Zuständigkeit je Event stehen unter <strong>Benutzer</strong>.</p>
+        <p className="text-sm text-neutral-500 md:col-span-2">Ein Kanal der ganzen Organisation meldet jedes Event dieser Organisation. Ein Kanal einer Person meldet die Events, für die diese Person zuständig ist. Personen, Rollen und die Zuständigkeit je Event stehen unter <strong>Benutzer</strong>.</p>
         <button className="button-primary md:col-span-2"><Bell size={16} /> Kanal speichern</button>
       </form>
     </Panel>
@@ -1894,7 +1896,7 @@ function Notifications() {
       {channelsError && <ErrorBox error={channelsError} />}
       <div className="grid gap-3">
         {channels?.map((channel) => <div key={channel.id} className="grid gap-2 rounded-md border border-neutral-200 p-3 md:grid-cols-[1fr_auto_auto]">
-          <div><strong>{channel.label}</strong><p className="text-sm text-neutral-500">{channel.channel_type} · {channel.user_name} · Secret: {channel.has_secret ? 'ja' : 'nein'} · Status: {channel.last_status || '-'}</p>{channel.last_error && <p className="text-sm text-red-700">{channel.last_error}</p>}</div>
+          <div><strong>{channel.label}</strong><p className="text-sm text-neutral-500">{channel.channel_type} · {channel.user_name || 'Ganze Organisation'} · Secret: {channel.has_secret ? 'ja' : 'nein'} · Status: {channel.last_status || '-'}</p>{channel.last_error && <p className="text-sm text-red-700">{channel.last_error}</p>}</div>
           <button onClick={() => testChannel(channel.id)} className="button-secondary"><Send size={16} /> Test</button>
           <button onClick={() => deleteChannel(channel)} className="button-secondary"><Trash2 size={16} /> Entfernen</button>
         </div>)}
@@ -1914,7 +1916,7 @@ function channelSecretPlaceholder(type) {
 
 function channelHelp(type) {
   const examples = {
-    email: 'Config: {"to":"person@example.com"} oder leer, dann wird die User-E-Mail genutzt.',
+    email: 'Config: {"to":"person@example.com"}. Gehört der Kanal einer Person, reicht auch leer, dann geht die Meldung an deren E-Mail-Adresse.',
     discord: 'Secret ist die Discord Webhook-URL. Config kann leer bleiben.',
     slack: 'Secret ist die Slack Incoming Webhook-URL. Funktioniert auch für Mattermost-kompatible Webhooks.',
     mattermost: 'Secret ist die Mattermost Incoming Webhook-URL.',

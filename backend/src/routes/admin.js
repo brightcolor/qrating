@@ -337,8 +337,18 @@ adminRouter.put('/events/:id/assignments', async (req, res, next) => {
     if (!hasRole(req.admin.role, 'event_manager')) throw httpError(403, 'Event-Zuweisungen können nur Event-Manager, Admins und Owner ändern.');
     await ensurePlanFeature(req, 'teams', 'Event-Zuweisungen gehören zum Tarif Business. Ein Plattform-Admin kann ihn unter Plan & Billing freischalten.');
     const assignments = Array.isArray(req.body.assignments) ? req.body.assignments : [];
+    const wanted = assignments.filter((item) => item.assigned);
+    // The team of an event is made of accounts of this organization. The list the page
+    // shows holds exactly those, so a request naming anyone else is turned away.
+    const known = new Set((await query(
+      'SELECT id FROM users WHERE organization_id = $1 AND id = ANY($2::uuid[])',
+      [req.admin.organizationId, wanted.map((item) => item.userId)]
+    )).rows.map((row) => row.id));
+    if (wanted.some((item) => !known.has(item.userId))) {
+      throw httpError(404, 'Mindestens eines der gewählten Benutzerkonten gehört zu einer anderen Organisation. Lade die Seite neu und wähle aus der Liste dieser Organisation.');
+    }
     await query('DELETE FROM user_event_assignments WHERE event_id = $1 AND organization_id = $2', [req.params.id, req.admin.organizationId]);
-    for (const assignment of assignments.filter((item) => item.assigned)) {
+    for (const assignment of wanted) {
       await query(
         `INSERT INTO user_event_assignments (organization_id, user_id, event_id, notify_low_rating)
          VALUES ($1,$2,$3,$4)
@@ -1672,7 +1682,19 @@ adminRouter.get('/notification-channels', async (req, res, next) => {
 
 adminRouter.post('/notification-channels', async (req, res, next) => {
   try {
-    const userId = req.body.userId || req.admin.sub;
+    // A channel belongs to one person of this organization, or to the organization
+    // itself. Whoever works here without an account of their own — a platform admin
+    // inside a tenant they are visiting — leaves the channel to the organization, so
+    // the alerting of a tenant stays with that tenant.
+    const wanted = typeof req.body.userId === 'string' && req.body.userId.length > 0 ? req.body.userId : null;
+    const owner = (await query(
+      'SELECT id FROM users WHERE id = $1 AND organization_id = $2',
+      [wanted || req.admin.sub, req.admin.organizationId]
+    )).rows[0];
+    if (wanted && !owner) {
+      throw httpError(404, 'Dieses Benutzerkonto gehört zu einer anderen Organisation. Wähle ein Konto dieser Organisation, oder lass den Kanal der ganzen Organisation gehören.');
+    }
+    const userId = owner?.id ?? null;
     if (!hasRole(req.admin.role, 'event_manager') && userId !== req.admin.sub) {
       throw httpError(403, 'Du kannst Benachrichtigungskanäle nur für dich selbst anlegen.');
     }
@@ -1750,7 +1772,7 @@ adminRouter.post('/notification-channels/:id/test', async (req, res, next) => {
     const result = await query(
       `SELECT nc.*, u.email AS user_email, u.name AS user_name
        FROM notification_channels nc
-       JOIN users u ON u.id = nc.user_id
+       LEFT JOIN users u ON u.id = nc.user_id
        WHERE nc.id = $1 AND nc.organization_id = $2 AND ($3::boolean OR nc.user_id = $4)`,
       [req.params.id, req.admin.organizationId, hasRole(req.admin.role, 'event_manager'), req.admin.sub]
     );

@@ -4,6 +4,21 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.54.0] - 2026-09-21
+
+### Added
+
+- A notification channel can belong to the whole organization. Such a channel reaches every event of that organization and writes to the address in its own config, so an organization owns its alerting while its own accounts are still being set up. A channel of a person keeps its meaning and reaches the events that person is assigned to.
+- The form for a channel asks who it belongs to and offers the whole organization beside the people of the organization. The list of channels names the owner, or the organization.
+
+### Fixed
+
+- Creating a notification channel while working inside another organization put an account of the own organization on it. A named account now has to belong to the organization being worked in, and whoever works there without an account of their own leaves the channel to the organization. Channels that already carried an account of another organization became channels of the organization they alert for, so the alerting continues unchanged.
+- The alerting reads the channels of the organization the event belongs to. A channel of another organization stays out of it, even when its owner is on the team of that event.
+- Event assignments follow the same rule: a request naming an account of another organization is answered with a message that says so, and assignments that already pointed across organizations are gone.
+- A mail channel without a recipient says which entry is missing and what belongs in it.
+- Version bumped to `0.54.0`.
+
 ## [0.53.0] - 2026-09-21
 
 ### Added

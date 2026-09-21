@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.53.0
+**Version:** 0.54.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -35,7 +35,7 @@ This repository was built with AI-assisted, vibe-coded development. Treat it lik
 - Newsletter opt-ins handed to MailWizz, with the event of the entry in a custom field
 - Dashboard, CSV/XLSX exports, newsletter export, and a designed PDF report with key figures, rating chart and guest comments; every download is named after its event, the event date and the moment of the download
 - Configurable SMTP for password resets, invitations, low-rating alerts, and report delivery
-- Per-user notification channels scoped to assigned events
+- Notification channels for the whole organization, or for one person scoped to their assigned events
 - Supported alert channels: email, Discord, Slack, Mattermost, Microsoft Teams, Telegram, Pushover, ntfy, Gotify, and generic webhooks
 - Background worker for Pretix sync, report email jobs, and low-rating notifications
 - Roles: Owner, Admin, Event Manager, Analyst, and Support
@@ -307,7 +307,7 @@ The website of the product carries its own line in the footer; the website conte
 
 ## When A Rating Is Low
 
-A rating of one or two stars reaches the people assigned to that event. Two things decide whether anything arrives at all: a notification channel of that person, and a row in `user_event_assignments` for that event with `notify_low_rating`. **The recipient hangs on the event, not on the channel** — a channel alone stays silent, and the job still reports `done`.
+A rating of one or two stars reaches the notification channels of the organization the event belongs to. A channel of the organization covers every event of that organization and writes to the address in its own config. A channel of a person covers the events that person is assigned to, so it needs a row in `user_event_assignments` for that event with `notify_low_rating`. **A personal channel whose owner is on no team stays silent**, and the job still reports `done`.
 
 What travels depends on the channel. **A push names no guest**: stars, event, time, and the note that the details are elsewhere. It lands on a lock screen and travels over a notification service. **A mail carries everything**: the callback number, the request, the free-text answers and a link into the dashboard. It goes to a mailbox the organizer named. The detailed text is built inside the mail branch and never enters the payload the other channels see, so a channel added later cannot start naming a guest by accident.
 
@@ -395,7 +395,7 @@ Low ratings can create a workflow case and notify only users who are allowed to 
 
 People, their roles and who is responsible for which event live in the admin area under **Benutzer**. The area **Benachrichtigungen** holds the channels.
 
-Notification channels are configured per user:
+A channel belongs to the whole organization or to one person of it. An organization channel carries its recipient in its own config, which lets a tenant own its alerting while its accounts are still being set up. A personal channel falls back to the mail address of its owner. Both live under **Benachrichtigungen** and can use:
 
 - email through the organization SMTP settings
 - Discord-compatible webhook
@@ -559,7 +559,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.53.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.54.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 
