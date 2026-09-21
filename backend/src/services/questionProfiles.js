@@ -44,71 +44,52 @@ function recommendation(label, sortOrder) {
   return question({ internalName: 'recommendation_nps', label, questionType: 'nps', sortOrder });
 }
 
-// Diese Vorlage folgt dem, was die Fragebogenforschung belegt, und weicht darin
-// bewusst von den anderen ab:
+// Diese Vorlage folgt dem, was die Forschung über erinnerte Erlebnisse belegt. Sie ist
+// deshalb kurz und fragt nicht Station für Station ab.
 //
-// - Jede Stufe einer Skala ist mit Worten benannt. Eine 0-bis-10-Skala, die nur ihre
-//   Enden beschriftet, liefert schiefe Verteilungen; fünf benannte Stufen nicht.
-// - Keine Zustimmungsfragen („Die Musik war gut: stimme zu / stimme nicht zu"). Auf
-//   Zustimmung antworten Menschen zustimmend, unabhängig vom Inhalt. Stattdessen
-//   eine eigene Skala je Frage.
-// - Eine Sache je Frage. „Musik und Stimmung" lässt sich nicht beantworten.
-// - Bei Fragen nach einer Tatsache — wie lange hast du gewartet — gibt es keine Mitte
-//   zum Ausweichen, denn zwischen „kurz" und „lang" liegt keine Haltung.
-// - Geschlossene Fragen zuerst, offene zum Schluss, vom Leichten ins Bestimmte.
-// - Absicht statt Empfehlungswert: „Kommst du wieder" ist eine Handlung, die der
-//   Veranstalter nachprüfen kann.
+// - Peak-End-Regel (Fredrickson & Kahneman 1993; Metaanalyse über 174 Effektgrößen,
+//   2022): Ein Erlebnis wird nach seinem stärksten Moment und nach seinem Ende
+//   beurteilt, kaum nach seiner Dauer. Gefragt wird also nach dem Höhepunkt und dem
+//   Schluss, nicht nach Musik, Einlass und Bar einzeln — so erinnert niemand einen Abend.
+// - Allgemein vor speziell (Schwarz, Strack & Mai 1991): Einzelfragen vorweg färben das
+//   Gesamturteil. Die Sterne der Gästeseite stehen vor dieser Vorlage und bleiben das.
+// - Satisficing (Krosnick): Mit jeder Frage sinkt die Sorgfalt bei allen folgenden.
+//   Drei Fragen nach den Sternen, keine mehr.
+// - Eine gute Frage misst ein konkretes Ding so gut wie viele (Bergkvist & Rossiter
+//   2007). Die Sterne sind das Gesamtmass; hier wird nichts davon wiederholt.
+// - Der Schluss hat benannte Stufen, keine nackten Zahlen, und fragt nach einer Sache.
+// - Die eine Frage mit einem Tipp steht vorn, die beiden zum Schreiben dahinter: Wer
+//   dort aufhört, hat die Antwort zum Schluss schon gegeben.
 // - Nichts ist Pflicht. Am Ausgang kostet jede erzwungene Antwort Abbrüche.
 const geprueft = [
   question({
-    internalName: 'musik_passung',
-    label: 'Wie war die Musik für dich?',
+    internalName: 'schluss',
+    label: 'Wie war der Schluss des Abends für dich?',
     questionType: 'multiple_choice',
-    options: ['Genau mein Ding', 'Gut', 'Ging so', 'Nicht so meins', 'Gar nicht meins'],
+    options: ['Ein richtig starkes Ende', 'Gut', 'Ging so', 'Eher schwach', 'Hat den Abend runtergezogen'],
     sortOrder: 10
-  }),
-  question({
-    internalName: 'einlass_wartezeit',
-    label: 'Wie lange hast du am Einlass gewartet?',
-    questionType: 'multiple_choice',
-    options: ['Gar nicht', 'Ein paar Minuten', 'Eine ganze Weile', 'Viel zu lang'],
-    sortOrder: 20
-  }),
-  question({
-    internalName: 'bar_wartezeit',
-    label: 'Wie schnell warst du an der Bar dran?',
-    questionType: 'multiple_choice',
-    options: ['Sofort', 'Ging zügig', 'Musste anstehen', 'Habe es gelassen'],
-    sortOrder: 30
-  }),
-  question({
-    internalName: 'wiederkommen',
-    label: 'Kommst du zu unserem nächsten Abend wieder?',
-    questionType: 'multiple_choice',
-    options: ['Auf jeden Fall', 'Wahrscheinlich', 'Vielleicht', 'Eher nicht'],
-    sortOrder: 40
   }),
   question({
     internalName: 'staerkster_moment',
     label: 'Was war dein stärkster Moment heute Abend?',
     questionType: 'text_short',
     placeholder: 'Ein Song, ein Mensch, ein Augenblick …',
-    sortOrder: 50
+    sortOrder: 20
   }),
   question({
     internalName: 'eine_sache',
-    label: 'Wenn du eine einzige Sache ändern könntest — welche?',
+    label: 'Was sollen wir als Erstes ändern?',
     questionType: 'text_short',
-    placeholder: 'Eine reicht.',
-    sortOrder: 60
+    placeholder: 'Eine Sache reicht.',
+    sortOrder: 30
   })
 ];
 
 export const questionProfiles = [
   {
     id: 'geprueft-abend',
-    name: 'Geprüfter Abend',
-    summary: 'Nach den Regeln der Fragebogenforschung gebaut: benannte Stufen statt nackter Zahlen, eine Sache je Frage, offene Fragen zum Schluss.',
+    name: 'Höhepunkt und Schluss',
+    summary: 'Drei Fragen nach der Peak-End-Regel: Ein Abend bleibt über seinen stärksten Moment und sein Ende in Erinnerung, kaum über seine Dauer. Genau danach wird gefragt.',
     badge: 'Empfohlen',
     questions: geprueft
   },

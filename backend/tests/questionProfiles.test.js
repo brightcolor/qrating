@@ -95,17 +95,37 @@ describe('question profiles', () => {
 
 // Diese Vorlage trägt ihre Begründung im Aufbau. Bricht jemand eine der Regeln,
 // soll ein Test das sagen und nicht erst die schiefe Auswertung nach dem Event.
-describe('the template built on questionnaire research', () => {
+describe('the template built on the research about remembered experiences', () => {
   const profile = questionProfiles.find((item) => item.id === 'geprueft-abend');
   const closed = profile.questions.filter((item) => item.questionType === 'multiple_choice');
-  const open = profile.questions.filter((item) => item.questionType.startsWith('text_'));
+  const names = profile.questions.map((item) => item.internalName);
 
   it('stands first, because it is the one to reach for', () => {
     expect(questionProfiles[0].id).toBe('geprueft-abend');
   });
 
-  it('names every step of every scale, instead of leaving bare numbers', () => {
-    // A scale labelled only at its ends produces skewed answers; named steps do not.
+  it('asks for the peak and the end, because memory keeps those two', () => {
+    // Peak-end rule: an experience is judged by its most intense moment and its end,
+    // hardly by its length.
+    expect(names).toContain('staerkster_moment');
+    expect(names).toContain('schluss');
+  });
+
+  it('does not walk the evening station by station', () => {
+    // Music, entry and bar one by one is not how anybody remembers a night out,
+    // and every such question costs care on all the answers that follow.
+    for (const name of ['musik_passung', 'einlass_wartezeit', 'bar_wartezeit']) {
+      expect(names).not.toContain(name);
+    }
+  });
+
+  it('stays at three questions after the stars', () => {
+    // The stars of the guest page are the overall measure and come first; this
+    // template repeats nothing of them.
+    expect(profile.questions.length).toBeLessThanOrEqual(3);
+  });
+
+  it('names every step of its scale, instead of leaving bare numbers', () => {
     expect(closed.length).toBeGreaterThan(0);
     for (const item of closed) {
       expect(item.options.length).toBeGreaterThanOrEqual(4);
@@ -115,43 +135,25 @@ describe('the template built on questionnaire research', () => {
         expect(option).not.toMatch(/^\d+$/);
       }
     }
-  });
-
-  it('carries no scale of bare numbers at all', () => {
-    // The 0-to-10 recommendation scale labels only its ends, so it stays out.
     expect(profile.questions.some((item) => item.questionType === 'nps')).toBe(false);
   });
 
-  it('asks about one thing per question', () => {
+  it('asks about one thing per question and never for agreement', () => {
     for (const item of profile.questions) {
       expect(item.label).not.toMatch(/\bund\b.*\?/i);
-      expect(item.label.match(/\?/g)?.length ?? 1).toBe(1);
     }
-  });
-
-  it('avoids agreement as an answer, because people agree regardless', () => {
     const woerter = profile.questions.flatMap((item) => item.options || []).join(' ').toLowerCase();
-
     expect(woerter).not.toContain('stimme zu');
-    expect(woerter).not.toContain('stimme nicht zu');
     expect(woerter).not.toContain('trifft zu');
   });
 
-  it('keeps the open questions to the end and to two', () => {
+  it('puts the one tap first, so leaving early still leaves an answer', () => {
+    expect(profile.questions[0].questionType).toBe('multiple_choice');
     const positionen = profile.questions.map((item) => item.questionType.startsWith('text_'));
-    const ersteOffene = positionen.indexOf(true);
-
-    expect(open.length).toBe(2);
-    // Everything after the first open question is open as well: they sit at the end.
-    expect(positionen.slice(ersteOffene).every(Boolean)).toBe(true);
-    expect(closed.length).toBeGreaterThan(open.length);
+    expect(positionen.slice(positionen.indexOf(true)).every(Boolean)).toBe(true);
   });
 
   it('forces no answer, because every forced one costs a finished form', () => {
     expect(profile.questions.some((item) => item.required)).toBe(false);
-  });
-
-  it('stays short enough for somebody standing at the exit', () => {
-    expect(profile.questions.length).toBeLessThanOrEqual(6);
   });
 });

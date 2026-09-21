@@ -4,6 +4,14 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.55.0] - 2026-09-21
+
+### Changed
+
+- The recommended template is now three questions instead of six and is called "Höhepunkt und Schluss". It follows the research on how experiences are remembered: an evening is judged by its most intense moment and by its end, hardly by its length (the peak-end rule, Fredrickson and Kahneman, confirmed by a meta-analysis of 174 effect sizes). It asks about exactly those two, plus the one thing to change first, instead of walking through music, entry and bar one by one.
+- The reasons behind it: every further question lowers the care taken over all the following ones (satisficing), one good question measures a concrete thing as well as several (Bergkvist and Rossiter), and specific questions asked before the overall rating would colour it (Schwarz, Strack and Mai) — the stars of the guest page stay first.
+- Version bumped to `0.55.0`.
+
 ## [0.54.1] - 2026-09-21
 
 ### Fixed
