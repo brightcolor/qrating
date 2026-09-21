@@ -4,6 +4,13 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.56.1] - 2026-09-21
+
+### Reverted
+
+- The early loading of the guest page from 0.56.0 is taken out again. Measured side by side against 0.55.0, seven runs each under identical conditions, it did not help and partly hurt: on a weak network (400 ms, 400 kbit/s) the stars appeared after 4.6 seconds instead of 3.7, on 3G there was no difference. On a narrow line every file loaded in parallel takes bandwidth from the base bundle, and nothing appears before that bundle has arrived. On 3G the stars already stand after about 1.2 seconds.
+- Version bumped to `0.56.1`.
+
 ## [0.56.0] - 2026-09-21
 
 ### Changed
