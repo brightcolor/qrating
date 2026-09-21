@@ -98,20 +98,70 @@ export function FormBuilder() {
   const template = templates.find((item) => item.id === templateId) || null;
   const form = template || (event ? formOf(event) : null);
 
-  // Ein Event bringt sein Formular schon mit, nur ohne Fragen. Die Vorlage füllt genau
-  // dieses Formular; ein zweites daneben würde die Gästeseite beide zeigen lassen.
+  // Ein Event aus Pretix bringt gar keinen Fragensatz mit, ein von Hand angelegtes einen
+  // leeren. Beide Fälle enden hier: vorhandenen füllen, sonst einen anlegen. Ein zweiter
+  // Satz neben einem vorhandenen würde die Gästeseite beide zeigen lassen.
   async function startFrom({ profileId, templateFormId }) {
-    if (!form) return;
     setMessage('');
     try {
-      await api(`/admin/forms/${form.id}/apply-profile`, {
-        method: 'POST',
-        body: JSON.stringify({ profileId: profileId || '', templateFormId: templateFormId || '' })
-      });
+      if (form) {
+        await api(`/admin/forms/${form.id}/apply-profile`, {
+          method: 'POST',
+          body: JSON.stringify({ profileId: profileId || '', templateFormId: templateFormId || '' })
+        });
+      } else {
+        await api('/admin/forms/from-profile', {
+          method: 'POST',
+          body: JSON.stringify({
+            profileId: profileId || '',
+            templateFormId: templateFormId || '',
+            eventId,
+            name: event ? `Fragen für ${event.name}` : 'Neuer Fragensatz',
+            isTemplate: false
+          })
+        });
+      }
       setReload(reload + 1);
     } catch (err) {
       setMessage(errorNotice(err));
     }
+  }
+
+  async function startBlank() {
+    if (form) {
+      setManual(true);
+      return;
+    }
+    setMessage('');
+    try {
+      await api('/admin/forms', {
+        method: 'POST',
+        body: JSON.stringify({ name: event ? `Fragen für ${event.name}` : 'Neuer Fragensatz', eventId })
+      });
+      setManual(true);
+      setReload(reload + 1);
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
+  }
+
+  function auswaehlen(next) {
+    setManual(false);
+    setMessage('');
+    setTemplateId(next.templateId ?? '');
+    setEventId(next.eventId ?? '');
+  }
+
+  // Was rechts steht: die Fragen, oder — solange es keine gibt — womit sie anfangen.
+  function rechteSeite() {
+    if (!event && !template) {
+      return <Panel><p className="text-neutral-600">{events?.length ? 'Wähle links ein Event.' : 'Sobald ein Event da ist, stehen hier seine Fragen.'}</p></Panel>;
+    }
+    if (form && (form.question_count > 0 || manual)) {
+      return <FormEditor key={form.id} formId={form.id} form={form} onChanged={() => setReload(reload + 1)} />;
+    }
+    if (manual) return <Panel><p className="text-sm text-neutral-500">Der Fragensatz wird angelegt …</p></Panel>;
+    return <StartingPoints event={event} profiles={profiles} onStart={startFrom} onBlank={startBlank} />;
   }
 
   return <div>
@@ -135,7 +185,7 @@ export function FormBuilder() {
               const aktiv = !templateId && eventId === item.id;
               return <button
                 key={item.id}
-                onClick={() => { setTemplateId(''); setEventId(item.id); }}
+                onClick={() => auswaehlen({ eventId: item.id })}
                 className={`focus-ring w-full rounded-md px-3 py-2 text-left ${aktiv ? 'bg-neutral-950 text-white' : 'bg-neutral-100 hover:bg-neutral-200'}`}
               >
                 <span className="block text-sm font-medium">{eventLabel(item)}</span>
@@ -158,7 +208,7 @@ export function FormBuilder() {
             <div className="mt-3 space-y-2">
               {templates.map((item) => <button
                 key={item.id}
-                onClick={() => { setEventId(''); setTemplateId(item.id); }}
+                onClick={() => auswaehlen({ templateId: item.id })}
                 className={`focus-ring w-full rounded-md px-3 py-2 text-left text-sm ${templateId === item.id ? 'bg-neutral-950 text-white' : 'bg-neutral-100 hover:bg-neutral-200'}`}
               >{item.name}</button>)}
             </div>
@@ -167,11 +217,7 @@ export function FormBuilder() {
       </div>
 
       <div className="order-1 xl:order-none">
-        {!form
-          ? <Panel><p className="text-neutral-600">{events?.length ? 'Wähle links ein Event.' : 'Sobald ein Event da ist, stehen hier seine Fragen.'}</p></Panel>
-          : form.question_count === 0 && !manual
-            ? <StartingPoints event={event} profiles={profiles} onStart={startFrom} onBlank={() => setManual(true)} />
-            : <FormEditor key={form.id} formId={form.id} form={form} onChanged={() => setReload(reload + 1)} />}
+        {rechteSeite()}
       </div>
     </div>
   </div>;

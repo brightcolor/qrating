@@ -4,6 +4,13 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.54.1] - 2026-09-21
+
+### Fixed
+
+- Picking an event that came from the ticket shop answered "Wähle links ein Event" and went no further. Events created by hand carry an empty set of questions, events from the sync carry none at all, and the page only knew the first case. Both now show what the event can start from, and one click creates the questions either way.
+- Version bumped to `0.54.1`.
+
 ## [0.54.0] - 2026-09-21
 
 ### Added
