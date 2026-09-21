@@ -319,7 +319,7 @@ authRouter.get('/me', requireAdmin, async (req, res, next) => {
   try {
     // The session may work in another organization than the one the account belongs to.
     const result = await query(
-      `SELECT u.id, u.name, u.email, u.role AS home_role, u.two_factor_enabled, u.platform_admin,
+      `SELECT u.id, u.name, u.email, u.role AS home_role, u.two_factor_enabled, u.platform_admin, u.admin_theme,
               home.id AS home_organization_id, home.name AS home_organization_name, home.slug AS home_organization_slug,
               visited.id AS organization_id, visited.name AS organization_name, visited.slug AS organization_slug
        FROM users u
@@ -335,9 +335,31 @@ authRouter.get('/me', requireAdmin, async (req, res, next) => {
       platformAdmin: Boolean(user.platform_admin),
       acting: Boolean(req.admin.acting) && user.home_organization_id !== user.organization_id,
       twoFactorEnabled: Boolean(user.two_factor_enabled),
+      adminTheme: user.admin_theme || null,
       two_factor_enabled: undefined,
-      platform_admin: undefined
+      platform_admin: undefined,
+      admin_theme: undefined
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// The look of the admin area belongs to the person, in whichever tenant they are working.
+// An unknown name is kept out; the page itself falls back to the default look for anything
+// it does not know, so an older name left behind by a later release does no harm.
+authRouter.patch('/me/preferences', requireAdmin, async (req, res, next) => {
+  try {
+    const theme = req.body?.adminTheme ?? null;
+    if (theme !== null && (typeof theme !== 'string' || !/^[a-z0-9-]{1,40}$/.test(theme))) {
+      throw httpError(400, 'Dieses Design gibt es nicht. Wähle eines unter Einstellungen → Darstellung.');
+    }
+    const updated = (await query(
+      'UPDATE users SET admin_theme = $2, updated_at = now() WHERE id = $1 RETURNING admin_theme',
+      [req.admin.sub, theme]
+    )).rows[0];
+    if (!updated) throw httpError(404, 'Dein Benutzerkonto wurde nicht gefunden. Bitte melde dich erneut an.');
+    res.json({ adminTheme: updated.admin_theme });
   } catch (error) {
     next(error);
   }

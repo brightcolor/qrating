@@ -1,21 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ArrowDown,
-  ArrowUp,
-  Bookmark,
-  Check,
-  ChevronDown,
-  Eye,
-  GripVertical,
-  Plus,
-  RefreshCw,
-  Sparkles,
-  Star,
-  Trash2
-} from 'lucide-react';
 import { api } from '../lib/api.js';
 import { buildSteps, questionType } from '../guest/flow.js';
-import { eventLabel } from './eventLabel.js';
 import {
   makeKey,
   moveById,
@@ -29,74 +14,36 @@ import {
   unknownTypeOption,
   typeCards
 } from './formBuilderUtils.js';
+import { Button, ErrorBox, Field, Icon, Input, Loading, Notice, Panel, Select, errorNotice, useAsync } from './ui.jsx';
 
 // Die Vorschau zieht die Gästeseite samt ihrem CSS herein. Sie lädt erst, wenn
 // jemand eine Frage aufklappt, damit der Adminbereich schlank bleibt.
 const LazyQuestionPreview = React.lazy(() => import('./QuestionPreview.jsx').then((module) => ({ default: module.QuestionPreview })));
 
-function useAsync(fn, deps = []) {
-  const [state, setState] = useState({ loading: true, data: null, error: null });
-  useEffect(() => {
-    let active = true;
-    setState((old) => ({ ...old, loading: true, error: null }));
-    fn().then((data) => active && setState({ loading: false, data, error: null })).catch((error) => active && setState({ loading: false, data: null, error }));
-    return () => { active = false; };
-  }, deps);
-  return state;
-}
-
-function Panel({ title, children, action, className = '' }) {
-  return <section className={`rounded-lg border border-neutral-200 bg-white p-5 shadow-sm ${className}`}>
-    {(title || action) && <div className="mb-4 flex items-start justify-between gap-3">
-      {title && <h2 className="text-lg font-semibold">{title}</h2>}
-      {action}
-    </div>}
-    {children}
-  </section>;
-}
-
-function ErrorBox({ error }) {
-  return <div role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error.message || String(error)}</div>;
-}
-
-// Messages are plain strings (information) or { tone: 'error', text } from errorNotice().
-function errorNotice(error) {
-  return { tone: 'error', text: error?.message || String(error) };
-}
-
-function Notice({ message, className = '' }) {
-  if (!message) return null;
-  const isError = typeof message === 'object' && message.tone === 'error';
-  const text = typeof message === 'object' ? message.text : message;
-  return <p role={isError ? 'alert' : 'status'} className={`${className} rounded-md p-3 text-sm ${isError ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>{text}</p>;
-}
-
-// Ein Event hat einen Fragensatz. Das ist die ganze Zuordnung. Wer ein Event wählt,
-// sieht dessen Fragen; hat es noch keine, steht dort die Auswahl, womit es anfängt.
-// Gespeicherte Fragensätze sind Startpunkte, keine eigene Verwaltung.
-export function FormBuilder() {
+// Ein Event hat einen Fragensatz. Das ist die ganze Zuordnung. Hat es noch keinen, steht
+// hier die Auswahl, womit es anfängt. Gemerkte Fragensätze sind Startpunkte; bearbeiten
+// lassen sie sich unten auf derselben Seite.
+export function EventQuestions({ event, onChanged }) {
   const [reload, setReload] = useState(0);
-  const [eventId, setEventId] = useState('');
-  const [templateId, setTemplateId] = useState('');
   const [message, setMessage] = useState('');
-  const [showTemplates, setShowTemplates] = useState(false);
   const [manual, setManual] = useState(false);
-  const { data: events } = useAsync(() => api('/admin/events'), [reload]);
+  const [templateId, setTemplateId] = useState('');
+  const [showTemplates, setShowTemplates] = useState(false);
   const { data: forms, loading, error } = useAsync(() => api('/admin/forms'), [reload]);
   const { data: profiles } = useAsync(() => api('/admin/forms/profiles'), [reload]);
 
-  const formOf = (event) => (forms || []).find((form) => form.event_id === event.id && form.active);
-  const templates = (forms || []).filter((form) => form.is_template);
-
   useEffect(() => {
-    if (eventId || templateId || !events?.length) return;
-    const mitFragen = events.find((event) => (forms || []).some((form) => form.event_id === event.id));
-    setEventId((mitFragen || events[0]).id);
-  }, [events, forms, eventId, templateId]);
+    setManual(false);
+    setMessage('');
+  }, [event.id]);
 
-  const event = (events || []).find((item) => item.id === eventId) || null;
+  const form = (forms || []).find((item) => item.event_id === event.id && item.active) || null;
+  const templates = (forms || []).filter((item) => item.is_template);
   const template = templates.find((item) => item.id === templateId) || null;
-  const form = template || (event ? formOf(event) : null);
+  const changed = () => {
+    setReload((value) => value + 1);
+    onChanged?.();
+  };
 
   // Ein Event aus Pretix bringt gar keinen Fragensatz mit, ein von Hand angelegtes einen
   // leeren. Beide Fälle enden hier: vorhandenen füllen, sonst einen anlegen. Ein zweiter
@@ -105,23 +52,14 @@ export function FormBuilder() {
     setMessage('');
     try {
       if (form) {
-        await api(`/admin/forms/${form.id}/apply-profile`, {
-          method: 'POST',
-          body: JSON.stringify({ profileId: profileId || '', templateFormId: templateFormId || '' })
-        });
+        await api(`/admin/forms/${form.id}/apply-profile`, { method: 'POST', body: JSON.stringify({ profileId: profileId || '', templateFormId: templateFormId || '' }) });
       } else {
         await api('/admin/forms/from-profile', {
           method: 'POST',
-          body: JSON.stringify({
-            profileId: profileId || '',
-            templateFormId: templateFormId || '',
-            eventId,
-            name: event ? `Fragen für ${event.name}` : 'Neuer Fragensatz',
-            isTemplate: false
-          })
+          body: JSON.stringify({ profileId: profileId || '', templateFormId: templateFormId || '', eventId: event.id, name: `Fragen für ${event.name}`, isTemplate: false })
         });
       }
-      setReload(reload + 1);
+      changed();
     } catch (err) {
       setMessage(errorNotice(err));
     }
@@ -134,92 +72,37 @@ export function FormBuilder() {
     }
     setMessage('');
     try {
-      await api('/admin/forms', {
-        method: 'POST',
-        body: JSON.stringify({ name: event ? `Fragen für ${event.name}` : 'Neuer Fragensatz', eventId })
-      });
+      await api('/admin/forms', { method: 'POST', body: JSON.stringify({ name: `Fragen für ${event.name}`, eventId: event.id }) });
       setManual(true);
-      setReload(reload + 1);
+      changed();
     } catch (err) {
       setMessage(errorNotice(err));
     }
   }
 
-  function auswaehlen(next) {
-    setManual(false);
-    setMessage('');
-    setTemplateId(next.templateId ?? '');
-    setEventId(next.eventId ?? '');
-  }
+  let main;
+  if (loading && !forms) main = <Loading />;
+  else if (form && (form.question_count > 0 || manual)) main = <FormEditor key={form.id} formId={form.id} form={form} onChanged={changed} />;
+  else if (manual) main = <Panel><p className="text-q-muted">Der Fragensatz wird angelegt …</p></Panel>;
+  else main = <StartingPoints event={event} profiles={profiles} onStart={startFrom} onBlank={startBlank} />;
 
-  // Was rechts steht: die Fragen, oder — solange es keine gibt — womit sie anfangen.
-  function rechteSeite() {
-    if (!event && !template) {
-      return <Panel><p className="text-neutral-600">{events?.length ? 'Wähle links ein Event.' : 'Sobald ein Event da ist, stehen hier seine Fragen.'}</p></Panel>;
-    }
-    if (form && (form.question_count > 0 || manual)) {
-      return <FormEditor key={form.id} formId={form.id} form={form} onChanged={() => setReload(reload + 1)} />;
-    }
-    if (manual) return <Panel><p className="text-sm text-neutral-500">Der Fragensatz wird angelegt …</p></Panel>;
-    return <StartingPoints event={event} profiles={profiles} onStart={startFrom} onBlank={startBlank} />;
-  }
-
-  return <div>
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Fragen</h1>
-        <p className="mt-1 text-neutral-600">Jedes Event hat seinen eigenen Fragensatz. Wähle das Event, dann stehen darunter seine Fragen.</p>
-      </div>
-      <button onClick={() => setReload(reload + 1)} className="button-secondary"><RefreshCw size={16} /> Neu laden</button>
-    </div>
-    {error && <div className="mt-4"><ErrorBox error={error} /></div>}
-    <Notice message={message} className="mt-4" />
-
-    <div className="mt-6 grid gap-6 xl:grid-cols-[320px_1fr]">
-      <div className="order-2 space-y-4 xl:order-none">
-        <Panel title="Events">
-          {loading && <p className="text-sm text-neutral-500">Lade …</p>}
-          <div className="space-y-2">
-            {(events || []).map((item) => {
-              const eigene = formOf(item);
-              const aktiv = !templateId && eventId === item.id;
-              return <button
-                key={item.id}
-                onClick={() => auswaehlen({ eventId: item.id })}
-                className={`focus-ring w-full rounded-md px-3 py-2 text-left ${aktiv ? 'bg-neutral-950 text-white' : 'bg-neutral-100 hover:bg-neutral-200'}`}
-              >
-                <span className="block text-sm font-medium">{eventLabel(item)}</span>
-                <span className={`mt-0.5 block text-xs ${aktiv ? 'opacity-75' : 'text-neutral-500'}`}>
-                  {eigene?.question_count ? `${eigene.question_count} Fragen` : 'noch keine Fragen'}
-                </span>
-              </button>;
-            })}
-            {!events?.length && !loading && <p className="text-sm text-neutral-500">Noch keine Events. Lege eines unter Events an oder hole sie über Pretix.</p>}
-          </div>
-        </Panel>
-
-        {templates.length > 0 && <Panel>
-          <button type="button" className="focus-ring flex w-full items-center justify-between gap-2 text-left text-sm font-medium" onClick={() => setShowTemplates(!showTemplates)}>
-            <span>Gemerkte Fragensätze ({templates.length})</span>
-            <ChevronDown size={16} className={showTemplates ? 'rotate-180 transition-transform' : 'transition-transform'} />
-          </button>
-          {showTemplates && <>
-            <p className="mt-2 text-xs text-neutral-500">Fragensätze, die du dir gemerkt hast. Du kannst sie hier bearbeiten; für ein Event nimmst du sie oben als Startpunkt.</p>
-            <div className="mt-3 space-y-2">
-              {templates.map((item) => <button
-                key={item.id}
-                onClick={() => auswaehlen({ templateId: item.id })}
-                className={`focus-ring w-full rounded-md px-3 py-2 text-left text-sm ${templateId === item.id ? 'bg-neutral-950 text-white' : 'bg-neutral-100 hover:bg-neutral-200'}`}
-              >{item.name}</button>)}
-            </div>
-          </>}
-        </Panel>}
-      </div>
-
-      <div className="order-1 xl:order-none">
-        {rechteSeite()}
-      </div>
-    </div>
+  return <div className="grid gap-4">
+    <ErrorBox error={error} />
+    <Notice message={message} />
+    {main}
+    {templates.length > 0 && <Panel>
+      <button type="button" className="flex w-full items-center justify-between gap-2 text-left font-semibold" aria-expanded={showTemplates} onClick={() => setShowTemplates(!showTemplates)}>
+        <span>Gemerkte Fragensätze ({templates.length})</span>
+        <Icon name="chevronDown" size={16} className={showTemplates ? 'rotate-180' : ''} />
+      </button>
+      {showTemplates && <div className="mt-3 grid gap-3">
+        <p className="q-hint">Fragensätze, die du dir gemerkt hast. Für ein neues Event wählst du sie oben als Startpunkt; hier bearbeitest du sie selbst.</p>
+        <div className="flex flex-wrap gap-1.5">
+          {templates.map((item) => <button key={item.id} type="button" className="q-chip" aria-pressed={templateId === item.id} onClick={() => setTemplateId(templateId === item.id ? '' : item.id)}>{item.name}</button>)}
+        </div>
+        {template && <FormEditor key={template.id} formId={template.id} form={template} onChanged={changed} />}
+      </div>}
+    </Panel>}
   </div>;
 }
 
@@ -228,45 +111,45 @@ export function FormBuilder() {
 function StartingPoints({ event, profiles, onStart, onBlank }) {
   const builtIn = profiles?.builtIn || [];
   const saved = profiles?.saved || [];
-  return <Panel title={`Womit fängt „${event?.name || "dieser Fragensatz"}“ an?`} action={<Sparkles className="text-blue-600" size={20} />}>
-    <p className="text-sm text-neutral-600">Ein Klick legt die Fragen für dieses Event an. Ändern kannst du danach alles.</p>
-    <div className="mt-4 grid gap-3">
+  return <Panel title={`Womit fängt „${event?.name || 'dieser Fragensatz'}“ an?`}>
+    <p className="text-q-muted">Ein Klick legt die Fragen für dieses Event an. Ändern kannst du danach alles.</p>
+    <div className="mt-3 grid gap-2.5 lg:grid-cols-2">
       {builtIn.map((profile) => <ProfileCard key={profile.id} profile={profile} onPick={() => onStart({ profileId: profile.id })} />)}
       {saved.map((profile) => <ProfileCard
         key={profile.id}
-        icon={Bookmark}
+        icon="questions"
         profile={{ ...profile, questionCount: profile.question_count, badge: 'Gemerkt', summary: profile.description || 'Deine gemerkten Fragen.' }}
         onPick={() => onStart({ templateFormId: profile.id })}
       />)}
     </div>
-    <button type="button" onClick={onBlank} className="button-secondary mt-4 w-full"><Plus size={16} /> Lieber selbst schreiben</button>
+    <Button className="mt-3" icon="plus" onClick={onBlank}>Lieber selbst schreiben</Button>
   </Panel>;
 }
 
-function ProfileCard({ profile, active, icon, onPick }) {
-  const Icon = icon || profileIcons[profile.id] || Sparkles;
-  const preview = (profile.questions || []).slice(0, 3).map((item) => item.label).join(' · ');
+function ProfileCard({ profile, icon, onPick }) {
+  const Symbol = icon ? null : profileIcons[profile.id];
+  const preview = (profile.questions || []).slice(0, 3).map((item) => item.label).join(', ');
   const count = profile.questionCount ?? (profile.questions || []).length;
-  return <button type="button" onClick={onPick} className={`focus-ring rounded-lg border p-4 text-left transition ${active ? 'border-blue-600 bg-blue-50' : 'border-neutral-200 hover:border-blue-300 hover:bg-blue-50/40'}`}>
-    <div className="flex items-start justify-between gap-3">
-      <div className="flex items-center gap-2">
-        <Icon size={18} className="text-blue-700" />
+  return <button type="button" onClick={onPick} className="profile-card">
+    <span className="flex items-start justify-between gap-3">
+      <span className="flex items-center gap-2">
+        {Symbol ? <Symbol size={18} className="text-q-accent-text" aria-hidden="true" /> : <Icon name={icon || 'questions'} size={18} className="text-q-accent-text" />}
         <strong>{profile.name}</strong>
-      </div>
-      {profile.badge && <span className={`rounded-full px-2 py-0.5 text-xs ${profile.badge === 'Empfohlen' ? 'bg-blue-600 text-white' : 'bg-neutral-100 text-neutral-600'}`}>{profile.badge}</span>}
-    </div>
-    <p className="mt-2 text-sm text-neutral-600">{profile.summary}</p>
-    {preview && <p className="mt-2 text-xs text-neutral-500">{preview}</p>}
-    <p className="mt-2 text-xs font-medium text-blue-700">{count} Fragen, alle anpassbar</p>
+      </span>
+      {profile.badge && <span className={`q-pill ${profile.badge === 'Empfohlen' ? 'q-pill-live' : 'q-pill-soon'}`}>{profile.badge}</span>}
+    </span>
+    <span className="mt-1.5 block text-q-muted">{profile.summary}</span>
+    {preview && <span className="mt-1.5 block q-hint">{preview}</span>}
+    <span className="mt-1.5 block font-semibold text-q-accent-text" style={{ fontSize: 12.5 }}>{count} Fragen, alle anpassbar</span>
   </button>;
 }
 
 // Der Zustand, den der Editor die ganze Zeit anzeigt. Ohne ihn weiss niemand,
 // ob eine Änderung beim Server angekommen ist.
 function SaveState({ state }) {
-  if (state === 'speichert') return <span className="text-sm text-neutral-500">Wird gespeichert …</span>;
-  if (state === 'fehler') return <span role="alert" className="text-sm text-red-700">Nicht gespeichert. Prüfe deine Verbindung.</span>;
-  return <span className="flex items-center gap-1 text-sm text-neutral-500"><Check size={15} /> Alle Änderungen gespeichert</span>;
+  if (state === 'speichert') return <span className="text-q-muted">Wird gespeichert …</span>;
+  if (state === 'fehler') return <span role="alert" className="text-q-danger">Nicht gespeichert. Prüfe deine Verbindung.</span>;
+  return <span className="flex items-center gap-1 text-q-muted"><Icon name="check" size={15} />Alle Änderungen gespeichert</span>;
 }
 
 function toDraft(question) {
@@ -302,7 +185,7 @@ function FormEditor({ formId, form, onChanged }) {
   const [questions, setQuestions] = useState([]);
   const [openId, setOpenId] = useState(null);
   const [saveState, setSaveState] = useState('gespeichert');
-  const [profileName, setProfileName] = useState(`${form?.name || "Fragen"}`);
+  const [profileName, setProfileName] = useState(`${form?.name || 'Fragen'}`);
   const [message, setMessage] = useState('');
   const [draftOfOpen, setDraftOfOpen] = useState(null);
 
@@ -313,14 +196,14 @@ function FormEditor({ formId, form, onChanged }) {
   // Die Texte der Gästeseite, damit die Vorschau dieselben Worte zeigt wie der Abend selbst.
   const texts = useMemo(() => {
     const defaults = textData?.defaults || {};
-    const eigene = {};
+    const own = {};
     for (const row of textData?.templates || []) {
-      if (!row.event_id && row.value) eigene[row.key] = row.value;
+      if (!row.event_id && row.value) own[row.key] = row.value;
     }
-    return { ...defaults, ...eigene };
+    return { ...defaults, ...own };
   }, [textData]);
 
-  if (loading) return <Panel><p>Lade Formular …</p></Panel>;
+  if (loading) return <Panel><Loading text="Lade Fragen …" /></Panel>;
   if (error) return <ErrorBox error={error} />;
 
   async function saveQuestion(id, payload) {
@@ -362,7 +245,7 @@ function FormEditor({ formId, form, onChanged }) {
   }
 
   async function removeQuestion(id) {
-    const vorher = questions;
+    const before = questions;
     setQuestions((current) => current.filter((item) => item.id !== id));
     if (openId === id) setOpenId(null);
     try {
@@ -370,25 +253,22 @@ function FormEditor({ formId, form, onChanged }) {
       onChanged();
     } catch (err) {
       // Die Frage kommt zurück, damit niemand eine Zeile verliert, die es noch gibt.
-      setQuestions(vorher);
+      setQuestions(before);
       setMessage(errorNotice(err));
     }
   }
 
   async function reorder(next) {
-    const vorher = questions;
+    const before = questions;
     setQuestions(next);
     setSaveState('speichert');
     try {
-      const saved = await api(`/admin/forms/${formId}/question-order`, {
-        method: 'PUT',
-        body: JSON.stringify({ order: next.map((item) => item.id) })
-      });
+      const saved = await api(`/admin/forms/${formId}/question-order`, { method: 'PUT', body: JSON.stringify({ order: next.map((item) => item.id) }) });
       setQuestions(saved);
       setSaveState('gespeichert');
       onChanged();
     } catch (err) {
-      setQuestions(vorher);
+      setQuestions(before);
       setSaveState('fehler');
       setMessage(errorNotice(err));
     }
@@ -398,32 +278,22 @@ function FormEditor({ formId, form, onChanged }) {
     setMessage('');
     try {
       const saved = await api(`/admin/forms/${formId}/save-profile`, { method: 'POST', body: JSON.stringify({ name: profileName }) });
-      setMessage(`Gemerkt als „${saved.name}“. Du findest sie beim nächsten Event unter den Startpunkten.`);
+      setMessage(`Gemerkt als „${saved.name}“. Du findest die Fragen beim nächsten Event unter den Startpunkten.`);
       onChanged();
     } catch (err) {
       setMessage(errorNotice(err));
     }
   }
 
-  const aktive = questions.filter((question) => question.active);
-  const offen = questions.find((question) => question.id === openId);
+  const active = questions.filter((question) => question.active);
+  const open = questions.find((question) => question.id === openId);
 
-  return <div className="space-y-6">
-    <Panel title={data.form.name} action={<span className="rounded-full bg-neutral-100 px-3 py-1 text-sm">{aktive.length} aktive Fragen</span>}>
-      <Notice message={message} className="mb-4" />
-      <div className="grid gap-3 md:grid-cols-[1fr_auto]">
-        <label className="block">
-          <span className="text-sm font-medium">Name, unter dem du sie wiederfindest</span>
-          <input className="input mt-1" value={profileName} onChange={(e) => setProfileName(e.target.value)} />
-        </label>
-        <button onClick={saveProfile} className="button-secondary self-end"><Bookmark size={16} /> Fragen merken</button>
-      </div>
-    </Panel>
-
-    <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-      <div className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold">Fragen</h2>
+  return <div className="grid gap-4">
+    <Notice message={message} />
+    <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
+      <div className="grid content-start gap-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="q-panel-title">{data.form.name} <span className="q-panel-note">{active.length} aktive Fragen</span></h2>
           <SaveState state={saveState} />
         </div>
         {questions.map((question, position) => <QuestionCard
@@ -443,24 +313,29 @@ function FormEditor({ formId, form, onChanged }) {
             reorder(moveItem(questions, from, position));
           }}
         />)}
-        {!questions.length && <Panel><p className="text-sm text-neutral-500">Noch keine Fragen. Wähle unten einen Typ, dann steht die erste Frage da.</p></Panel>}
+        {!questions.length && <Panel><p className="text-q-muted">Noch keine Fragen. Wähle unten eine Antwortart, dann steht die erste Frage da.</p></Panel>}
         <AddQuestion onAdd={addQuestion} />
+        <Panel>
+          <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
+            <Field label="Diese Fragen merken unter dem Namen"><Input value={profileName} onChange={(e) => setProfileName(e.target.value)} /></Field>
+            <Button icon="questions" onClick={saveProfile}>Fragen merken</Button>
+          </div>
+        </Panel>
       </div>
-
-      <div className="space-y-4 lg:sticky lg:top-6 lg:self-start">
-        {offen
-          ? <Panel title="So sieht der Gast sie" action={<Eye size={18} className="text-blue-600" />}>
-            <React.Suspense fallback={<p className="text-sm text-neutral-500">Vorschau wird geladen …</p>}>
+      <div className="grid content-start gap-4 lg:sticky lg:top-4 lg:self-start">
+        {open
+          ? <Panel title="So sieht der Gast sie">
+            <React.Suspense fallback={<p className="text-q-muted">Vorschau wird geladen …</p>}>
               <LazyQuestionPreview
-                key={`${offen.id}:${draftOfOpen?.questionType || offen.question_type}`}
-                question={toPreviewQuestion(draftOfOpen || toDraft(offen))}
+                key={`${open.id}:${draftOfOpen?.questionType || open.question_type}`}
+                question={toPreviewQuestion(draftOfOpen || toDraft(open))}
                 brandColor={branding?.primaryColor || branding?.primary_color}
                 texts={texts}
               />
             </React.Suspense>
-            <p className="mt-3 text-xs text-neutral-500">Die Vorschau ist bedienbar. Was du hier antippst, wird nirgends gespeichert.</p>
+            <p className="mt-2 q-hint">Die Vorschau ist bedienbar. Was du hier antippst, wird nirgends gespeichert.</p>
           </Panel>
-          : <GuestFlowPreview questions={aktive} />}
+          : <GuestFlowPreview questions={active} />}
       </div>
     </div>
   </div>;
@@ -475,8 +350,8 @@ function QuestionCard({ question, position, total, open, onToggle, onSave, onDra
   const [showKey, setShowKey] = useState(false);
   const labelRef = useRef(null);
   const type = typeCards.find((item) => item.value === draft.questionType) || typeCards[0];
-  const Icon = type.icon;
-  const fehlerId = `frage-${question.id}-fehler`;
+  const TypeIcon = type.icon;
+  const problemId = `frage-${question.id}-fehler`;
 
   useEffect(() => { onDraft(draft); }, [draft, onDraft]);
 
@@ -484,9 +359,9 @@ function QuestionCard({ question, position, total, open, onToggle, onSave, onDra
   // zerbrechen würde, geht nicht raus — der Grund steht stattdessen an der Frage.
   useEffect(() => {
     if (!touched) return undefined;
-    const gefunden = questionProblems(draft);
-    setProblems(gefunden);
-    if (gefunden.length) return undefined;
+    const found = questionProblems(draft);
+    setProblems(found);
+    if (found.length) return undefined;
     const timer = setTimeout(() => onSave(questionPayload(draft)), 700);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -504,102 +379,80 @@ function QuestionCard({ question, position, total, open, onToggle, onSave, onDra
     setDraft((current) => ({ ...current, ...patch }));
   }
 
+  const iconButton = 'q-btn q-btn-ghost q-btn-icon';
   return <article
-    className={`rounded-lg border bg-white shadow-sm ${open ? 'border-blue-300 ring-1 ring-blue-100' : 'border-neutral-200'}`}
+    className={`question-card ${open ? 'open' : ''}`}
     draggable={!open}
     onDragStart={(event) => event.dataTransfer.setData('text/plain', question.id)}
     onDragOver={(event) => event.preventDefault()}
     onDrop={(event) => { event.preventDefault(); onDropOn(event.dataTransfer.getData('text/plain')); }}
   >
-    <div className="flex items-start gap-2 p-3">
-      <span className="mt-1 hidden cursor-grab text-neutral-400 sm:block" aria-hidden="true" title="Zum Sortieren ziehen"><GripVertical size={18} /></span>
+    <div className="flex items-start gap-2 p-2.5">
+      <span className="mt-2.5 hidden cursor-grab text-q-faint sm:block" aria-hidden="true" title="Zum Sortieren ziehen"><Icon name="grip" size={18} /></span>
       <button type="button" onClick={onToggle} aria-expanded={open} className="flex min-w-0 flex-1 items-start gap-3 text-left">
-        <span className="flex h-8 w-8 flex-none items-center justify-center rounded-md bg-blue-50 text-blue-700"><Icon size={17} /></span>
+        <span className="type-badge"><TypeIcon size={17} aria-hidden="true" /></span>
         <span className="min-w-0">
           <strong className="block truncate">{position + 1}. {question.label}</strong>
-          <span className="block text-sm text-neutral-500">{questionSummary(question)}</span>
+          <span className="block text-q-muted">{questionSummary(question)}</span>
         </span>
       </button>
-      <div className="flex flex-none items-center gap-1">
-        <button type="button" onClick={() => onMove('up')} disabled={position === 0} className="focus-ring flex h-11 w-11 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 disabled:opacity-30" aria-label={`„${question.label}“ nach oben`}><ArrowUp size={16} /></button>
-        <button type="button" onClick={() => onMove('down')} disabled={position === total - 1} className="focus-ring flex h-11 w-11 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 disabled:opacity-30" aria-label={`„${question.label}“ nach unten`}><ArrowDown size={16} /></button>
-        <button type="button" onClick={onToggle} className="focus-ring flex h-11 w-11 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100" aria-label={open ? 'Frage zuklappen' : 'Frage bearbeiten'}>
-          <ChevronDown size={18} className={open ? 'rotate-180 transition-transform' : 'transition-transform'} />
-        </button>
+      <div className="flex flex-none items-center gap-0.5">
+        <button type="button" onClick={() => onMove('up')} disabled={position === 0} className={iconButton} style={{ width: 44, height: 44 }} aria-label={`„${question.label}“ nach oben`}><Icon name="chevronDown" size={16} className="rotate-180" /></button>
+        <button type="button" onClick={() => onMove('down')} disabled={position === total - 1} className={iconButton} style={{ width: 44, height: 44 }} aria-label={`„${question.label}“ nach unten`}><Icon name="chevronDown" size={16} /></button>
+        <button type="button" onClick={onToggle} className={iconButton} style={{ width: 44, height: 44 }} aria-label={open ? 'Frage zuklappen' : 'Frage bearbeiten'}><Icon name="settings" size={16} /></button>
       </div>
     </div>
 
-    {problems.length > 0 && <ul id={fehlerId} role="alert" className="mx-3 mb-3 space-y-1 rounded-md bg-red-50 p-3 text-sm text-red-700">
+    {problems.length > 0 && <ul id={problemId} role="alert" className="q-notice q-notice-error mx-3 mb-3 grid gap-1">
       {problems.map((problem) => <li key={problem}>{problem}</li>)}
     </ul>}
 
-    {open && <div className="space-y-4 border-t border-neutral-200 p-4">
-      <label className="block">
-        <span className="text-sm font-medium">Frage, die Gäste sehen</span>
-        <input
-          ref={labelRef}
-          className="input mt-1"
-          value={draft.label}
-          aria-describedby={problems.length ? fehlerId : undefined}
-          onChange={(event) => change({ label: event.target.value })}
-        />
-      </label>
-      <div className="flex flex-wrap gap-2">
-        {promptIdeas.slice(0, 3).map((idea) => <button key={idea} type="button" className="rounded-full bg-neutral-100 px-3 py-1 text-xs text-neutral-700 hover:bg-blue-50" onClick={() => change({ label: idea })}>{idea}</button>)}
+    {open && <div className="grid gap-3 border-t border-q-line p-3.5">
+      <Field label="Frage, die Gäste sehen">
+        <Input ref={labelRef} value={draft.label} aria-describedby={problems.length ? problemId : undefined} onChange={(event) => change({ label: event.target.value })} />
+      </Field>
+      <div className="flex flex-wrap gap-1.5">
+        {promptIdeas.slice(0, 3).map((idea) => <button key={idea} type="button" className="q-chip" onClick={() => change({ label: idea })}>{idea}</button>)}
       </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="block">
-          <span className="text-sm font-medium">Antwortart</span>
-          <select className="input mt-1" value={draft.questionType} onChange={(event) => {
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Antwortart">
+          <Select value={draft.questionType} onChange={(event) => {
             const next = event.target.value;
             change({ questionType: next, options: needsOptions(next) && !draft.options.length ? ['Erste Antwort', 'Zweite Antwort'] : draft.options });
           }}>
-            {unknownTypeOption(draft.questionType) && <option value={draft.questionType}>{unknownTypeOption(draft.questionType).label} — {unknownTypeOption(draft.questionType).hint}</option>}
-            {typeCards.map((item) => <option key={item.value} value={item.value}>{item.label} — {item.hint}</option>)}
-          </select>
-        </label>
-        <label className="block">
-          <span className="text-sm font-medium">Hinweis unter der Frage</span>
-          <input className="input mt-1" placeholder="Optional" value={draft.helpText} onChange={(event) => change({ helpText: event.target.value })} />
-        </label>
+            {unknownTypeOption(draft.questionType) && <option value={draft.questionType}>{unknownTypeOption(draft.questionType).label}, {unknownTypeOption(draft.questionType).hint}</option>}
+            {typeCards.map((item) => <option key={item.value} value={item.value}>{item.label}, {item.hint}</option>)}
+          </Select>
+        </Field>
+        <Field label="Hinweis unter der Frage"><Input placeholder="Optional" value={draft.helpText} onChange={(event) => change({ helpText: event.target.value })} /></Field>
       </div>
 
       {needsOptions(draft.questionType) && <OptionRows options={draft.options} onChange={(options) => change({ options })} />}
 
-      {['text_short', 'text_long'].includes(draft.questionType) && <label className="block">
-        <span className="text-sm font-medium">Platzhalter im Feld</span>
-        <input className="input mt-1" placeholder="Optional" value={draft.placeholder} onChange={(event) => change({ placeholder: event.target.value })} />
-      </label>}
+      {['text_short', 'text_long'].includes(draft.questionType) && <Field label="Platzhalter im Feld">
+        <Input placeholder="Optional" value={draft.placeholder} onChange={(event) => change({ placeholder: event.target.value })} />
+      </Field>}
 
       <div className="flex flex-wrap items-center gap-5">
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={draft.required} onChange={(event) => change({ required: event.target.checked })} /> Pflichtfrage
-        </label>
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={draft.active} onChange={(event) => change({ active: event.target.checked })} /> Gästen zeigen
-        </label>
+        <label className="q-check"><input type="checkbox" checked={draft.required} onChange={(event) => change({ required: event.target.checked })} /><span>Pflichtfrage</span></label>
+        <label className="q-check"><input type="checkbox" checked={draft.active} onChange={(event) => change({ active: event.target.checked })} /><span>Gästen zeigen</span></label>
       </div>
 
-      <div className="border-t border-neutral-100 pt-3">
-        <button type="button" className="text-sm text-neutral-500 underline" onClick={() => setShowKey(!showKey)}>
-          {showKey ? 'Technisches ausblenden' : 'Technisches anzeigen'}
-        </button>
-        {showKey && <label className="mt-3 block">
-          <span className="text-sm font-medium">Interner Schlüssel</span>
-          <input className="input mt-1 font-mono text-sm" value={draft.internalName} onChange={(event) => change({ internalName: event.target.value })} />
-          <span className="mt-1 block text-xs text-neutral-500">Steht so in CSV, Excel und Webhooks. Ändere ihn nur, solange noch keine Antworten da sind.</span>
-        </label>}
+      <div className="border-t border-q-line pt-2.5">
+        <button type="button" className="text-q-muted underline" onClick={() => setShowKey(!showKey)}>{showKey ? 'Technisches ausblenden' : 'Technisches anzeigen'}</button>
+        {showKey && <Field label="Interner Schlüssel" hint="Steht so in CSV, Excel und Webhooks. Ändere ihn nur, solange noch keine Antworten da sind." className="mt-2.5">
+          <Input value={draft.internalName} onChange={(event) => change({ internalName: event.target.value })} style={{ fontFamily: 'ui-monospace, monospace' }} />
+        </Field>}
       </div>
 
-      <div className="flex justify-end border-t border-neutral-100 pt-3">
+      <div className="flex justify-end border-t border-q-line pt-2.5">
         {confirming
-          ? <span className="flex flex-wrap items-center gap-3 text-sm">
+          ? <span className="flex flex-wrap items-center gap-2">
             <span>Frage samt Antworten löschen?</span>
-            <button type="button" onClick={onDelete} className="button-primary bg-red-700 hover:bg-red-800"><Trash2 size={16} /> Ja, löschen</button>
-            <button type="button" onClick={() => setConfirming(false)} className="button-secondary">Abbrechen</button>
+            <Button variant="danger" icon="trash" onClick={onDelete}>Ja, löschen</Button>
+            <Button onClick={() => setConfirming(false)}>Abbrechen</Button>
           </span>
-          : <button type="button" onClick={() => setConfirming(true)} className="button-secondary"><Trash2 size={16} /> Frage löschen</button>}
+          : <Button icon="trash" onClick={() => setConfirming(true)}>Frage löschen</Button>}
       </div>
     </div>}
   </article>;
@@ -607,42 +460,32 @@ function QuestionCard({ question, position, total, open, onToggle, onSave, onDra
 
 // Jede Antwortmöglichkeit hat ihre eigene Zeile: anlegen, umsortieren, entfernen.
 function OptionRows({ options, onChange }) {
+  const iconButton = 'q-btn q-btn-ghost q-btn-icon';
   return <div>
-    <span className="text-sm font-medium">Antwortmöglichkeiten</span>
-    <ol className="mt-2 space-y-2">
-      {options.map((option, position) => <li key={position} className="flex flex-wrap items-center gap-2">
-        <span className="w-5 flex-none text-sm text-neutral-400">{position + 1}</span>
-        <input
-          className="input min-w-[9rem] flex-1"
-          value={option}
-          aria-label={`Antwortmöglichkeit ${position + 1}`}
-          onChange={(event) => onChange(options.map((item, index) => (index === position ? event.target.value : item)))}
-        />
-        <button type="button" className="focus-ring flex h-11 w-11 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 disabled:opacity-30" disabled={position === 0}
-          onClick={() => onChange(moveItem(options, position, position - 1))} aria-label={`Antwort ${position + 1} nach oben`}><ArrowUp size={15} /></button>
-        <button type="button" className="focus-ring flex h-11 w-11 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 disabled:opacity-30" disabled={position === options.length - 1}
-          onClick={() => onChange(moveItem(options, position, position + 1))} aria-label={`Antwort ${position + 1} nach unten`}><ArrowDown size={15} /></button>
-        <button type="button" className="focus-ring flex h-11 w-11 flex-none items-center justify-center rounded-md text-neutral-500 hover:bg-red-50 hover:text-red-700"
-          onClick={() => onChange(options.filter((item, index) => index !== position))} aria-label={`Antwort ${position + 1} entfernen`}><Trash2 size={15} /></button>
+    <span className="q-label">Antwortmöglichkeiten</span>
+    <ol className="mt-1.5 grid gap-1.5">
+      {options.map((option, position) => <li key={position} className="flex flex-wrap items-center gap-1.5">
+        <span className="w-5 flex-none text-q-faint">{position + 1}</span>
+        <input className="q-input min-w-[9rem] flex-1" value={option} aria-label={`Antwortmöglichkeit ${position + 1}`} onChange={(event) => onChange(options.map((item, index) => (index === position ? event.target.value : item)))} />
+        <button type="button" className={iconButton} style={{ width: 44, height: 44 }} disabled={position === 0} onClick={() => onChange(moveItem(options, position, position - 1))} aria-label={`Antwort ${position + 1} nach oben`}><Icon name="chevronDown" size={15} className="rotate-180" /></button>
+        <button type="button" className={iconButton} style={{ width: 44, height: 44 }} disabled={position === options.length - 1} onClick={() => onChange(moveItem(options, position, position + 1))} aria-label={`Antwort ${position + 1} nach unten`}><Icon name="chevronDown" size={15} /></button>
+        <button type="button" className={iconButton} style={{ width: 44, height: 44 }} onClick={() => onChange(options.filter((item, index) => index !== position))} aria-label={`Antwort ${position + 1} entfernen`}><Icon name="trash" size={15} /></button>
       </li>)}
     </ol>
-    <button type="button" className="button-secondary mt-2" onClick={() => onChange([...options, ''])}><Plus size={16} /> Antwort hinzufügen</button>
+    <Button size="sm" className="mt-1.5" icon="plus" onClick={() => onChange([...options, ''])}>Antwort hinzufügen</Button>
   </div>;
 }
 
 // Neue Fragen entstehen unten, dort wo die Liste endet.
 function AddQuestion({ onAdd }) {
-  return <div className="rounded-lg border border-dashed border-neutral-300 p-4">
-    <p className="text-sm font-medium">Frage hinzufügen</p>
-    <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+  return <div className="add-question">
+    <p className="font-semibold">Frage hinzufügen</p>
+    <div className="mt-2 grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
       {typeCards.map((type) => {
-        const Icon = type.icon;
-        return <button key={type.value} type="button" onClick={() => onAdd(type.value)} className="focus-ring flex items-center gap-3 rounded-md border border-neutral-200 bg-white p-3 text-left hover:border-blue-300 hover:bg-blue-50">
-          <Icon size={18} className="flex-none text-neutral-500" />
-          <span className="min-w-0">
-            <strong className="block text-sm">{type.label}</strong>
-            <span className="block truncate text-xs text-neutral-500">{type.hint}</span>
-          </span>
+        const TypeIcon = type.icon;
+        return <button key={type.value} type="button" onClick={() => onAdd(type.value)} className="type-option">
+          <TypeIcon size={18} className="flex-none text-q-muted" aria-hidden="true" />
+          <span className="min-w-0"><strong className="block">{type.label}</strong><span className="block truncate text-q-muted" style={{ fontSize: 12 }}>{type.hint}</span></span>
         </button>;
       })}
     </div>
@@ -650,9 +493,9 @@ function AddQuestion({ onAdd }) {
 }
 
 const stepHints = {
-  rating: 'Sterne von 1 bis 5 · springt direkt weiter',
+  rating: 'Sterne von 1 bis 5, springt direkt weiter',
   contact: 'Erscheint bei 1 oder 2 Sternen: Rückrufnummer und Anliegen',
-  newsletter: 'Ja oder Nein · bei Ja folgt das Feld für die E-Mail-Adresse',
+  newsletter: 'Ja oder Nein, bei Ja folgt das Feld für die E-Mail-Adresse',
   summary: 'Alle Antworten auf einen Blick, jede lässt sich noch ändern'
 };
 
@@ -672,24 +515,21 @@ function stepHint(step) {
   if (['rating', 'nps', 'yes_no', 'multiple_choice'].includes(questionType(step.question))) parts.push('springt direkt weiter');
   if (step.detailField) parts.push('mit optionalem Satz');
   if (step.question.required) parts.push('Pflichtfrage');
-  return parts.join(' · ');
+  return parts.join(', ');
 }
 
 function GuestFlowPreview({ questions }) {
   const steps = useMemo(() => buildSteps(questions, 0), [questions]);
-  return <Panel title="Ablauf für Gäste" action={<Eye size={18} className="text-blue-600" />}>
-    <p className="text-sm text-neutral-600">Gäste sehen eine Frage pro Schritt. Klapp eine Frage auf, dann steht hier ihr echtes Gästebild.</p>
-    <ol className="mt-4 space-y-2">
-      {steps.map((step, index) => <li key={step.id} className="flex items-start gap-3 rounded-md bg-neutral-50 p-2">
-        <span className="grid h-6 w-6 flex-none place-items-center rounded-full bg-neutral-950 text-xs font-semibold text-white">{index + 1}</span>
-        <span className="min-w-0">
-          <span className="block text-sm font-medium">{stepTitle(step)}</span>
-          <span className="block text-xs text-neutral-500">{stepHint(step)}</span>
-        </span>
+  return <Panel title="Ablauf für Gäste">
+    <p className="text-q-muted">Gäste sehen eine Frage pro Schritt. Klapp eine Frage auf, dann steht hier ihr echtes Gästebild.</p>
+    <ol className="mt-3 grid gap-1.5">
+      {steps.map((step, index) => <li key={step.id} className="flex items-start gap-2.5 rounded-lg bg-q-sunken p-2">
+        <span className="step-dot">{index + 1}</span>
+        <span className="min-w-0"><span className="block font-semibold">{stepTitle(step)}</span><span className="block q-hint">{stepHint(step)}</span></span>
       </li>)}
-      <li className="flex items-start gap-3 rounded-md border border-dashed border-neutral-300 p-2">
-        <Star size={16} className="mt-0.5 flex-none text-amber-500" />
-        <span className="text-xs text-neutral-500">{stepHints.contact}</span>
+      <li className="flex items-start gap-2.5 rounded-lg border border-dashed border-q-line p-2">
+        <Icon name="star" size={16} className="mt-0.5 text-q-star" />
+        <span className="q-hint">{stepHints.contact}</span>
       </li>
     </ol>
   </Panel>;

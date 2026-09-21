@@ -31,6 +31,7 @@ import {
 } from '../services/billingService.js';
 import { getQuestionProfile, questionProfiles, toProfileQuestionRows } from '../services/questionProfiles.js';
 import { writeAudit } from '../services/auditService.js';
+import { eventStats, eventVoices } from '../services/voiceService.js';
 
 export const adminRouter = express.Router();
 adminRouter.use(requireAdmin);
@@ -239,10 +240,13 @@ adminRouter.get('/events', async (req, res, next) => {
          ORDER BY e.date_from DESC`,
         [req.admin.organizationId, req.admin.sub]
       );
+    // The lists of the admin area ask for the numbers beside every event in the same call.
+    const stats = req.query.stats ? await eventStats({ query }, result.rows.map((event) => event.id)) : null;
     res.json(result.rows.map((event) => ({
       ...event,
       feedbackWindow: calculateFeedbackWindow(event),
-      feedbackUrl: `${env.feedbackAppUrl}/e/${event.event_feedback_token}`
+      feedbackUrl: `${env.feedbackAppUrl}/e/${event.event_feedback_token}`,
+      ...(stats ? { stats: stats.get(event.id) } : {})
     })));
   } catch (error) {
     next(error);
@@ -536,8 +540,17 @@ adminRouter.get('/events/:id/analytics', async (req, res, next) => {
       rating: Number(row.draft?.rating) || 0,
       entries: abandonedEntries(row.draft, questionLabels.rows)
     }));
+    const voices = await eventVoices({ query }, req.params.id);
+    const cases = await query(
+      `SELECT count(*) FILTER (WHERE status IN ('open','contact_planned'))::int AS open,
+              count(*) FILTER (WHERE status IN ('open','contact_planned') AND contact_phone_encrypted IS NOT NULL)::int AS open_with_phone
+       FROM low_rating_cases WHERE event_id = $1`,
+      [req.params.id]
+    );
     res.json({
       abandoned,
+      voices,
+      cases: cases.rows[0],
       summary: summary.rows[0],
       distribution: distribution.rows,
       comments: comments.rows,
@@ -1609,8 +1622,10 @@ adminRouter.patch('/branding', requireRole('event_manager'), async (req, res, ne
            default_language = COALESCE($11, default_language),
            branding = COALESCE($12::jsonb, branding),
            retention_low_rating_phone_days = COALESCE($13, retention_low_rating_phone_days),
-           retention_feedback_days = $14,
-           retention_newsletter_days = $15,
+           -- Empty means keep forever, so these two change only when the request names them;
+           -- a page that saves the look alone must not wipe the deletion periods.
+           retention_feedback_days = CASE WHEN $22::boolean THEN $14 ELSE retention_feedback_days END,
+           retention_newsletter_days = CASE WHEN $23::boolean THEN $15 ELSE retention_newsletter_days END,
            wallboard_settings = COALESCE($16::jsonb, wallboard_settings),
            qr_mark_enabled = COALESCE($17, qr_mark_enabled),
            product_credit_enabled = COALESCE($18, product_credit_enabled),
@@ -1644,7 +1659,9 @@ adminRouter.patch('/branding', requireRole('event_manager'), async (req, res, ne
         req.body.productCreditEnabled === undefined ? null : Boolean(req.body.productCreditEnabled),
         req.body.legalName === undefined ? null : String(req.body.legalName).trim(),
         req.body.legalAddress === undefined ? null : String(req.body.legalAddress).trim(),
-        req.body.legalEmail === undefined ? null : String(req.body.legalEmail).trim()
+        req.body.legalEmail === undefined ? null : String(req.body.legalEmail).trim(),
+        Object.hasOwn(req.body, 'retentionFeedbackDays'),
+        Object.hasOwn(req.body, 'retentionNewsletterDays')
       ]
     );
     res.json(result.rows[0]);
@@ -1825,7 +1842,16 @@ adminRouter.get('/low-rating-cases', async (req, res, next) => {
     }
     const result = await query(
       `SELECT lrc.*, e.name AS event_name, e.date_from, u.name AS assigned_user_name,
-              fr.comment_positive, fr.comment_improvement, fr.general_comment, fr.submitted_at
+              fr.comment_positive, fr.comment_improvement, fr.general_comment, fr.submitted_at,
+              -- What the guest wrote to the open questions of the form; the recommended
+              -- template asks there, so without these a case would read "no text".
+              COALESCE((
+                SELECT json_agg(json_build_object('label', q.label, 'value', fa.answer_value #>> '{}') ORDER BY q.sort_order)
+                FROM feedback_answers fa
+                JOIN feedback_questions q ON q.id = fa.feedback_question_id
+                WHERE fa.feedback_response_id = lrc.feedback_response_id
+                  AND q.question_type IN ('text_short', 'text_long')
+              ), '[]'::json) AS answer_texts
        FROM low_rating_cases lrc
        JOIN events e ON e.id = lrc.event_id
        LEFT JOIN users u ON u.id = lrc.assigned_user_id

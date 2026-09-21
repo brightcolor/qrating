@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.57.0
+**Version:** 0.58.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -108,7 +108,7 @@ qrating does not create a default admin account. The first visit to `/admin` sho
 After setup:
 
 - login with the email and password created in the setup form
-- create further users from the admin user management area
+- invite further people under Einstellungen → Team
 - assign roles and event access per user
 - configure SMTP before using email invitations or password reset links
 
@@ -116,9 +116,40 @@ After setup:
 
 An installation carries as many organizations (tenants) as needed. Each one has its own events, forms, texts, QR codes, guests, and users; every query runs inside one organization.
 
-The account that completes the first-admin setup also runs the platform. Under Mandanten it sees every organization with its plan, events, feedback count, users, and Pretix connections, creates further tenants, and enters one to work inside it. While a platform admin works in another tenant, a banner names it and offers the way back, and entering and leaving are written to the audit log of that tenant.
+The account that completes the first-admin setup also runs the platform. Under Plattform → Mandanten it sees every organization with its plan, events, feedback count, users, and Pretix connections, creates further tenants, and enters one to work inside it. While a platform admin works in another tenant, a banner names it and offers the way back, and entering and leaving are written to the audit log of that tenant.
 
 Accounts without the platform role only ever see their own organization; the platform routes answer them with HTTP 403.
+
+## The Admin Area
+
+The admin area is built around the event. Everything that belongs to one evening sits in its four tabs, **Auswertung**, **Fragen**, **QR & Aushang** and **Einstellungen**, so an event is picked once and not again on every page. The menu around it:
+
+- **Übersicht**: what runs now, open callbacks, what comes next
+- **Events**, **Rückrufe** (low ratings to call back, with a counter) and **Wallboard**
+- **Gästeseite**: **Texte** and **Aussehen** (colour, logo, the mark in the QR code)
+- **Einstellungen**: Organisation, Team, Meldungen, Verbindungen (Pretix, Newsletter, E-Mail, Webhooks), Sicherheit, Tarif, Darstellung
+- **Plattform**, for the platform role only: Mandanten, Website, Tarife
+
+Every page has its own address, such as `/admin/events/<id>/fragen`, `/admin/einstellungen/team` or `/admin/plattform/mandanten`. Addresses from before this structure (`/admin/auswertung?event=…`, `/admin/fragen`, `/admin/benutzer`, `/admin/smtp` and the others) lead to the page that took over their content.
+
+### Ten Looks
+
+Each person picks the look of the admin area for themselves under **Einstellungen → Darstellung**. The choice is stored with the account (`users.admin_theme`, `PATCH /api/admin/me/preferences`) and follows it to every device; the browser keeps the last look under `qrating.adminTheme` for the first paint.
+
+| No. | Look | Frame |
+|---|---|---|
+| 1 | Bändchen | dark sidebar in the colours of the website, the event as a wristband |
+| 2 | Einlassliste | menu on top, a clipboard sheet, highlighter marks on what needs doing |
+| 3 | Mischpult | dark, icon rail, numbers as meters and faders |
+| 4 | Ablaufplan | the event list is the menu, the round as a timeline |
+| 5 | Eintrittskarte | the event as a ticket with a stamp |
+| 6 | Kommandozeile | no sidebar; Ctrl K searches events, pages and settings |
+| 7 | Posteingang | the voices of the guests as an inbox, the selected callback beside it |
+| 8 | Plakat | the event as a flyer, a black bar on top |
+| 9 | Schwarzlicht | dark with UV glow and a live band of the latest votes |
+| 10 | Tabellenwerk | all events in one table, the chosen one unfolds below |
+
+The looks share every page and every function. They differ in colours, type, frame and in how the evaluation of an event is arranged. Colours and fonts are CSS variables on the root element (`frontend/src/admin/admin.css`), and a look loads its fonts only while it is in use.
 
 ## Domains
 
@@ -242,7 +273,7 @@ Guests never see Pretix details, admin logic, or event lists unless that is expl
 
 ## Form Templates
 
-The admin area offers 13 German templates under Formulare: Schnellfeedback, Party & Club, Festival, Konzert,
+The tab **Fragen** of every event offers 13 German templates: Schnellfeedback, Party & Club, Festival, Konzert,
 Geburtstagsfeier, Hochzeit, Firmen- & Weihnachtsfeier, Stadt- & Vereinsfest, Konferenz & Messe,
 Workshop & Seminar, Theater, Lesung & Comedy, Emotionaler Rückblick, and Nachfassen bei Kritik.
 
@@ -251,7 +282,7 @@ Question types: short answer, long answer, multiple selection, single selection,
 
 ## Print Sheets
 
-A sheet carries the code, and four designs decide how it looks. The admin area picks one under **QR & Wallboard**; the address takes it as `?design=`:
+A sheet carries the code, and four designs decide how it looks. The tab **QR & Aushang** of an event picks one; the address takes it as `?design=`:
 
 | Design | What it looks like |
 |---|---|
@@ -275,7 +306,7 @@ The picture of an event carries the page. On the page before a round the flyer o
 
 While a round runs nothing stands in the way: the guest goes straight into the rating. The events that follow appear after the feedback, on the thank-you screen.
 
-Each event decides for itself, on its card in the admin area:
+Each event decides for itself, in its tab **Einstellungen**:
 
 - `upcomingEnabled`: whether guests see the pointer at all
 - `upcomingEventIds`: up to five events chosen by hand; without a choice the next ones by date follow
@@ -294,11 +325,11 @@ The stage colors swap through `data-theme` on the guest container. The brand col
 
 The step asks once, and it asks for the evening rather than for a newsletter: tickets before they go public, prize draws, and now and then a night only a small circle hears about. What a guest agrees to stands in the consent text itself (`newsletter_label`), which is stored with every entry, so one yes covers all of it. Every line is a text of the organization and can be rewritten per tenant.
 
-Under the answer stands what happens with the address and a link to `/datenschutz/<slug>` on the guest domain. That page is written by `backend/src/services/privacyService.js` out of the settings of the organization: the deletion periods come from the retention fields, the newsletter system is named only while a connection exists, and the responsible party comes from `legalName`, `legalAddress` and `legalEmail` under **Branding**. As long as one of the three is missing, the page says so at the top instead of pretending to be complete.
+Under the answer stands what happens with the address and a link to `/datenschutz/<slug>` on the guest domain. That page is written by `backend/src/services/privacyService.js` out of the settings of the organization: the deletion periods come from the retention fields, the newsletter system is named only while a connection exists, and the responsible party comes from `legalName`, `legalAddress` and `legalEmail` under **Einstellungen → Organisation**. As long as one of the three is missing, the page says so at the top instead of pretending to be complete.
 
 ## Mark And Note
 
-Two things carry the product into the open, and an organization can switch each one off under **Branding**:
+Two things carry the product into the open, and an organization can switch each one off under **Gästeseite → Aussehen**:
 
 - the qrating mark in the middle of every QR code. The code is written with the highest error correction and the mark covers about a fifth of its width, so it stays readable. A test decodes a code with the mark and proves it.
 - the note `qrating — ein Projekt von bright color` on the guest page, on the ticket stub of the thank-you screen and under the event on the print sheet. On screen both names carry their sign and lead to <https://qrating.de> and <https://bright-color.de>; the sheet keeps the plain line, since paper has no links.
@@ -324,7 +355,7 @@ A session holds no personal data: the address of the guest and the browser are o
 
 ## Event Status
 
-An event carries one of four statuses, and the event card in the admin area sets it:
+An event carries one of four statuses, and the tab **Einstellungen** of the event sets it:
 
 - `draft`: prepared, the guest page stays closed
 - `active`: the only status that collects feedback
@@ -335,7 +366,7 @@ The dynamic QR code of an organization only ever points at an active event.
 
 ## Event Preview
 
-Every event card carries a "Vorschau" button. It asks the admin API for a link that opens the guest page of that event, signed and valid for two hours:
+The header of every event carries a "Gästeseite" button. It asks the admin API for a link that opens the guest page of that event, signed and valid for two hours:
 
 ```text
 GET /api/admin/events/{id}/preview-link
@@ -387,15 +418,15 @@ If that fails, it falls back to the settings endpoint without `explain=true`. Se
 
 Pretix keeps the shop header in `logo_image` and the social preview in `og_image`; qrating reads both, prefers the shop header, and accepts the other known keys of plugins and older installations. A connection can name its own key under "preferred image settings key".
 
-An event picture can also be set by hand in the admin area. The event card takes a picture URL and a picture description and stores them with the source `manual`. A Pretix sync then keeps that picture as long as the connection leaves "prefer Pretix images" switched off. Clearing the picture URL removes the picture, its description, and the source, so the next sync can fill the picture in from Pretix again.
+An event picture can also be set by hand in the admin area. The tab **Einstellungen** of an event takes a picture URL and a picture description and stores them with the source `manual`. A Pretix sync then keeps that picture as long as the connection leaves "prefer Pretix images" switched off. Clearing the picture URL removes the picture, its description, and the source, so the next sync can fill the picture in from Pretix again.
 
 ## Notifications
 
 Low ratings can create a workflow case and notify only users who are allowed to access the affected event.
 
-People, their roles and who is responsible for which event live in the admin area under **Benutzer**. The area **Benachrichtigungen** holds the channels.
+People, their roles and who is responsible for which event live under **Einstellungen → Team**. **Einstellungen → Meldungen** holds the channels.
 
-A channel belongs to the whole organization or to one person of it. An organization channel carries its recipient in its own config, which lets a tenant own its alerting while its accounts are still being set up. A personal channel falls back to the mail address of its owner. Both live under **Benachrichtigungen** and can use:
+A channel belongs to the whole organization or to one person of it. An organization channel carries its recipient in its own config, which lets a tenant own its alerting while its accounts are still being set up. A personal channel falls back to the mail address of its owner. Both live under **Einstellungen → Meldungen** and can use:
 
 - email through the organization SMTP settings
 - Discord-compatible webhook
@@ -412,7 +443,7 @@ Report delivery uses the background worker and SMTP settings.
 
 ## Newsletter Connection
 
-An organization can hand its newsletter opt-ins to a MailWizz installation. The connection lives in the admin area under **Newsletter** and holds the API address, the API key (encrypted at rest), the list UID, and the tags of the two custom fields that carry the event and the way the entry came in.
+An organization can hand its newsletter opt-ins to a MailWizz installation. The connection lives under **Einstellungen → Verbindungen → Newsletter** and holds the API address, the API key (encrypted at rest), the list UID, and the tags of the two custom fields that carry the event and the way the entry came in.
 
 Every opt-in is handed over by the background worker, so a guest never waits for the newsletter system. The subscriber carries:
 
@@ -443,7 +474,7 @@ Outbound notifications are intentionally redacted:
 - newsletter opt-in webhooks do not include raw email addresses; they include `emailProvided`, `emailHash`, and `emailDomain`
 - newsletter CSV export requires Event Manager permissions or higher and decrypts encrypted emails only for that export response
 
-The Security Center contains the PII Vault. Sensitive values are not shown in normal workflow lists. Authorized users must explicitly reveal callback phone numbers, contact notes, or newsletter email addresses; each reveal is written to `audit_log`. The PII Vault also supports deletion of individual newsletter opt-ins and low-rating contact data.
+**Einstellungen → Sicherheit** contains the PII Vault. Sensitive values are not shown in normal workflow lists. Authorized users must explicitly reveal callback phone numbers, contact notes, or newsletter email addresses; each reveal is written to `audit_log`. The PII Vault also supports deletion of individual newsletter opt-ins and low-rating contact data.
 
 Before production use, configure:
 
@@ -480,7 +511,7 @@ Admin areas include events, analytics, exports, forms, texts, QR sources, Pretix
 
 Admin authentication uses the `qrating_admin` HTTP-only cookie. The frontend does not store session tokens in `localStorage` or expose them to JavaScript.
 
-Two-factor authentication can be enabled in the Security Center. It uses standard TOTP apps and provides one-time recovery codes during setup.
+Two-factor authentication can be enabled under **Einstellungen → Sicherheit**. It uses standard TOTP apps and provides one-time recovery codes during setup.
 
 ## Tests And CI
 
@@ -559,7 +590,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.57.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.58.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

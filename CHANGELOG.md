@@ -4,6 +4,28 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.58.0] - 2026-09-21
+
+### Added
+
+- Ten looks for the admin area. Each person picks one under **Einstellungen → Darstellung**: Bändchen, Einlassliste, Mischpult, Ablaufplan, Eintrittskarte, Kommandozeile, Posteingang, Plakat, Schwarzlicht and Tabellenwerk. They differ in colours, type, the frame around the pages and the arrangement of the evaluation, and they share every function. The choice is stored with the account (migration `032`, `PATCH /api/admin/me/preferences`) and follows it to every device; a look loads its fonts only while it is in use.
+- The look Kommandozeile finds events, pages and settings with Ctrl K. Words beside the names find a page by its content, such as "Pretix" or "Impressum".
+- The evaluation lists every vote with everything the guest wrote, the answers to the open questions of the form included, together with the QR place and whether a callback is still open.
+- The list of callbacks shows the answers to the open questions of the form as well. With the recommended template these were the only texts, and the list read "no text".
+- `GET /api/admin/events?stats=1` carries the numbers of every event in one call: votes, average, stars only, open callbacks, questions, completion, scans and a small curve of the votes.
+
+### Changed
+
+- The admin area is built around the event. Evaluation, questions, QR codes with the print sheets, and the settings of an event are its four tabs, so an event is picked once. Low ratings are **Rückrufe** with an entry of their own and a counter; texts and look of the guest page form **Gästeseite**; organisation, team, alerts, connections, security, plan and design sit under **Einstellungen**; tenants, website and plans belong to the platform role.
+- Every page has its own address, and the addresses from before lead to the page that took over their content.
+- Pages are denser: smaller headings, one row of figures, less room between the panels.
+- The settings of the wallboard sit on the wallboard. The evaluation draws its bars itself, and the chart library is removed from the frontend.
+- Version bumped to `0.58.0`.
+
+### Fixed
+
+- Saving part of the organisation keeps the deletion periods of feedback and newsletter entries. A save that left them out used to empty them, which means keeping the data forever.
+
 ## [0.57.0] - 2026-09-21
 
 ### Added
