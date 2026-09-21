@@ -66,3 +66,15 @@ button, input, textarea, select {
 @media (prefers-reduced-motion: reduce) {
   .drawer, .drawer-closing, .scrim, .scrim-closing { animation-duration: 1ms; }
 }
+
+/* Die Vorschau im Fragen-Editor zeigt das echte Gästebild in einem Handyrahmen.
+   Die Gästeseite rechnet mit der vollen Fensterhöhe; im Rahmen zählt der Rahmen. */
+.builder-phone .guest,
+.builder-phone .guest-screen {
+  min-height: 100%;
+  height: 100%;
+}
+
+.builder-phone .guest-screen {
+  padding: 26px 20px;
+}

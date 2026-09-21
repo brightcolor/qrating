@@ -1,11 +1,14 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ArrowDown,
+  ArrowUp,
   Bookmark,
-  Copy,
+  Check,
+  ChevronDown,
   Eye,
+  GripVertical,
   Plus,
   RefreshCw,
-  Save,
   Sparkles,
   Star,
   Trash2
@@ -13,7 +16,23 @@ import {
 import { api } from '../lib/api.js';
 import { buildSteps, questionType } from '../guest/flow.js';
 import { eventLabel } from './eventLabel.js';
-import { linesToOptions, makeKey, optionsToLines, profileIcons, promptIdeas, typeCards } from './formBuilderUtils.js';
+import {
+  makeKey,
+  moveById,
+  moveItem,
+  needsOptions,
+  profileIcons,
+  promptIdeas,
+  questionPayload,
+  questionProblems,
+  questionSummary,
+  unknownTypeOption,
+  typeCards
+} from './formBuilderUtils.js';
+
+// Die Vorschau zieht die Gästeseite samt ihrem CSS herein. Sie lädt erst, wenn
+// jemand eine Frage aufklappt, damit der Adminbereich schlank bleibt.
+const LazyQuestionPreview = React.lazy(() => import('./QuestionPreview.jsx').then((module) => ({ default: module.QuestionPreview })));
 
 function useAsync(fn, deps = []) {
   const [state, setState] = useState({ loading: true, data: null, error: null });
@@ -75,7 +94,7 @@ export function FormBuilder() {
     </div>
     {error && <div className="mt-4"><ErrorBox error={error} /></div>}
     <div className="mt-6 grid gap-6 xl:grid-cols-[360px_1fr]">
-      <div className="space-y-6">
+      <div className="order-2 space-y-6 xl:order-none">
         <ProfileLauncher events={events || []} profiles={profiles} onCreated={(form) => { setSelected(form.id); setReload(reload + 1); }} />
         <Panel title="Deine Formulare">
           <CreateBlankForm events={events || []} onCreated={(form) => { setSelected(form.id); setReload(reload + 1); }} />
@@ -88,7 +107,7 @@ export function FormBuilder() {
           </div>
         </Panel>
       </div>
-      {selected ? <FormEditor key={selected} formId={selected} form={selectedForm} onChanged={() => setReload(reload + 1)} /> : <Panel><p className="text-neutral-600">Wähle ein Formular aus oder lege eines aus einer Vorlage an.</p></Panel>}
+      <div className="order-1 xl:order-none">{selected ? <FormEditor key={selected} formId={selected} form={selectedForm} onChanged={() => setReload(reload + 1)} /> : <Panel><p className="text-neutral-600">Wähle ein Formular aus oder lege eines aus einer Vorlage an.</p></Panel>}</div>
     </div>
   </div>;
 }
@@ -174,27 +193,139 @@ function CreateBlankForm({ events, onCreated }) {
   </form>;
 }
 
+// Der Zustand, den der Editor die ganze Zeit anzeigt. Ohne ihn weiss niemand,
+// ob eine Änderung beim Server angekommen ist.
+function SaveState({ state }) {
+  if (state === 'speichert') return <span className="text-sm text-neutral-500">Wird gespeichert …</span>;
+  if (state === 'fehler') return <span role="alert" className="text-sm text-red-700">Nicht gespeichert. Prüfe deine Verbindung.</span>;
+  return <span className="flex items-center gap-1 text-sm text-neutral-500"><Check size={15} /> Alle Änderungen gespeichert</span>;
+}
+
+function toDraft(question) {
+  return {
+    label: question.label || '',
+    internalName: question.internal_name || '',
+    questionType: question.question_type || 'text_long',
+    helpText: question.help_text || '',
+    placeholder: question.placeholder || '',
+    required: Boolean(question.required),
+    active: question.active !== false,
+    options: Array.isArray(question.options) ? question.options.map(String) : []
+  };
+}
+
+// Was die Vorschau sieht: der Entwurf in der Form, die auch die Gästeseite bekommt.
+function toPreviewQuestion(draft) {
+  return {
+    internal_name: draft.internalName || 'vorschau',
+    label: draft.label,
+    question_type: draft.questionType,
+    help_text: draft.helpText,
+    placeholder: draft.placeholder,
+    required: draft.required,
+    options: draft.options
+  };
+}
+
 function FormEditor({ formId, form, onChanged }) {
-  const [reload, setReload] = useState(0);
+  const { data, loading, error } = useAsync(() => api(`/admin/forms/${formId}`), [formId]);
+  const { data: textData } = useAsync(() => api('/admin/text-templates'), []);
+  const { data: branding } = useAsync(() => api('/admin/branding').catch(() => null), []);
+  const [questions, setQuestions] = useState([]);
+  const [openId, setOpenId] = useState(null);
+  const [saveState, setSaveState] = useState('gespeichert');
   const [profileName, setProfileName] = useState(`${form?.name || 'Feedbackformular'} Vorlage`);
   const [message, setMessage] = useState('');
-  const { data, loading, error } = useAsync(() => api(`/admin/forms/${formId}`), [formId, reload]);
+  const [draftOfOpen, setDraftOfOpen] = useState(null);
+
+  useEffect(() => {
+    if (data?.questions) setQuestions(data.questions);
+  }, [data]);
+
+  // Die Texte der Gästeseite, damit die Vorschau dieselben Worte zeigt wie der Abend selbst.
+  const texts = useMemo(() => {
+    const defaults = textData?.defaults || {};
+    const eigene = {};
+    for (const row of textData?.templates || []) {
+      if (!row.event_id && row.value) eigene[row.key] = row.value;
+    }
+    return { ...defaults, ...eigene };
+  }, [textData]);
+
   if (loading) return <Panel><p>Lade Formular …</p></Panel>;
   if (error) return <ErrorBox error={error} />;
 
-  async function refresh() {
-    setReload(reload + 1);
-    onChanged();
-  }
-  async function remove(questionId) {
-    setMessage('');
+  async function saveQuestion(id, payload) {
+    setSaveState('speichert');
     try {
-      await api(`/admin/forms/${formId}/questions/${questionId}`, { method: 'DELETE' });
-      refresh();
+      const saved = await api(`/admin/forms/${formId}/questions/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
+      setQuestions((current) => current.map((item) => (item.id === id ? saved : item)));
+      setSaveState('gespeichert');
+      onChanged();
     } catch (err) {
+      setSaveState('fehler');
       setMessage(errorNotice(err));
     }
   }
+
+  async function addQuestion(type) {
+    setSaveState('speichert');
+    try {
+      const label = 'Neue Frage';
+      const created = await api(`/admin/forms/${formId}/questions`, {
+        method: 'POST',
+        body: JSON.stringify({
+          label,
+          internalName: `${makeKey(label)}_${Date.now().toString(36)}`,
+          questionType: type,
+          sortOrder: (questions.length + 1) * 10,
+          required: false,
+          options: needsOptions(type) ? ['Erste Antwort', 'Zweite Antwort'] : []
+        })
+      });
+      setQuestions((current) => [...current, created]);
+      setOpenId(created.id);
+      setSaveState('gespeichert');
+      onChanged();
+    } catch (err) {
+      setSaveState('fehler');
+      setMessage(errorNotice(err));
+    }
+  }
+
+  async function removeQuestion(id) {
+    const vorher = questions;
+    setQuestions((current) => current.filter((item) => item.id !== id));
+    if (openId === id) setOpenId(null);
+    try {
+      await api(`/admin/forms/${formId}/questions/${id}`, { method: 'DELETE' });
+      onChanged();
+    } catch (err) {
+      // Die Frage kommt zurück, damit niemand eine Zeile verliert, die es noch gibt.
+      setQuestions(vorher);
+      setMessage(errorNotice(err));
+    }
+  }
+
+  async function reorder(next) {
+    const vorher = questions;
+    setQuestions(next);
+    setSaveState('speichert');
+    try {
+      const saved = await api(`/admin/forms/${formId}/question-order`, {
+        method: 'PUT',
+        body: JSON.stringify({ order: next.map((item) => item.id) })
+      });
+      setQuestions(saved);
+      setSaveState('gespeichert');
+      onChanged();
+    } catch (err) {
+      setQuestions(vorher);
+      setSaveState('fehler');
+      setMessage(errorNotice(err));
+    }
+  }
+
   async function saveProfile() {
     setMessage('');
     try {
@@ -206,151 +337,247 @@ function FormEditor({ formId, form, onChanged }) {
     }
   }
 
-  const activeQuestions = data.questions.filter((question) => question.active);
+  const aktive = questions.filter((question) => question.active);
+  const offen = questions.find((question) => question.id === openId);
+
   return <div className="space-y-6">
-    <Panel title={data.form.name} action={<span className="rounded-full bg-neutral-100 px-3 py-1 text-sm">{activeQuestions.length} aktive Fragen</span>}>
+    <Panel title={data.form.name} action={<span className="rounded-full bg-neutral-100 px-3 py-1 text-sm">{aktive.length} aktive Fragen</span>}>
       <Notice message={message} className="mb-4" />
       <div className="grid gap-3 md:grid-cols-[1fr_auto]">
-        <input className="input" value={profileName} onChange={(e) => setProfileName(e.target.value)} />
-        <button onClick={saveProfile} className="button-secondary"><Save size={16} /> Als Vorlage speichern</button>
+        <label className="block">
+          <span className="text-sm font-medium">Name der Vorlage</span>
+          <input className="input mt-1" value={profileName} onChange={(e) => setProfileName(e.target.value)} />
+        </label>
+        <button onClick={saveProfile} className="button-secondary self-end"><Bookmark size={16} /> Als Vorlage speichern</button>
       </div>
-      <QuestionCreate formId={formId} nextOrder={(data.questions.length + 1) * 10} onCreated={refresh} />
     </Panel>
-    <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
+
+    <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
       <div className="space-y-3">
-        {data.questions.map((question) => <QuestionRow key={question.id} formId={formId} question={question} onSaved={refresh} onDelete={() => remove(question.id)} />)}
-        {!data.questions.length && <Panel><p className="text-sm text-neutral-500">Noch keine eigenen Fragen. Nimm eine Idee von oben oder starte mit einer Vorlage.</p></Panel>}
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold">Fragen</h2>
+          <SaveState state={saveState} />
+        </div>
+        {questions.map((question, position) => <QuestionCard
+          key={question.id}
+          question={question}
+          position={position}
+          total={questions.length}
+          open={openId === question.id}
+          onToggle={() => setOpenId(openId === question.id ? null : question.id)}
+          onSave={(payload) => saveQuestion(question.id, payload)}
+          onDraft={(draft) => { if (openId === question.id) setDraftOfOpen(draft); }}
+          onDelete={() => removeQuestion(question.id)}
+          onMove={(direction) => reorder(moveById(questions, question.id, direction))}
+          onDropOn={(fromId) => {
+            const from = questions.findIndex((item) => item.id === fromId);
+            if (from === -1 || from === position) return;
+            reorder(moveItem(questions, from, position));
+          }}
+        />)}
+        {!questions.length && <Panel><p className="text-sm text-neutral-500">Noch keine Fragen. Wähle unten einen Typ, dann steht die erste Frage da.</p></Panel>}
+        <AddQuestion onAdd={addQuestion} />
       </div>
-      <GuestFlowPreview questions={activeQuestions} />
+
+      <div className="space-y-4 lg:sticky lg:top-6 lg:self-start">
+        {offen
+          ? <Panel title="So sieht der Gast sie" action={<Eye size={18} className="text-blue-600" />}>
+            <React.Suspense fallback={<p className="text-sm text-neutral-500">Vorschau wird geladen …</p>}>
+              <LazyQuestionPreview
+                key={`${offen.id}:${draftOfOpen?.questionType || offen.question_type}`}
+                question={toPreviewQuestion(draftOfOpen || toDraft(offen))}
+                brandColor={branding?.primaryColor || branding?.primary_color}
+                texts={texts}
+              />
+            </React.Suspense>
+            <p className="mt-3 text-xs text-neutral-500">Die Vorschau ist bedienbar. Was du hier antippst, wird nirgends gespeichert.</p>
+          </Panel>
+          : <GuestFlowPreview questions={aktive} />}
+      </div>
     </div>
   </div>;
 }
 
-function QuestionCreate({ formId, nextOrder, onCreated }) {
-  const [draft, setDraft] = useState({ label: '', internalName: '', questionType: 'text_long', helpText: '', placeholder: '', options: '', required: false });
-  const [message, setMessage] = useState('');
-  const selectedType = typeCards.find((type) => type.value === draft.questionType);
-  async function submit(e) {
-    e.preventDefault();
-    setMessage('');
-    if (['checkboxes', 'multiple_choice'].includes(draft.questionType) && !linesToOptions(draft.options).length) {
-      setMessage(errorNotice({ message: 'Für diesen Fragetyp brauchst du mindestens eine Antwortmöglichkeit, eine pro Zeile.' }));
-      return;
-    }
-    try {
-      await api(`/admin/forms/${formId}/questions`, {
-        method: 'POST',
-        body: JSON.stringify({ ...draft, internalName: draft.internalName || makeKey(draft.label), sortOrder: nextOrder, options: linesToOptions(draft.options) })
-      });
-      setDraft({ label: '', internalName: '', questionType: 'text_long', helpText: '', placeholder: '', options: '', required: false });
-      onCreated();
-    } catch (err) {
-      setMessage(errorNotice(err));
-    }
-  }
-  return <form onSubmit={submit} className="mt-5 space-y-4 rounded-lg bg-neutral-50 p-4">
-    <div>
-      <label className="text-sm font-medium">Frage, die Gäste sehen</label>
-      <input className="input mt-1" placeholder="Was sollen die Gäste beantworten?" value={draft.label} onChange={(e) => setDraft({ ...draft, label: e.target.value, internalName: draft.internalName || makeKey(e.target.value) })} required />
-      <div className="mt-2 flex flex-wrap gap-2">{promptIdeas.map((idea) => <button key={idea} type="button" className="rounded-full bg-white px-3 py-1 text-xs text-neutral-700 ring-1 ring-neutral-200 hover:bg-blue-50" onClick={() => setDraft({ ...draft, label: idea, internalName: makeKey(idea) })}>{idea}</button>)}</div>
-    </div>
-    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">{typeCards.map((type) => <TypeCard key={type.value} type={type} active={draft.questionType === type.value} onPick={() => setDraft({ ...draft, questionType: type.value })} />)}</div>
-    <div className="grid gap-3 md:grid-cols-2">
-      <input className="input" placeholder="Hinweis für Gäste, optional" value={draft.helpText} onChange={(e) => setDraft({ ...draft, helpText: e.target.value })} />
-      <input className="input" placeholder="Platzhalter, optional" value={draft.placeholder} onChange={(e) => setDraft({ ...draft, placeholder: e.target.value })} />
-    </div>
-    {['checkboxes', 'multiple_choice'].includes(draft.questionType) && <textarea className="input min-h-24" placeholder="Eine Antwort pro Zeile" value={draft.options} onChange={(e) => setDraft({ ...draft, options: e.target.value })} />}
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={draft.required} onChange={(e) => setDraft({ ...draft, required: e.target.checked })} /> Pflichtfrage</label>
-      <button className="button-blue"><Plus size={16} /> {selectedType?.label || 'Frage'} hinzufügen</button>
-    </div>
-    <Notice message={message} />
-  </form>;
-}
-
-function TypeCard({ type, active, onPick }) {
-  const Icon = type.icon;
-  return <button type="button" onClick={onPick} className={`rounded-lg border p-3 text-left ${active ? 'border-blue-600 bg-white shadow-sm' : 'border-neutral-200 bg-white/70 hover:bg-white'}`}>
-    <Icon size={18} className={active ? 'text-blue-600' : 'text-neutral-500'} />
-    <strong className="mt-2 block hyphens-auto break-words text-sm">{type.label}</strong>
-    <span className="block hyphens-auto break-words text-xs text-neutral-500">{type.hint}</span>
-  </button>;
-}
-
-function QuestionRow({ formId, question, onSaved, onDelete }) {
-  const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState({
-    label: question.label,
-    internalName: question.internal_name,
-    questionType: question.question_type,
-    helpText: question.help_text || '',
-    placeholder: question.placeholder || '',
-    required: question.required,
-    active: question.active,
-    sortOrder: question.sort_order,
-    options: optionsToLines(question.options)
-  });
-  const [message, setMessage] = useState('');
+// Eine Karte je Frage. Zugeklappt sagt sie den Stand des Servers, aufgeklappt ist sie der Editor.
+function QuestionCard({ question, position, total, open, onToggle, onSave, onDraft, onDelete, onMove, onDropOn }) {
+  const [draft, setDraft] = useState(() => toDraft(question));
+  const [touched, setTouched] = useState(false);
+  const [problems, setProblems] = useState([]);
+  const [confirming, setConfirming] = useState(false);
+  const [showKey, setShowKey] = useState(false);
+  const labelRef = useRef(null);
   const type = typeCards.find((item) => item.value === draft.questionType) || typeCards[0];
   const Icon = type.icon;
+  const fehlerId = `frage-${question.id}-fehler`;
 
-  async function save(nextDraft = draft) {
-    setMessage('');
-    try {
-      await api(`/admin/forms/${formId}/questions/${question.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ ...nextDraft, options: linesToOptions(nextDraft.options) })
-      });
-      setMessage('Frage gespeichert.');
-      onSaved();
-    } catch (err) {
-      setMessage(errorNotice(err));
+  useEffect(() => { onDraft(draft); }, [draft, onDraft]);
+
+  // Gespeichert wird von selbst, kurz nachdem die Eingabe steht. Was die Gästeseite
+  // zerbrechen würde, geht nicht raus — der Grund steht stattdessen an der Frage.
+  useEffect(() => {
+    if (!touched) return undefined;
+    const gefunden = questionProblems(draft);
+    setProblems(gefunden);
+    if (gefunden.length) return undefined;
+    const timer = setTimeout(() => onSave(questionPayload(draft)), 700);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, touched]);
+
+  useEffect(() => {
+    if (open && question.label === 'Neue Frage') {
+      labelRef.current?.focus();
+      labelRef.current?.select();
     }
-  }
-  async function duplicate() {
-    setMessage('');
-    try {
-      await api(`/admin/forms/${formId}/questions`, {
-        method: 'POST',
-        body: JSON.stringify({ ...draft, label: `${draft.label} (Kopie)`, internalName: `${draft.internalName}_kopie`, sortOrder: Number(draft.sortOrder || 0) + 1, options: linesToOptions(draft.options) })
-      });
-      onSaved();
-    } catch (err) {
-      setMessage(errorNotice(err));
-    }
+  }, [open, question.label]);
+
+  function change(patch) {
+    setTouched(true);
+    setDraft((current) => ({ ...current, ...patch }));
   }
 
-  return <div className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <button type="button" onClick={() => setOpen(!open)} className="flex min-w-0 flex-1 items-start gap-3 text-left">
-        <span className="rounded-md bg-blue-50 p-2 text-blue-700"><Icon size={18} /></span>
-        <span>
-          <strong className="block">{draft.label}</strong>
-          <span className="text-sm text-neutral-500">{type.label} · Position {draft.sortOrder} · {draft.active ? 'sichtbar' : 'ausgeblendet'}</span>
+  return <article
+    className={`rounded-lg border bg-white shadow-sm ${open ? 'border-blue-300 ring-1 ring-blue-100' : 'border-neutral-200'}`}
+    draggable={!open}
+    onDragStart={(event) => event.dataTransfer.setData('text/plain', question.id)}
+    onDragOver={(event) => event.preventDefault()}
+    onDrop={(event) => { event.preventDefault(); onDropOn(event.dataTransfer.getData('text/plain')); }}
+  >
+    <div className="flex items-start gap-2 p-3">
+      <span className="mt-1 hidden cursor-grab text-neutral-400 sm:block" aria-hidden="true" title="Zum Sortieren ziehen"><GripVertical size={18} /></span>
+      <button type="button" onClick={onToggle} aria-expanded={open} className="flex min-w-0 flex-1 items-start gap-3 text-left">
+        <span className="flex h-8 w-8 flex-none items-center justify-center rounded-md bg-blue-50 text-blue-700"><Icon size={17} /></span>
+        <span className="min-w-0">
+          <strong className="block truncate">{position + 1}. {question.label}</strong>
+          <span className="block text-sm text-neutral-500">{questionSummary(question)}</span>
         </span>
       </button>
-      <div className="flex flex-wrap gap-2">
-        <button onClick={duplicate} className="button-secondary"><Copy size={16} /> Duplizieren</button>
-        <button onClick={() => save()} className="button-primary"><Save size={16} /> Speichern</button>
-        <button onClick={onDelete} className="button-secondary" title="Löschen"><Trash2 size={16} /></button>
+      <div className="flex flex-none items-center gap-1">
+        <button type="button" onClick={() => onMove('up')} disabled={position === 0} className="focus-ring flex h-11 w-11 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 disabled:opacity-30" aria-label={`„${question.label}“ nach oben`}><ArrowUp size={16} /></button>
+        <button type="button" onClick={() => onMove('down')} disabled={position === total - 1} className="focus-ring flex h-11 w-11 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 disabled:opacity-30" aria-label={`„${question.label}“ nach unten`}><ArrowDown size={16} /></button>
+        <button type="button" onClick={onToggle} className="focus-ring flex h-11 w-11 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100" aria-label={open ? 'Frage zuklappen' : 'Frage bearbeiten'}>
+          <ChevronDown size={18} className={open ? 'rotate-180 transition-transform' : 'transition-transform'} />
+        </button>
       </div>
     </div>
-    <Notice message={message} className="mt-3" />
-    {open && <div className="mt-4 grid gap-3">
-      <input className="input" value={draft.label} onChange={(e) => setDraft({ ...draft, label: e.target.value })} />
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">{typeCards.map((item) => <TypeCard key={item.value} type={item} active={draft.questionType === item.value} onPick={() => setDraft({ ...draft, questionType: item.value })} />)}</div>
-      <div className="grid gap-3 md:grid-cols-2">
-        <input className="input" placeholder="Hinweis für Gäste" value={draft.helpText} onChange={(e) => setDraft({ ...draft, helpText: e.target.value })} />
-        <input className="input" placeholder="Platzhalter" value={draft.placeholder} onChange={(e) => setDraft({ ...draft, placeholder: e.target.value })} />
+
+    {problems.length > 0 && <ul id={fehlerId} role="alert" className="mx-3 mb-3 space-y-1 rounded-md bg-red-50 p-3 text-sm text-red-700">
+      {problems.map((problem) => <li key={problem}>{problem}</li>)}
+    </ul>}
+
+    {open && <div className="space-y-4 border-t border-neutral-200 p-4">
+      <label className="block">
+        <span className="text-sm font-medium">Frage, die Gäste sehen</span>
+        <input
+          ref={labelRef}
+          className="input mt-1"
+          value={draft.label}
+          aria-describedby={problems.length ? fehlerId : undefined}
+          onChange={(event) => change({ label: event.target.value })}
+        />
+      </label>
+      <div className="flex flex-wrap gap-2">
+        {promptIdeas.slice(0, 3).map((idea) => <button key={idea} type="button" className="rounded-full bg-neutral-100 px-3 py-1 text-xs text-neutral-700 hover:bg-blue-50" onClick={() => change({ label: idea })}>{idea}</button>)}
       </div>
-      {['checkboxes', 'multiple_choice'].includes(draft.questionType) && <textarea className="input min-h-24" placeholder="Eine Antwort pro Zeile" value={draft.options} onChange={(e) => setDraft({ ...draft, options: e.target.value })} />}
-      <div className="grid gap-3 md:grid-cols-[1fr_160px_auto_auto]">
-        <input className="input" placeholder="Interner Schlüssel" value={draft.internalName} onChange={(e) => setDraft({ ...draft, internalName: e.target.value })} />
-        <input className="input" type="number" value={draft.sortOrder} onChange={(e) => setDraft({ ...draft, sortOrder: Number(e.target.value) })} />
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={draft.required} onChange={(e) => setDraft({ ...draft, required: e.target.checked })} /> Pflichtfrage</label>
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={draft.active} onChange={(e) => setDraft({ ...draft, active: e.target.checked })} /> Sichtbar</label>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="block">
+          <span className="text-sm font-medium">Antwortart</span>
+          <select className="input mt-1" value={draft.questionType} onChange={(event) => {
+            const next = event.target.value;
+            change({ questionType: next, options: needsOptions(next) && !draft.options.length ? ['Erste Antwort', 'Zweite Antwort'] : draft.options });
+          }}>
+            {unknownTypeOption(draft.questionType) && <option value={draft.questionType}>{unknownTypeOption(draft.questionType).label} — {unknownTypeOption(draft.questionType).hint}</option>}
+            {typeCards.map((item) => <option key={item.value} value={item.value}>{item.label} — {item.hint}</option>)}
+          </select>
+        </label>
+        <label className="block">
+          <span className="text-sm font-medium">Hinweis unter der Frage</span>
+          <input className="input mt-1" placeholder="Optional" value={draft.helpText} onChange={(event) => change({ helpText: event.target.value })} />
+        </label>
+      </div>
+
+      {needsOptions(draft.questionType) && <OptionRows options={draft.options} onChange={(options) => change({ options })} />}
+
+      {['text_short', 'text_long'].includes(draft.questionType) && <label className="block">
+        <span className="text-sm font-medium">Platzhalter im Feld</span>
+        <input className="input mt-1" placeholder="Optional" value={draft.placeholder} onChange={(event) => change({ placeholder: event.target.value })} />
+      </label>}
+
+      <div className="flex flex-wrap items-center gap-5">
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={draft.required} onChange={(event) => change({ required: event.target.checked })} /> Pflichtfrage
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={draft.active} onChange={(event) => change({ active: event.target.checked })} /> Gästen zeigen
+        </label>
+      </div>
+
+      <div className="border-t border-neutral-100 pt-3">
+        <button type="button" className="text-sm text-neutral-500 underline" onClick={() => setShowKey(!showKey)}>
+          {showKey ? 'Technisches ausblenden' : 'Technisches anzeigen'}
+        </button>
+        {showKey && <label className="mt-3 block">
+          <span className="text-sm font-medium">Interner Schlüssel</span>
+          <input className="input mt-1 font-mono text-sm" value={draft.internalName} onChange={(event) => change({ internalName: event.target.value })} />
+          <span className="mt-1 block text-xs text-neutral-500">Steht so in CSV, Excel und Webhooks. Ändere ihn nur, solange noch keine Antworten da sind.</span>
+        </label>}
+      </div>
+
+      <div className="flex justify-end border-t border-neutral-100 pt-3">
+        {confirming
+          ? <span className="flex flex-wrap items-center gap-3 text-sm">
+            <span>Frage samt Antworten löschen?</span>
+            <button type="button" onClick={onDelete} className="button-primary bg-red-700 hover:bg-red-800"><Trash2 size={16} /> Ja, löschen</button>
+            <button type="button" onClick={() => setConfirming(false)} className="button-secondary">Abbrechen</button>
+          </span>
+          : <button type="button" onClick={() => setConfirming(true)} className="button-secondary"><Trash2 size={16} /> Frage löschen</button>}
       </div>
     </div>}
+  </article>;
+}
+
+// Jede Antwortmöglichkeit hat ihre eigene Zeile: anlegen, umsortieren, entfernen.
+function OptionRows({ options, onChange }) {
+  return <div>
+    <span className="text-sm font-medium">Antwortmöglichkeiten</span>
+    <ol className="mt-2 space-y-2">
+      {options.map((option, position) => <li key={position} className="flex flex-wrap items-center gap-2">
+        <span className="w-5 flex-none text-sm text-neutral-400">{position + 1}</span>
+        <input
+          className="input min-w-[9rem] flex-1"
+          value={option}
+          aria-label={`Antwortmöglichkeit ${position + 1}`}
+          onChange={(event) => onChange(options.map((item, index) => (index === position ? event.target.value : item)))}
+        />
+        <button type="button" className="focus-ring flex h-11 w-11 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 disabled:opacity-30" disabled={position === 0}
+          onClick={() => onChange(moveItem(options, position, position - 1))} aria-label={`Antwort ${position + 1} nach oben`}><ArrowUp size={15} /></button>
+        <button type="button" className="focus-ring flex h-11 w-11 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 disabled:opacity-30" disabled={position === options.length - 1}
+          onClick={() => onChange(moveItem(options, position, position + 1))} aria-label={`Antwort ${position + 1} nach unten`}><ArrowDown size={15} /></button>
+        <button type="button" className="focus-ring flex h-11 w-11 flex-none items-center justify-center rounded-md text-neutral-500 hover:bg-red-50 hover:text-red-700"
+          onClick={() => onChange(options.filter((item, index) => index !== position))} aria-label={`Antwort ${position + 1} entfernen`}><Trash2 size={15} /></button>
+      </li>)}
+    </ol>
+    <button type="button" className="button-secondary mt-2" onClick={() => onChange([...options, ''])}><Plus size={16} /> Antwort hinzufügen</button>
+  </div>;
+}
+
+// Neue Fragen entstehen unten, dort wo die Liste endet.
+function AddQuestion({ onAdd }) {
+  return <div className="rounded-lg border border-dashed border-neutral-300 p-4">
+    <p className="text-sm font-medium">Frage hinzufügen</p>
+    <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+      {typeCards.map((type) => {
+        const Icon = type.icon;
+        return <button key={type.value} type="button" onClick={() => onAdd(type.value)} className="focus-ring flex items-center gap-3 rounded-md border border-neutral-200 bg-white p-3 text-left hover:border-blue-300 hover:bg-blue-50">
+          <Icon size={18} className="flex-none text-neutral-500" />
+          <span className="min-w-0">
+            <strong className="block text-sm">{type.label}</strong>
+            <span className="block truncate text-xs text-neutral-500">{type.hint}</span>
+          </span>
+        </button>;
+      })}
+    </div>
   </div>;
 }
 
@@ -383,7 +610,7 @@ function stepHint(step) {
 function GuestFlowPreview({ questions }) {
   const steps = useMemo(() => buildSteps(questions, 0), [questions]);
   return <Panel title="Ablauf für Gäste" action={<Eye size={18} className="text-blue-600" />}>
-    <p className="text-sm text-neutral-600">Gäste sehen eine Frage pro Schritt. Am Ende steht die Zusammenfassung.</p>
+    <p className="text-sm text-neutral-600">Gäste sehen eine Frage pro Schritt. Klapp eine Frage auf, dann steht hier ihr echtes Gästebild.</p>
     <ol className="mt-4 space-y-2">
       {steps.map((step, index) => <li key={step.id} className="flex items-start gap-3 rounded-md bg-neutral-50 p-2">
         <span className="grid h-6 w-6 flex-none place-items-center rounded-full bg-neutral-950 text-xs font-semibold text-white">{index + 1}</span>

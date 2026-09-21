@@ -4,6 +4,24 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.52.0] - 2026-09-21
+
+### Changed
+
+- The question editor was rebuilt. One card per question, and the collapsed card says what the server holds, so it can no longer show an unsaved change as if it were saved. Opening a card turns it into the editor.
+- Changes save themselves shortly after they are typed, and the editor says which state it is in: saving, saved, or not saved.
+- Questions are moved with buttons and, on a pointer, by dragging. The position number is gone; the whole new order travels to the server in one request.
+- Every answer of a choice question has its own row with add, move and remove. An empty answer, a duplicate and a list of only one are named at the question and never leave the browser.
+- Deleting a question asks first.
+- Every field carries a visible label, and the internal key sits behind "Technisches anzeigen" instead of between the question and its answers.
+- The preview beside the list shows the real guest page of the question that is open — the same component the guests use, so it cannot drift away from it. It is usable, and nothing it collects is stored.
+- Version bumped to `0.52.0`.
+
+### Fixed
+
+- A question whose type the editor does not know keeps that type instead of quietly becoming a short answer on the next save. Card and dropdown both name it and say how guests will see it.
+- Icon buttons in the editor are large enough to hit on a phone, and on a small screen the questions stand above the templates instead of below thirteen of them.
+
 ## [0.51.1] - 2026-09-20
 
 ### Fixed

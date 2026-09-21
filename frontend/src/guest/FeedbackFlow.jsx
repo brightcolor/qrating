@@ -521,7 +521,7 @@ function MiniStars({ value, label }) {
   </span>;
 }
 
-function QuestionStep({ step, state, texts, title, onAnswer, onChoose, onUpdate, onEnter }) {
+export function QuestionStep({ step, state, texts, title, onAnswer, onChoose, onUpdate, onEnter }) {
   const { question } = step;
   const type = questionType(question);
   const value = state.answers[question.internal_name];

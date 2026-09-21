@@ -103,7 +103,7 @@ describe('what guests gave on the way', () => {
     const form = (await query('SELECT id FROM feedback_forms WHERE event_id = $1 LIMIT 1', [event.id])).rows[0];
     await query(
       `INSERT INTO feedback_questions (feedback_form_id, question_type, internal_name, label, sort_order)
-       VALUES ($1, 'single_choice', 'musik', 'Wie war die Musik?', 1)`,
+       VALUES ($1, 'multiple_choice', 'musik', 'Wie war die Musik?', 1)`,
       [form.id]
     );
 

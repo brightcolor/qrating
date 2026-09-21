@@ -1190,6 +1190,40 @@ adminRouter.delete('/forms/:id/questions/:questionId', async (req, res, next) =>
   }
 });
 
+// The order of the questions is the order of the guest flow. It arrives as the whole
+// list, so the numbers are rewritten in one go instead of one request per question.
+adminRouter.put('/forms/:id/question-order', async (req, res, next) => {
+  try {
+    const wanted = Array.isArray(req.body.order) ? req.body.order.map(String) : [];
+    if (!wanted.length) throw httpError(400, 'Für die neue Reihenfolge fehlt die Liste der Fragen. Lade das Formular neu und versuche es erneut.');
+    const known = await query(
+      `SELECT q.id FROM feedback_questions q
+       JOIN feedback_forms f ON f.id = q.feedback_form_id
+       WHERE f.id = $1 AND f.organization_id = $2`,
+      [req.params.id, req.admin.organizationId]
+    );
+    const ids = new Set(known.rows.map((row) => String(row.id)));
+    if (ids.size !== wanted.length || wanted.some((id) => !ids.has(id))) {
+      throw httpError(409, 'Die Reihenfolge passt nicht mehr zu den Fragen dieses Formulars. Lade das Formular neu und sortiere erneut.');
+    }
+    // Steps of ten, so a single question can still be squeezed in between by hand.
+    await query(
+      `UPDATE feedback_questions AS q
+       SET sort_order = position.nummer * 10, updated_at = now()
+       FROM unnest($1::uuid[]) WITH ORDINALITY AS position(id, nummer)
+       WHERE q.id = position.id`,
+      [wanted]
+    );
+    const result = await query(
+      `SELECT * FROM feedback_questions WHERE feedback_form_id = $1 ORDER BY sort_order`,
+      [req.params.id]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
 adminRouter.post('/forms/:id/duplicate', async (req, res, next) => {
   try {
     await ensureFormLimit(req);
