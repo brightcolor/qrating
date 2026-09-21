@@ -57,13 +57,6 @@ export async function api(path, options = {}) {
       ? 'Keine Internetverbindung. Bitte prüfe deine Verbindung und versuche es erneut.'
       : 'Der Server ist gerade nicht erreichbar. Bitte prüfe deine Internetverbindung und versuche es erneut.');
   }
-  return readResponse(response);
-}
-
-// Everything a response goes through, apart from fetching it. A request started early —
-// the guest page asks for its event before the bundle arrives — ends up here as well,
-// so its errors read exactly like those of any other request.
-export async function readResponse(response) {
   const isJson = response.headers.get('content-type')?.includes('application/json');
   let body = null;
   try {
