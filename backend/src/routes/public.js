@@ -152,20 +152,24 @@ async function trackQrScan(event, sourceSlug, qrSource = null, sourceType = 'unk
   }
   await query(
     `INSERT INTO qr_source_daily_stats (
-      organization_id, event_id, qr_source_id, source_type, day, scans_count, scans_before, scans_after
+      organization_id, event_id, qr_source_id, source_type, source_label, day,
+      scans_count, scans_before, scans_after
     )
-    VALUES ($1,$2,$3,$4,current_date,$5,$6,$7)
+    VALUES ($1,$2,$3,$4,$5,current_date,$6,$7,$8)
     ON CONFLICT (organization_id, event_id, qr_source_id, source_type, day)
     DO UPDATE SET
       scans_count = qr_source_daily_stats.scans_count + EXCLUDED.scans_count,
       scans_before = qr_source_daily_stats.scans_before + EXCLUDED.scans_before,
       scans_after = qr_source_daily_stats.scans_after + EXCLUDED.scans_after,
+      source_label = COALESCE(EXCLUDED.source_label, qr_source_daily_stats.source_label),
       updated_at = now()`,
     [
       event.organization_id,
       event.id,
       source?.id || null,
       sourceSlug || sourceType,
+      // The counted day keeps the name of the spot, so it stays readable once the source is gone.
+      source?.label || null,
       round === 'live' ? 1 : 0,
       round === 'before' ? 1 : 0,
       round === 'after' ? 1 : 0
@@ -177,25 +181,27 @@ async function trackQrScan(event, sourceSlug, qrSource = null, sourceType = 'unk
 async function trackQrFeedback(event, feedback, sourceSlug, qrSource = null, sourceType = 'unknown') {
   await query(
     `INSERT INTO qr_source_daily_stats (
-      organization_id, event_id, qr_source_id, source_type, day, feedback_count, average_rating,
-      newsletter_optins, low_ratings
+      organization_id, event_id, qr_source_id, source_type, source_label, day, feedback_count,
+      average_rating, newsletter_optins, low_ratings
     )
-    VALUES ($1,$2,$3,$4,current_date,1,$5,$6,$7)
+    VALUES ($1,$2,$3,$4,$5,current_date,1,$6,$7,$8)
     ON CONFLICT (organization_id, event_id, qr_source_id, source_type, day)
     DO UPDATE SET
       feedback_count = qr_source_daily_stats.feedback_count + 1,
       average_rating = (
-        (COALESCE(qr_source_daily_stats.average_rating, 0) * qr_source_daily_stats.feedback_count + $5)
+        (COALESCE(qr_source_daily_stats.average_rating, 0) * qr_source_daily_stats.feedback_count + $6)
         / NULLIF(qr_source_daily_stats.feedback_count + 1, 0)
       ),
-      newsletter_optins = qr_source_daily_stats.newsletter_optins + $6,
-      low_ratings = qr_source_daily_stats.low_ratings + $7,
+      newsletter_optins = qr_source_daily_stats.newsletter_optins + $7,
+      low_ratings = qr_source_daily_stats.low_ratings + $8,
+      source_label = COALESCE(EXCLUDED.source_label, qr_source_daily_stats.source_label),
       updated_at = now()`,
     [
       event.organization_id,
       event.id,
       qrSource?.id || null,
       sourceSlug || sourceType,
+      qrSource?.label || null,
       feedback.rating,
       feedback.newsletter_optin ? 1 : 0,
       feedback.rating <= 2 ? 1 : 0

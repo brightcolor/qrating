@@ -4,6 +4,14 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.52.1] - 2026-09-21
+
+### Fixed
+
+- Deleting a QR source could fail with "Diese Angabe ist schon vergeben, zum Beispiel ein Name, eine E-Mail-Adresse oder ein Kurzname", and the source stayed. The counted days of a spot pointed at their source, the pointer was emptied when the source went away, and the index treats two empty pointers as one row. A spot that had been scanned once before anyone created its source therefore had two days that collided the moment the source was deleted. QR sources can be deleted again.
+- The counted days now stay when their source goes. A scan is recorded in those numbers and nowhere else, so an event would have ended up with fewer scans than answers. Each counted day carries the name of its spot along, and the QR source report still names the spot after the source is gone -- the numbers from before and after its creation appear as one line.
+- Version bumped to `0.52.1`.
+
 ## [0.52.0] - 2026-09-21
 
 ### Changed

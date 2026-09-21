@@ -549,7 +549,8 @@ adminRouter.get('/events/:id/qr-analytics', async (req, res, next) => {
   try {
     await ensureEventAccess(req, req.params.id);
     const bySource = await query(
-      `SELECT COALESCE(qs.label, qds.source_type) AS label,
+      // A deleted source leaves its days behind; they answer with the name they kept.
+      `SELECT COALESCE(qs.label, max(qds.source_label), qds.source_type) AS label,
               COALESCE(qs.source_slug, qds.source_type) AS source_slug,
               sum(qds.scans_count)::int AS scans_count,
               sum(qds.scans_before)::int AS scans_before,
@@ -1379,6 +1380,14 @@ adminRouter.patch('/qr-sources/:id', async (req, res, next) => {
 
 adminRouter.delete('/qr-sources/:id', async (req, res, next) => {
   try {
+    // The counted days stay. They take the current name along first, so a source renamed
+    // after its last scan is still called what the admin called it.
+    await query(
+      `UPDATE qr_source_daily_stats SET source_label = qs.label
+       FROM qr_sources qs
+       WHERE qs.id = $1 AND qs.organization_id = $2 AND qr_source_daily_stats.qr_source_id = qs.id`,
+      [req.params.id, req.admin.organizationId]
+    );
     await query('DELETE FROM qr_sources WHERE id = $1 AND organization_id = $2', [req.params.id, req.admin.organizationId]);
     res.json({ ok: true });
   } catch (error) {
