@@ -2,6 +2,7 @@ import {
   Briefcase,
   Cake,
   CheckCircle2,
+  ClipboardCheck,
   Drama,
   GraduationCap,
   Hash,
@@ -42,6 +43,7 @@ export const promptIdeas = [
 export const profileIcons = {
   'quick-vibe': Zap,
   'club-party': PartyPopper,
+  'geprueft-abend': ClipboardCheck,
   festival: Tent,
   concert: Mic2,
   'birthday-party': Cake,

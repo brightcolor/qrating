@@ -4,6 +4,20 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.53.0] - 2026-09-21
+
+### Added
+
+- A template built on questionnaire research: every step of every scale is named in words, one thing is asked per question, the two open questions stand at the end, and nothing is compulsory. It replaces the recommendation scale of bare numbers with a question about coming back, which is an action rather than an opinion.
+
+### Changed
+
+- The page is called "Fragen" and carries one idea: an event has its questions. The fork between "save as a reusable template" and "attach to an event" is gone, and so is the second creation path beside it. Pick an event, see its questions; an event without questions shows what it can start from, and one click fills them in.
+- A template now fills the question set an event already carries instead of putting a second one beside it. Two sets on one event made the guest page show the questions of both.
+- Saved question sets moved out of the way into a section that stays closed. They are starting points, not a thing to manage.
+- The old address `/admin/formulare` leads to the renamed page.
+- Version bumped to `0.53.0`.
+
 ## [0.52.1] - 2026-09-21
 
 ### Fixed

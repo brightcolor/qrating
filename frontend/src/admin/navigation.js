@@ -5,7 +5,8 @@ export const adminPages = [
   { id: 'dashboard', slug: 'dashboard', label: 'Dashboard' },
   { id: 'security', slug: 'sicherheit', label: 'Sicherheit' },
   { id: 'events', slug: 'events', label: 'Events' },
-  { id: 'forms', slug: 'formulare', label: 'Formulare' },
+  // „Fragen" ist das Wort, das Veranstalter benutzen. Die alte Adresse führt weiter hin.
+  { id: 'forms', slug: 'fragen', label: 'Fragen', aliases: ['formulare'] },
   { id: 'analytics', slug: 'auswertung', label: 'Auswertung' },
   { id: 'low-ratings', slug: 'low-rating', label: 'Low-Rating' },
   { id: 'texts', slug: 'texte', label: 'Texte' },
@@ -58,7 +59,9 @@ export function pageFromPath(pathname = '', search = '') {
   }
   if (parts.length > 1) return null;
   if (reservedPaths.includes(parts[0])) return null;
-  return adminPages.find((page) => page.slug === parts[0])?.id || null;
+  // Eine Seite darf umbenannt werden, ohne dass verschickte Links ins Leere laufen.
+  const page = adminPages.find((item) => item.slug === parts[0] || (item.aliases || []).includes(parts[0]));
+  return page?.id || null;
 }
 
 // The tenant list belongs to the platform role. Everyone else never sees the entry.

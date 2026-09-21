@@ -49,6 +49,12 @@ describe('the address of an admin page', () => {
     }
   });
 
+  it('still answers to an address a page used to have', () => {
+    // Die Seite heisst jetzt „Fragen"; verschickte Links auf „formulare" müssen weiter hinführen.
+    expect(pageFromPath('/admin/formulare')).toBe('forms');
+    expect(pathFor('forms')).toBe('/admin/fragen');
+  });
+
   it('gives every page its own name', () => {
     const slugs = adminPages.map((page) => page.slug);
 

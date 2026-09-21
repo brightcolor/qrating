@@ -71,126 +71,148 @@ function Notice({ message, className = '' }) {
   return <p role={isError ? 'alert' : 'status'} className={`${className} rounded-md p-3 text-sm ${isError ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>{text}</p>;
 }
 
+// Ein Event hat einen Fragensatz. Das ist die ganze Zuordnung. Wer ein Event wählt,
+// sieht dessen Fragen; hat es noch keine, steht dort die Auswahl, womit es anfängt.
+// Gespeicherte Fragensätze sind Startpunkte, keine eigene Verwaltung.
 export function FormBuilder() {
   const [reload, setReload] = useState(0);
-  const [selected, setSelected] = useState(null);
-  const { data: events } = useAsync(() => api('/admin/events'), []);
+  const [eventId, setEventId] = useState('');
+  const [templateId, setTemplateId] = useState('');
+  const [message, setMessage] = useState('');
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [manual, setManual] = useState(false);
+  const { data: events } = useAsync(() => api('/admin/events'), [reload]);
   const { data: forms, loading, error } = useAsync(() => api('/admin/forms'), [reload]);
   const { data: profiles } = useAsync(() => api('/admin/forms/profiles'), [reload]);
 
+  const formOf = (event) => (forms || []).find((form) => form.event_id === event.id && form.active);
+  const templates = (forms || []).filter((form) => form.is_template);
+
   useEffect(() => {
-    if (!selected && forms?.[0]) setSelected(forms[0].id);
-  }, [forms, selected]);
+    if (eventId || templateId || !events?.length) return;
+    const mitFragen = events.find((event) => (forms || []).some((form) => form.event_id === event.id));
+    setEventId((mitFragen || events[0]).id);
+  }, [events, forms, eventId, templateId]);
 
-  const selectedForm = forms?.find((form) => form.id === selected);
+  const event = (events || []).find((item) => item.id === eventId) || null;
+  const template = templates.find((item) => item.id === templateId) || null;
+  const form = template || (event ? formOf(event) : null);
 
-  return <div>
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Formulare</h1>
-        <p className="mt-1 text-neutral-600">Starte mit einer Vorlage, passe die Fragen an und speichere deine eigene Fassung für das nächste Event.</p>
-      </div>
-      <button onClick={() => setReload(reload + 1)} className="button-secondary"><RefreshCw size={16} /> Neu laden</button>
-    </div>
-    {error && <div className="mt-4"><ErrorBox error={error} /></div>}
-    <div className="mt-6 grid gap-6 xl:grid-cols-[360px_1fr]">
-      <div className="order-2 space-y-6 xl:order-none">
-        <ProfileLauncher events={events || []} profiles={profiles} onCreated={(form) => { setSelected(form.id); setReload(reload + 1); }} />
-        <Panel title="Deine Formulare">
-          <CreateBlankForm events={events || []} onCreated={(form) => { setSelected(form.id); setReload(reload + 1); }} />
-          <div className="mt-4 space-y-2">
-            {loading && <p className="text-sm text-neutral-500">Lade Formulare …</p>}
-            {(forms || []).map((form) => <button key={form.id} onClick={() => setSelected(form.id)} className={`w-full rounded-md px-3 py-2 text-left text-sm ${selected === form.id ? 'bg-neutral-950 text-white' : 'bg-neutral-100 hover:bg-neutral-200'}`}>
-              <span className="font-medium">{form.name}</span>
-              <span className="mt-1 block text-xs opacity-75">{form.is_template ? 'Vorlage' : 'Eventformular'}</span>
-            </button>)}
-          </div>
-        </Panel>
-      </div>
-      <div className="order-1 xl:order-none">{selected ? <FormEditor key={selected} formId={selected} form={selectedForm} onChanged={() => setReload(reload + 1)} /> : <Panel><p className="text-neutral-600">Wähle ein Formular aus oder lege eines aus einer Vorlage an.</p></Panel>}</div>
-    </div>
-  </div>;
-}
-
-function ProfileLauncher({ events, profiles, onCreated }) {
-  const builtIn = profiles?.builtIn || [];
-  const saved = profiles?.saved || [];
-  const [draft, setDraft] = useState({ profileId: '', templateFormId: '', eventId: '', name: '' });
-  const [message, setMessage] = useState('');
-  const selected = builtIn.find((item) => item.id === draft.profileId) || saved.find((item) => item.id === draft.templateFormId);
-
-  async function createFromProfile() {
+  // Ein Event bringt sein Formular schon mit, nur ohne Fragen. Die Vorlage füllt genau
+  // dieses Formular; ein zweites daneben würde die Gästeseite beide zeigen lassen.
+  async function startFrom({ profileId, templateFormId }) {
+    if (!form) return;
     setMessage('');
-    if (!draft.profileId && !draft.templateFormId) {
-      setMessage(errorNotice({ message: 'Bitte wähle zuerst eine Vorlage aus.' }));
-      return;
-    }
     try {
-      const created = await api('/admin/forms/from-profile', {
+      await api(`/admin/forms/${form.id}/apply-profile`, {
         method: 'POST',
-        body: JSON.stringify({ ...draft, name: draft.name || selected?.name || 'Neues Feedbackformular', isTemplate: !draft.eventId })
+        body: JSON.stringify({ profileId: profileId || '', templateFormId: templateFormId || '' })
       });
-      setDraft({ profileId: '', templateFormId: '', eventId: '', name: '' });
-      onCreated(created);
+      setReload(reload + 1);
     } catch (err) {
       setMessage(errorNotice(err));
     }
   }
 
-  return <Panel title="Vorlagen" action={<Sparkles className="text-blue-600" size={20} />}>
-    <div className="grid gap-3">
-      {builtIn.map((profile) => <ProfileCard key={profile.id} profile={profile} active={draft.profileId === profile.id} onPick={() => setDraft({ ...draft, profileId: profile.id, templateFormId: '', name: profile.name })} />)}
-      {saved.map((profile) => <ProfileCard key={profile.id} icon={Bookmark} profile={{ ...profile, questionCount: profile.question_count, badge: 'Eigene', summary: profile.description || 'Deine wiederverwendbaren Fragen.' }} active={draft.templateFormId === profile.id} onPick={() => setDraft({ ...draft, profileId: '', templateFormId: profile.id, name: profile.name })} />)}
+  return <div>
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Fragen</h1>
+        <p className="mt-1 text-neutral-600">Jedes Event hat seinen eigenen Fragensatz. Wähle das Event, dann stehen darunter seine Fragen.</p>
+      </div>
+      <button onClick={() => setReload(reload + 1)} className="button-secondary"><RefreshCw size={16} /> Neu laden</button>
     </div>
-    <div className="mt-4 space-y-3 rounded-md bg-blue-50 p-3">
-      <input className="input" placeholder="Name des Formulars" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-      <select className="input" value={draft.eventId} onChange={(e) => setDraft({ ...draft, eventId: e.target.value })}>
-        <option value="">Als wiederverwendbare Vorlage speichern</option>
-        {events.map((event) => <option key={event.id} value={event.id}>{eventLabel(event)}</option>)}
-      </select>
-      <button type="button" onClick={createFromProfile} className="button-blue w-full" disabled={!selected}><Sparkles size={16} /> Vorlage verwenden</button>
-      <Notice message={message} />
+    {error && <div className="mt-4"><ErrorBox error={error} /></div>}
+    <Notice message={message} className="mt-4" />
+
+    <div className="mt-6 grid gap-6 xl:grid-cols-[320px_1fr]">
+      <div className="order-2 space-y-4 xl:order-none">
+        <Panel title="Events">
+          {loading && <p className="text-sm text-neutral-500">Lade …</p>}
+          <div className="space-y-2">
+            {(events || []).map((item) => {
+              const eigene = formOf(item);
+              const aktiv = !templateId && eventId === item.id;
+              return <button
+                key={item.id}
+                onClick={() => { setTemplateId(''); setEventId(item.id); }}
+                className={`focus-ring w-full rounded-md px-3 py-2 text-left ${aktiv ? 'bg-neutral-950 text-white' : 'bg-neutral-100 hover:bg-neutral-200'}`}
+              >
+                <span className="block text-sm font-medium">{eventLabel(item)}</span>
+                <span className={`mt-0.5 block text-xs ${aktiv ? 'opacity-75' : 'text-neutral-500'}`}>
+                  {eigene?.question_count ? `${eigene.question_count} Fragen` : 'noch keine Fragen'}
+                </span>
+              </button>;
+            })}
+            {!events?.length && !loading && <p className="text-sm text-neutral-500">Noch keine Events. Lege eines unter Events an oder hole sie über Pretix.</p>}
+          </div>
+        </Panel>
+
+        {templates.length > 0 && <Panel>
+          <button type="button" className="focus-ring flex w-full items-center justify-between gap-2 text-left text-sm font-medium" onClick={() => setShowTemplates(!showTemplates)}>
+            <span>Gemerkte Fragensätze ({templates.length})</span>
+            <ChevronDown size={16} className={showTemplates ? 'rotate-180 transition-transform' : 'transition-transform'} />
+          </button>
+          {showTemplates && <>
+            <p className="mt-2 text-xs text-neutral-500">Fragensätze, die du dir gemerkt hast. Du kannst sie hier bearbeiten; für ein Event nimmst du sie oben als Startpunkt.</p>
+            <div className="mt-3 space-y-2">
+              {templates.map((item) => <button
+                key={item.id}
+                onClick={() => { setEventId(''); setTemplateId(item.id); }}
+                className={`focus-ring w-full rounded-md px-3 py-2 text-left text-sm ${templateId === item.id ? 'bg-neutral-950 text-white' : 'bg-neutral-100 hover:bg-neutral-200'}`}
+              >{item.name}</button>)}
+            </div>
+          </>}
+        </Panel>}
+      </div>
+
+      <div className="order-1 xl:order-none">
+        {!form
+          ? <Panel><p className="text-neutral-600">{events?.length ? 'Wähle links ein Event.' : 'Sobald ein Event da ist, stehen hier seine Fragen.'}</p></Panel>
+          : form.question_count === 0 && !manual
+            ? <StartingPoints event={event} profiles={profiles} onStart={startFrom} onBlank={() => setManual(true)} />
+            : <FormEditor key={form.id} formId={form.id} form={form} onChanged={() => setReload(reload + 1)} />}
+      </div>
     </div>
+  </div>;
+}
+
+// Solange ein Event keine Fragen hat, steht hier die einzige Entscheidung, die zu
+// treffen ist: womit es anfängt. Ein Klick legt den Fragensatz für dieses Event an.
+function StartingPoints({ event, profiles, onStart, onBlank }) {
+  const builtIn = profiles?.builtIn || [];
+  const saved = profiles?.saved || [];
+  return <Panel title={`Womit fängt „${event?.name || "dieser Fragensatz"}“ an?`} action={<Sparkles className="text-blue-600" size={20} />}>
+    <p className="text-sm text-neutral-600">Ein Klick legt die Fragen für dieses Event an. Ändern kannst du danach alles.</p>
+    <div className="mt-4 grid gap-3">
+      {builtIn.map((profile) => <ProfileCard key={profile.id} profile={profile} onPick={() => onStart({ profileId: profile.id })} />)}
+      {saved.map((profile) => <ProfileCard
+        key={profile.id}
+        icon={Bookmark}
+        profile={{ ...profile, questionCount: profile.question_count, badge: 'Gemerkt', summary: profile.description || 'Deine gemerkten Fragen.' }}
+        onPick={() => onStart({ templateFormId: profile.id })}
+      />)}
+    </div>
+    <button type="button" onClick={onBlank} className="button-secondary mt-4 w-full"><Plus size={16} /> Lieber selbst schreiben</button>
   </Panel>;
 }
 
 function ProfileCard({ profile, active, icon, onPick }) {
   const Icon = icon || profileIcons[profile.id] || Sparkles;
   const preview = (profile.questions || []).slice(0, 3).map((item) => item.label).join(' · ');
-  return <button type="button" onClick={onPick} className={`rounded-lg border p-3 text-left transition ${active ? 'border-blue-600 bg-blue-50' : 'border-neutral-200 bg-white hover:border-blue-300'}`}>
-    <div className="flex items-center justify-between gap-3">
-      <strong className="flex items-center gap-2"><Icon size={18} className={active ? 'text-blue-600' : 'text-neutral-500'} /> {profile.name}</strong>
-      <span className="rounded-full bg-neutral-100 px-2 py-1 text-xs text-neutral-600">{profile.badge || `${profile.questionCount} Fragen`}</span>
+  const count = profile.questionCount ?? (profile.questions || []).length;
+  return <button type="button" onClick={onPick} className={`focus-ring rounded-lg border p-4 text-left transition ${active ? 'border-blue-600 bg-blue-50' : 'border-neutral-200 hover:border-blue-300 hover:bg-blue-50/40'}`}>
+    <div className="flex items-start justify-between gap-3">
+      <div className="flex items-center gap-2">
+        <Icon size={18} className="text-blue-700" />
+        <strong>{profile.name}</strong>
+      </div>
+      {profile.badge && <span className={`rounded-full px-2 py-0.5 text-xs ${profile.badge === 'Empfohlen' ? 'bg-blue-600 text-white' : 'bg-neutral-100 text-neutral-600'}`}>{profile.badge}</span>}
     </div>
-    <p className="mt-1 text-sm text-neutral-600">{profile.summary}</p>
+    <p className="mt-2 text-sm text-neutral-600">{profile.summary}</p>
     {preview && <p className="mt-2 text-xs text-neutral-500">{preview}</p>}
-    <p className="mt-2 text-xs font-medium text-blue-700">{profile.questionCount} Fragen, alle anpassbar</p>
+    <p className="mt-2 text-xs font-medium text-blue-700">{count} Fragen, alle anpassbar</p>
   </button>;
-}
-
-function CreateBlankForm({ events, onCreated }) {
-  const [name, setName] = useState('Neues Feedbackformular');
-  const [eventId, setEventId] = useState('');
-  const [message, setMessage] = useState('');
-  async function submit(e) {
-    e.preventDefault();
-    setMessage('');
-    try {
-      const form = await api('/admin/forms', { method: 'POST', body: JSON.stringify({ name, eventId: eventId || null, isTemplate: !eventId }) });
-      onCreated(form);
-    } catch (err) {
-      setMessage(errorNotice(err));
-    }
-  }
-  return <form onSubmit={submit} className="space-y-2">
-    <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
-    <select className="input" value={eventId} onChange={(e) => setEventId(e.target.value)}>
-      <option value="">Wiederverwendbare Vorlage</option>
-      {events.map((event) => <option key={event.id} value={event.id}>{eventLabel(event)}</option>)}
-    </select>
-    <button className="button-primary w-full"><Plus size={16} /> Leer beginnen</button>
-    <Notice message={message} />
-  </form>;
 }
 
 // Der Zustand, den der Editor die ganze Zeit anzeigt. Ohne ihn weiss niemand,
@@ -234,7 +256,7 @@ function FormEditor({ formId, form, onChanged }) {
   const [questions, setQuestions] = useState([]);
   const [openId, setOpenId] = useState(null);
   const [saveState, setSaveState] = useState('gespeichert');
-  const [profileName, setProfileName] = useState(`${form?.name || 'Feedbackformular'} Vorlage`);
+  const [profileName, setProfileName] = useState(`${form?.name || "Fragen"}`);
   const [message, setMessage] = useState('');
   const [draftOfOpen, setDraftOfOpen] = useState(null);
 
@@ -330,7 +352,7 @@ function FormEditor({ formId, form, onChanged }) {
     setMessage('');
     try {
       const saved = await api(`/admin/forms/${formId}/save-profile`, { method: 'POST', body: JSON.stringify({ name: profileName }) });
-      setMessage(`Als Vorlage „${saved.name}“ gespeichert.`);
+      setMessage(`Gemerkt als „${saved.name}“. Du findest sie beim nächsten Event unter den Startpunkten.`);
       onChanged();
     } catch (err) {
       setMessage(errorNotice(err));
@@ -345,10 +367,10 @@ function FormEditor({ formId, form, onChanged }) {
       <Notice message={message} className="mb-4" />
       <div className="grid gap-3 md:grid-cols-[1fr_auto]">
         <label className="block">
-          <span className="text-sm font-medium">Name der Vorlage</span>
+          <span className="text-sm font-medium">Name, unter dem du sie wiederfindest</span>
           <input className="input mt-1" value={profileName} onChange={(e) => setProfileName(e.target.value)} />
         </label>
-        <button onClick={saveProfile} className="button-secondary self-end"><Bookmark size={16} /> Als Vorlage speichern</button>
+        <button onClick={saveProfile} className="button-secondary self-end"><Bookmark size={16} /> Fragen merken</button>
       </div>
     </Panel>
 

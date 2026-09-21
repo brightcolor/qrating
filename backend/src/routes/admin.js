@@ -902,7 +902,18 @@ adminRouter.get('/organizations/:id/qr', async (req, res, next) => {
 
 adminRouter.get('/forms', async (req, res, next) => {
   try {
-    const result = await query('SELECT * FROM feedback_forms WHERE organization_id = $1 ORDER BY created_at DESC', [req.admin.organizationId]);
+    // Die Zahl der Fragen entscheidet, ob eine Liste zum Bearbeiten dasteht oder die
+    // Auswahl, womit ein Event anfängt. Ohne sie müsste die Oberfläche jedes Formular
+    // einzeln nachladen.
+    const result = await query(
+      `SELECT f.*, count(q.id)::int AS question_count
+       FROM feedback_forms f
+       LEFT JOIN feedback_questions q ON q.feedback_form_id = f.id
+       WHERE f.organization_id = $1
+       GROUP BY f.id
+       ORDER BY f.created_at DESC`,
+      [req.admin.organizationId]
+    );
     res.json(result.rows);
   } catch (error) {
     next(error);
@@ -1002,6 +1013,65 @@ adminRouter.post('/forms/from-profile', async (req, res, next) => {
       return form;
     });
     res.status(201).json(created);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Ein Event bringt sein Formular schon mit, nur ohne Fragen. Eine Vorlage füllt
+// dieses Formular, statt ein zweites daneben zu legen -- die Gästeseite nimmt sonst
+// die Fragen beider und zeigt sie hintereinander.
+adminRouter.post('/forms/:id/apply-profile', async (req, res, next) => {
+  try {
+    const form = (await query(
+      'SELECT * FROM feedback_forms WHERE id = $1 AND organization_id = $2',
+      [req.params.id, req.admin.organizationId]
+    )).rows[0];
+    if (!form) throw httpError(404, 'Dieses Formular gibt es nicht mehr. Lade die Liste neu.');
+
+    const vorhandene = await query('SELECT count(*)::int AS anzahl FROM feedback_questions WHERE feedback_form_id = $1', [form.id]);
+    if (vorhandene.rows[0].anzahl > 0) {
+      throw httpError(409, 'Dieser Fragensatz hat schon Fragen. Lösche sie zuerst, wenn du stattdessen eine Vorlage nehmen willst.');
+    }
+
+    let questions = [];
+    if (req.body.profileId) {
+      const profile = getQuestionProfile(req.body.profileId);
+      if (!profile) throw httpError(400, 'Diese Vorlage gibt es nicht. Wähle eine andere aus.');
+      questions = profile.questions;
+    } else if (req.body.templateFormId) {
+      const source = (await query(
+        'SELECT id FROM feedback_forms WHERE id = $1 AND organization_id = $2 AND is_template = true',
+        [req.body.templateFormId, req.admin.organizationId]
+      )).rows[0];
+      if (!source) throw httpError(400, 'Diesen gemerkten Fragensatz gibt es nicht mehr. Lade die Seite neu und wähle einen anderen aus.');
+      const rows = await query('SELECT * FROM feedback_questions WHERE feedback_form_id = $1 ORDER BY sort_order', [source.id]);
+      questions = rows.rows.map((item) => ({
+        internalName: item.internal_name,
+        label: item.label,
+        questionType: item.question_type,
+        helpText: item.help_text,
+        placeholder: item.placeholder,
+        required: item.required,
+        sortOrder: item.sort_order,
+        active: item.active,
+        category: item.category,
+        privacyRelevant: item.privacy_relevant,
+        showInExport: item.show_in_export,
+        showInDashboard: item.show_in_dashboard,
+        anonymousAnswer: item.anonymous_answer,
+        visibilityRules: item.visibility_rules,
+        options: item.options
+      }));
+    } else {
+      throw httpError(400, 'Bitte wähle eine Vorlage aus.');
+    }
+
+    await withTransaction(async (client) => {
+      await insertQuestionRows(client, form.id, questions);
+    });
+    const saved = await query('SELECT * FROM feedback_questions WHERE feedback_form_id = $1 ORDER BY sort_order', [form.id]);
+    res.status(201).json({ form, questions: saved.rows });
   } catch (error) {
     next(error);
   }

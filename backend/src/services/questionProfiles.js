@@ -44,7 +44,74 @@ function recommendation(label, sortOrder) {
   return question({ internalName: 'recommendation_nps', label, questionType: 'nps', sortOrder });
 }
 
+// Diese Vorlage folgt dem, was die Fragebogenforschung belegt, und weicht darin
+// bewusst von den anderen ab:
+//
+// - Jede Stufe einer Skala ist mit Worten benannt. Eine 0-bis-10-Skala, die nur ihre
+//   Enden beschriftet, liefert schiefe Verteilungen; fünf benannte Stufen nicht.
+// - Keine Zustimmungsfragen („Die Musik war gut: stimme zu / stimme nicht zu"). Auf
+//   Zustimmung antworten Menschen zustimmend, unabhängig vom Inhalt. Stattdessen
+//   eine eigene Skala je Frage.
+// - Eine Sache je Frage. „Musik und Stimmung" lässt sich nicht beantworten.
+// - Bei Fragen nach einer Tatsache — wie lange hast du gewartet — gibt es keine Mitte
+//   zum Ausweichen, denn zwischen „kurz" und „lang" liegt keine Haltung.
+// - Geschlossene Fragen zuerst, offene zum Schluss, vom Leichten ins Bestimmte.
+// - Absicht statt Empfehlungswert: „Kommst du wieder" ist eine Handlung, die der
+//   Veranstalter nachprüfen kann.
+// - Nichts ist Pflicht. Am Ausgang kostet jede erzwungene Antwort Abbrüche.
+const geprueft = [
+  question({
+    internalName: 'musik_passung',
+    label: 'Wie war die Musik für dich?',
+    questionType: 'multiple_choice',
+    options: ['Genau mein Ding', 'Gut', 'Ging so', 'Nicht so meins', 'Gar nicht meins'],
+    sortOrder: 10
+  }),
+  question({
+    internalName: 'einlass_wartezeit',
+    label: 'Wie lange hast du am Einlass gewartet?',
+    questionType: 'multiple_choice',
+    options: ['Gar nicht', 'Ein paar Minuten', 'Eine ganze Weile', 'Viel zu lang'],
+    sortOrder: 20
+  }),
+  question({
+    internalName: 'bar_wartezeit',
+    label: 'Wie schnell warst du an der Bar dran?',
+    questionType: 'multiple_choice',
+    options: ['Sofort', 'Ging zügig', 'Musste anstehen', 'Habe es gelassen'],
+    sortOrder: 30
+  }),
+  question({
+    internalName: 'wiederkommen',
+    label: 'Kommst du zu unserem nächsten Abend wieder?',
+    questionType: 'multiple_choice',
+    options: ['Auf jeden Fall', 'Wahrscheinlich', 'Vielleicht', 'Eher nicht'],
+    sortOrder: 40
+  }),
+  question({
+    internalName: 'staerkster_moment',
+    label: 'Was war dein stärkster Moment heute Abend?',
+    questionType: 'text_short',
+    placeholder: 'Ein Song, ein Mensch, ein Augenblick …',
+    sortOrder: 50
+  }),
+  question({
+    internalName: 'eine_sache',
+    label: 'Wenn du eine einzige Sache ändern könntest — welche?',
+    questionType: 'text_short',
+    placeholder: 'Eine reicht.',
+    sortOrder: 60
+  })
+];
+
 export const questionProfiles = [
+  {
+    id: 'geprueft-abend',
+    name: 'Geprüfter Abend',
+    summary: 'Nach den Regeln der Fragebogenforschung gebaut: benannte Stufen statt nackter Zahlen, eine Sache je Frage, offene Fragen zum Schluss.',
+    badge: 'Empfohlen',
+    questions: geprueft
+  },
   {
     id: 'quick-vibe',
     name: 'Schnellfeedback',
