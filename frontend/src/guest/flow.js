@@ -320,3 +320,14 @@ export function clearDraft(token) {
     // See saveDraft.
   }
 }
+
+// A bar that moves fast early and slowly late keeps more people going than an even one;
+// one that starts slowly loses them (Villar, Callegaro & Yang 2013, 32 experiments). It
+// counts the steps already done, so it stands at nothing before the first answer and is
+// full only when the form is sent.
+export function progressShare(index, total, done = false) {
+  if (done) return 1;
+  if (!total || total <= 0) return 0;
+  const linear = Math.min(Math.max(index / total, 0), 1);
+  return 1 - (1 - linear) ** 2;
+}

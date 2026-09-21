@@ -35,7 +35,7 @@ export function privacySections(organization = {}, { newsletter = null, mailHost
     'Den Zeitpunkt der Abgabe und die Sprache der Seite.',
     'Einen Kennwert deiner Adresse und deines Browsers. Er entsteht als Einwegwert, aus dem sich weder Adresse noch Gerät zurückrechnen lassen, und hält Mehrfachabgaben auseinander.',
     'Welchen Schritt du zuletzt gesehen hast. Daraus lesen wir, an welcher Stelle Gäste aufhören.',
-    'Deine Antworten auch dann, wenn du die Bewertung abbrichst. Sie werden beim Wechsel jedes Schritts gespeichert, damit wir sehen, woran es hakt. Rufnummer, Anliegen und E-Mail-Adresse sind davon ausgenommen: Die übermitteln wir erst, wenn du abschickst.'
+    'Deine Sterne in dem Moment, in dem du sie antippst, und deine übrigen Antworten beim Wechsel jedes Schritts – auch dann, wenn du die Bewertung abbrichst. So zählt deine Stimme auch ohne den letzten Knopf, und wir sehen, woran es hakt. Rufnummer, Anliegen und E-Mail-Adresse sind davon ausgenommen: Die übermitteln wir erst, wenn du abschickst.'
   ];
   const voluntary = [
     'Deine E-Mail-Adresse, wenn du Infos zu kommenden Events möchtest. Sie liegt verschlüsselt.',

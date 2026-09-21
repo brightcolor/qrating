@@ -4,6 +4,22 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.57.0] - 2026-09-21
+
+### Added
+
+- A tap on a star is a vote. It is stored the moment it happens, so a guest who stops right after it has still been counted; the form sent at the end completes that very vote instead of adding a second one. The evaluation says how many votes went no further than the stars.
+- A low tap reaches the organizer even if the guest leaves at once. The alert waits half an hour, so a callback number left in the meantime travels with it, and it reads the stars when it runs: a guest who raises them to four sets off nothing.
+- Under the stars the page says what the first step costs: "Ein Tipp reicht. Alles danach ist freiwillig." An unknown effort keeps people from starting.
+- A text slot for a thank-you shown above the question — a presale code, for instance. A gift given before the ask works two to three times as well as one promised for after it. It is empty until the organizer fills it and hangs on nothing, least of all the newsletter.
+
+### Changed
+
+- The line under the question opens with thanks: "Schön, dass du da warst."
+- The progress bar is one bar that moves fast early and slowly late; an even bar does not reduce drop-offs, one that starts slowly adds to them. The count "2/6" is gone from the top, screen readers still hear the step.
+- The privacy page says that the stars are stored the moment they are tapped.
+- Version bumped to `0.57.0`.
+
 ## [0.56.1] - 2026-09-21
 
 ### Reverted

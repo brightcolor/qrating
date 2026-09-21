@@ -1,7 +1,8 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import Joi from 'joi';
-import { query } from '../db/pool.js';
+import { query, withTransaction } from '../db/pool.js';
+import { lowRatingGraceMinutes, openVoteFor, recordRating, turnsLow } from '../services/ratingService.js';
 import { EventResolver, calculateFeedbackWindow } from '../services/eventResolver.js';
 import { defaultTexts, defaultTextsByLanguage, loadResolvedTexts } from '../services/textService.js';
 import { eventToPublic } from '../db/bootstrap.js';
@@ -209,6 +210,31 @@ async function trackQrFeedback(event, feedback, sourceSlug, qrSource = null, sou
   ).catch(() => {});
 }
 
+// A vote counted at the tap may change its stars before the form is sent, and only then
+// says whether the guest wants the newsletter. Its day keeps the count it already has;
+// the average, the low ratings and the sign-ups move with the change. The day is read
+// from the vote itself, so a form sent after midnight still corrects the day of the tap.
+async function adjustQrFeedback(event, { feedbackId, sourceSlug, qrSource, sourceType, oldRating, newRating, newsletter }) {
+  if (Number(oldRating) === Number(newRating) && !newsletter) return;
+  const low = (value) => (Number(value) >= 1 && Number(value) <= 2 ? 1 : 0);
+  await query(
+    `UPDATE qr_source_daily_stats SET
+       average_rating = CASE WHEN feedback_count > 0
+         THEN (COALESCE(average_rating, 0) * feedback_count - $6 + $7) / feedback_count
+         ELSE average_rating END,
+       low_ratings = GREATEST(low_ratings - $8 + $9, 0),
+       newsletter_optins = newsletter_optins + $10,
+       updated_at = now()
+     WHERE organization_id = $1 AND event_id = $2 AND qr_source_id IS NOT DISTINCT FROM $3
+       AND source_type = $4
+       AND day = (SELECT submitted_at::date FROM feedback_responses WHERE id = $5)`,
+    [
+      event.organization_id, event.id, qrSource?.id || null, sourceSlug || sourceType, feedbackId,
+      Number(oldRating), Number(newRating), low(oldRating), low(newRating), newsletter ? 1 : 0
+    ]
+  ).catch((error) => console.warn(`Die Zahlen der QR-Quelle liessen sich nicht nachfuehren: ${error.message}`));
+}
+
 async function publicPayload(resolveResult, questions = [], language = null) {
   const event = resolveResult.event;
   const organization = resolveResult.organization || {
@@ -388,6 +414,60 @@ publicRouter.post('/events/:eventToken/progress', progressLimiter, async (req, r
   }
 });
 
+const ratingSchema = Joi.object({
+  rating: Joi.number().integer().min(1).max(5).required(),
+  sessionKey: Joi.string().max(64).required(),
+  sourceType: Joi.string().max(80).default('event_specific'),
+  language: Joi.string().max(10).allow('', null)
+});
+
+// A tap on a star is a vote, stored the moment it happens. A guest who stops right after
+// it has been counted all the same: the smallest first step, taken seriously.
+publicRouter.post('/events/:eventToken/rating', feedbackLimiter, async (req, res, next) => {
+  try {
+    const { value, error } = ratingSchema.validate(req.body, { stripUnknown: true });
+    if (error) return res.status(400).json({ error: 'Die Sterne ließen sich nicht speichern. Tippe sie bitte noch einmal an.' });
+    const resolved = await new EventResolver({ query }).resolveEventByToken(req.params.eventToken);
+    if (resolved.status !== 'ok') {
+      return res.status(410).json({ error: 'Die Bewertung für dieses Event ist gerade geschlossen. Deine Sterne konnten deshalb nicht gespeichert werden.' });
+    }
+    const event = resolved.event;
+    const qrSource = await findQrSource(event, value.sourceType);
+    const vote = await recordRating({
+      event,
+      rating: value.rating,
+      sessionKey: value.sessionKey,
+      sourceType: value.sourceType,
+      qrSourceId: qrSource?.id || null,
+      userAgent: req.headers['user-agent'],
+      ip: req.ip
+    });
+    if (vote.created) {
+      await trackQrFeedback(event, { rating: vote.rating, newsletter_optin: false }, value.sourceType, qrSource, value.sourceType);
+    } else if (!vote.completed && vote.previousRating !== vote.rating) {
+      await adjustQrFeedback(event, {
+        feedbackId: vote.id,
+        sourceSlug: value.sourceType,
+        qrSource,
+        sourceType: value.sourceType,
+        oldRating: vote.previousRating,
+        newRating: vote.rating,
+        newsletter: false
+      });
+    }
+    // A low tap reaches the organizer even if the guest leaves now. The alert waits a while,
+    // so a callback number left in the next minutes still travels with it.
+    if (!vote.completed && turnsLow(vote.previousRating, vote.rating)) {
+      await enqueueJob({ query }, event.organization_id, 'notification.low_rating', { eventId: event.id, feedbackId: vote.id }, {
+        runAfter: new Date(Date.now() + lowRatingGraceMinutes * 60 * 1000)
+      }).catch((jobError) => console.warn(`Die Meldung zur niedrigen Bewertung liess sich nicht einplanen: ${jobError.message}`));
+    }
+    res.status(vote.created ? 201 : 200).json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
 publicRouter.post('/events/:eventToken/feedback', feedbackLimiter, async (req, res, next) => {
   try {
     const { value, error } = feedbackSchema.validate(req.body, { stripUnknown: true });
@@ -407,35 +487,70 @@ publicRouter.post('/events/:eventToken/feedback', feedbackLimiter, async (req, r
     const tooFast = secondsSinceStart !== null && secondsSinceStart < Number(antiSpam.min_seconds ?? 3);
     const spamScore = (honeypotHit ? 80 : 0) + (tooFast ? 20 : 0);
     const qrSource = await findQrSource(event, value.sourceType);
-    const response = await query(
-      `INSERT INTO feedback_responses (
-        organization_id, event_id, qr_source_id, resolved_event_id, source_type, rating, nps_score, comment_positive,
-        comment_improvement, general_comment, newsletter_optin, contact_requested, contact_phone, contact_note, testimonial_allowed,
-        user_agent_hash, ip_hash, spam_score, is_suspicious
-      ) VALUES ($1,$2,$3,$2,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
-      [
-        event.organization_id,
-        event.id,
-        qrSource?.id || null,
-        value.sourceType,
-        value.rating,
-        value.npsScore,
-        value.commentPositive,
-        value.commentImprovement,
-        value.generalComment,
-        value.newsletterOptin,
-        value.rating <= 2 && Boolean(value.contactRequested || value.contactPhone),
-        null,
-        null,
-        value.testimonialAllowed,
-        hashValue(req.headers['user-agent']),
-        hashValue(req.ip),
-        spamScore,
-        spamScore >= 20
-      ]
-    );
-    const feedback = response.rows[0];
-    await trackQrFeedback(event, feedback, value.sourceType, qrSource, value.sourceType);
+    const contactRequested = value.rating <= 2 && Boolean(value.contactRequested || value.contactPhone);
+    // A tap on a star already stored the vote. The form completes that very row, so one
+    // guest stays one rating; only a visit without a tap -- an older page, a lost request --
+    // writes a new one as before.
+    const { feedback, tapped } = await withTransaction(async (client) => {
+      const vote = await openVoteFor(client, event, value.sessionKey);
+      if (vote) {
+        const updated = (await client.query(
+          `UPDATE feedback_responses SET
+             rating = $2, nps_score = $3, comment_positive = $4, comment_improvement = $5, general_comment = $6,
+             newsletter_optin = $7, contact_requested = $8, testimonial_allowed = $9, spam_score = $10,
+             is_suspicious = $11, qr_source_id = COALESCE(qr_source_id, $12), completed_at = now()
+           WHERE id = $1 RETURNING *`,
+          [
+            vote.id, value.rating, value.npsScore, value.commentPositive, value.commentImprovement,
+            value.generalComment, value.newsletterOptin, contactRequested, value.testimonialAllowed,
+            spamScore, spamScore >= 20, qrSource?.id || null
+          ]
+        )).rows[0];
+        return { feedback: updated, tapped: vote };
+      }
+      const inserted = (await client.query(
+        `INSERT INTO feedback_responses (
+          organization_id, event_id, qr_source_id, resolved_event_id, source_type, rating, nps_score, comment_positive,
+          comment_improvement, general_comment, newsletter_optin, contact_requested, contact_phone, contact_note, testimonial_allowed,
+          user_agent_hash, ip_hash, spam_score, is_suspicious, completed_at
+        ) VALUES ($1,$2,$3,$2,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18, now()) RETURNING *`,
+        [
+          event.organization_id,
+          event.id,
+          qrSource?.id || null,
+          value.sourceType,
+          value.rating,
+          value.npsScore,
+          value.commentPositive,
+          value.commentImprovement,
+          value.generalComment,
+          value.newsletterOptin,
+          contactRequested,
+          null,
+          null,
+          value.testimonialAllowed,
+          hashValue(req.headers['user-agent']),
+          hashValue(req.ip),
+          spamScore,
+          spamScore >= 20
+        ]
+      )).rows[0];
+      return { feedback: inserted, tapped: null };
+    });
+    if (tapped) {
+      // The tap counted this vote in the numbers of its QR source already.
+      await adjustQrFeedback(event, {
+        feedbackId: feedback.id,
+        sourceSlug: value.sourceType,
+        qrSource,
+        sourceType: value.sourceType,
+        oldRating: tapped.rating,
+        newRating: feedback.rating,
+        newsletter: feedback.newsletter_optin
+      });
+    } else {
+      await trackQrFeedback(event, feedback, value.sourceType, qrSource, value.sourceType);
+    }
     const questions = await activeQuestions(event.id);
     for (const question of questions) {
       if (Object.prototype.hasOwnProperty.call(value.answers, question.internal_name)) {

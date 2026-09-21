@@ -1,7 +1,9 @@
 // Labels for the public texts of the guest flow. The keys come from the backend defaults.
 export const textLabels = {
   headline: ['Überschrift der ersten Frage', '{event_name} setzt den Eventnamen ein.'],
+  thanks_upfront: ['Dankeschön vor der Frage, etwa ein Code für den nächsten Vorverkauf. Leer lassen, wenn es keins gibt.'],
   subtitle: ['Zeile unter der Überschrift'],
+  rating_effort_hint: ['Hinweis unter den Sternen, bis getippt wurde'],
   rating_label: ['Gesamtbewertung, Beschriftung für Screenreader'],
   rating_reaction_1: ['Reaktion auf 1 Stern'],
   rating_reaction_2: ['Reaktion auf 2 Sterne'],
@@ -72,7 +74,7 @@ export const textLabels = {
 
 export const textGroups = [
   ['Einstieg und Bewertung', [
-    'headline', 'subtitle', 'rating_label', 'stars_value',
+    'thanks_upfront', 'headline', 'subtitle', 'rating_effort_hint', 'rating_label', 'stars_value',
     'rating_reaction_1', 'rating_reaction_2', 'rating_reaction_3', 'rating_reaction_4', 'rating_reaction_5'
   ]],
   ['Fragen und Knöpfe', [

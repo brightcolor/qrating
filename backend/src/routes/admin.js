@@ -441,10 +441,12 @@ adminRouter.delete('/events/:id', requireRole('event_manager'), async (req, res,
 adminRouter.get('/events/:id/analytics', async (req, res, next) => {
   try {
     await ensureEventAccess(req, req.params.id);
+    // A tap on a star counts as a vote; only_stars says how many of them went no further.
     const summary = await query(
       `SELECT count(*)::int AS total,
               round(avg(rating)::numeric, 2) AS average_rating,
-              count(*) FILTER (WHERE newsletter_optin)::int AS newsletter_optins
+              count(*) FILTER (WHERE newsletter_optin)::int AS newsletter_optins,
+              count(*) FILTER (WHERE completed_at IS NULL)::int AS only_stars
        FROM feedback_responses WHERE event_id = $1`,
       [req.params.id]
     );

@@ -913,7 +913,7 @@ function Analytics() {
     {error && <ErrorBox error={error} />}
     {data && <div className="mt-6 grid gap-6">
       <div className="grid gap-4 md:grid-cols-4">
-        <Stat title="Feedbacks" value={data.summary.total || 0} />
+        <Stat title="Feedbacks" value={data.summary.total || 0} note={data.summary.only_stars ? `davon ${data.summary.only_stars} nur mit Sternen` : null} />
         <Stat title="Durchschnitt" value={data.summary.average_rating || '-'} />
         <Stat title="Newsletter" value={data.summary.newsletter_optins || 0} />
         <Stat title="Kommentare" value={data.comments.length || 0} />
@@ -2215,8 +2215,12 @@ function Panel({ title, children, className = '' }) {
   return <section className={`rounded-lg bg-white p-5 shadow-sm ${className}`.trim()}>{title && <h2 className="mb-4 font-semibold">{title}</h2>}{children}</section>;
 }
 
-function Stat({ title, value }) {
-  return <div className="rounded-lg bg-white p-5 shadow-sm"><p className="text-sm text-neutral-500">{title}</p><p className="mt-2 text-2xl font-semibold">{value}</p></div>;
+function Stat({ title, value, note }) {
+  return <div className="rounded-lg bg-white p-5 shadow-sm">
+    <p className="text-sm text-neutral-500">{title}</p>
+    <p className="mt-2 text-2xl font-semibold">{value}</p>
+    {note && <p className="mt-1 text-xs text-neutral-500">{note}</p>}
+  </div>;
 }
 
 function ErrorBox({ error }) {

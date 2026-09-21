@@ -205,13 +205,7 @@
   transition: transform 0.45s var(--ease-out);
 }
 
-.guest-progress .is-done i {
-  transform: scaleX(1);
-}
 
-.guest-progress .is-current i {
-  transform: scaleX(0.4);
-}
 
 .guest-bar {
   display: grid;
@@ -436,6 +430,30 @@
 .guest-reaction span {
   display: inline-block;
   animation: guest-rise 0.45s var(--ease-spring) 0.12s both;
+}
+
+/* Der Dank vor der Frage. Ein Geschenk wirkt, wenn es vorab kommt; es steht deshalb über
+   der Frage und hängt an nichts. */
+.guest-gift {
+  display: inline-block;
+  max-width: 32em;
+  margin: 0 0 14px;
+  padding: 8px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: var(--soft);
+  color: var(--chalk);
+  font-size: 0.98rem;
+  line-height: 1.4;
+}
+
+/* Was der erste Tipp kostet, bis er getan ist. Leiser als die Reaktion, die ihn ablöst. */
+.guest-reaction .guest-effort {
+  color: var(--haze);
+  font-family: var(--font);
+  font-size: 1rem;
+  font-weight: 500;
+  animation: none;
 }
 
 /* Answers */

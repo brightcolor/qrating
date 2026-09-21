@@ -72,7 +72,7 @@ describe('backend flows against PostgreSQL', () => {
     expect(dynamic.body.texts.stamp_label).toBe('Angekommen');
     expect(dynamic.body.texts.thank_headline).toBe('Merci für dein Feedback');
     expect(dynamic.body.texts.subtitle)
-      .toBe('Dein Feedback hilft uns, kommende Events noch schöner, entspannter und besser zu machen.');
+      .toBe('Schön, dass du da warst. Dein Feedback macht den nächsten Abend besser.');
 
     const eventQr = await request('GET', `/public/e/${event.event_feedback_token}`);
     expect(eventQr.status).toBe(200);

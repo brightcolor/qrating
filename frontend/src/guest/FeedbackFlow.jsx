@@ -26,6 +26,7 @@ import {
   isRequired,
   loadDraft,
   nextStepId,
+  progressShare,
   noValue,
   questionOptions,
   questionType,
@@ -261,6 +262,15 @@ export function FeedbackFlow({ event, texts, sourceType, lang = 'de', preview = 
   function chooseRating(value) {
     if (locked) return;
     update({ rating: value });
+    // The tap is the vote. It goes out now, so a guest who stops here has still been
+    // counted; everything after it completes the same vote. A lost request costs nothing:
+    // the form at the end writes the vote on its own.
+    if (!preview && sessionKey) {
+      api(`/public/events/${event.token}/rating`, {
+        method: 'POST',
+        body: JSON.stringify({ rating: value, sessionKey, sourceType, language: lang })
+      }).catch(() => {});
+    }
     advanceSoon(ratingPause);
   }
 
@@ -444,17 +454,17 @@ export function FeedbackFlow({ event, texts, sourceType, lang = 'de', preview = 
     <div className="guest-frame">
       <PreviewBanner preview={preview} texts={texts} />
       <header className="guest-top">
+        {/* One bar, fast early and slow late. A count like „2/6" would contradict it and is
+            itself an even indicator; screen readers still hear the step below. */}
         <div className="guest-progress" aria-hidden="true">
-          {steps.slice(0, total).map((item, itemIndex) => (
-            <span key={item.id} className={onSummary || itemIndex < index ? 'is-done' : itemIndex === index ? 'is-current' : undefined}><i /></span>
-          ))}
+          <span><i style={{ transform: `scaleX(${progressShare(index, total, onSummary)})` }} /></span>
         </div>
         <div className="guest-bar">
           <button type="button" className="guest-back" onClick={goBack} disabled={index === 0} aria-label={texts.back_label}>
             <ChevronLeft size={22} aria-hidden="true" />
           </button>
           <p className="guest-title">{event.name}</p>
-          <p className="guest-count" aria-hidden="true">{onSummary ? <Check size={18} strokeWidth={2.6} /> : `${index + 1}/${total}`}</p>
+          <p className="guest-count" aria-hidden="true">{onSummary ? <Check size={18} strokeWidth={2.6} /> : null}</p>
           <ThemeSwitch className="guest-bar-theme" />
         </div>
         <p className="sr-only" aria-live="polite">
@@ -480,13 +490,19 @@ function RatingStep({ event, texts, image, locale, rating, onChoose, title }) {
       <img src={image} alt={event.imageAlt || ''} fetchpriority="high" />
     </figure>}
     {meta && <p className="guest-meta">{meta}</p>}
+    {/* A gift before the ask works two to three times as well as one promised for after
+        it. It is shown to everybody and asks nothing back: it must not hang on a newsletter. */}
+    {texts.thanks_upfront && <p className="guest-gift">{texts.thanks_upfront}</p>}
     {title(texts.headline)}
     {texts.subtitle && <p className="guest-help">{texts.subtitle}</p>}
     <div className="guest-rating guest-rating--hero">
       <span className="guest-spot" style={{ '--level': preview || rating }} aria-hidden="true" />
       <StarButtons value={rating} label={texts.rating_label} texts={texts} onChoose={onChoose} onPreview={setPreview} />
       <p className="guest-reaction" aria-live="polite">
-        {rating ? <span key={rating}>{texts[`rating_reaction_${rating}`]}</span> : null}
+        {rating
+          ? <span key={rating}>{texts[`rating_reaction_${rating}`]}</span>
+          // Until the first tap: what it costs. An unknown effort keeps people from starting.
+          : texts.rating_effort_hint ? <span className="guest-effort">{texts.rating_effort_hint}</span> : null}
       </p>
     </div>
   </>;

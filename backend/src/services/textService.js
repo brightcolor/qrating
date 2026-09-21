@@ -1,7 +1,9 @@
 export const defaultTextsByLanguage = {
   de: {
     headline: 'Wie war dein Abend bei {event_name}?',
-    subtitle: 'Dein Feedback hilft uns, kommende Events noch schöner, entspannter und besser zu machen.',
+    thanks_upfront: '',
+    subtitle: 'Schön, dass du da warst. Dein Feedback macht den nächsten Abend besser.',
+    rating_effort_hint: 'Ein Tipp reicht. Alles danach ist freiwillig.',
     rating_label: 'Wie würdest du den Abend insgesamt bewerten?',
     positive_label: 'Was ist dir besonders positiv in Erinnerung geblieben?',
     positive_placeholder: 'Zum Beispiel Musik, Stimmung, Menschen, Location oder ein besonderer Moment ...',
@@ -71,7 +73,9 @@ export const defaultTextsByLanguage = {
   },
   en: {
     headline: 'How was your night at {event_name}?',
-    subtitle: 'Your feedback helps us make upcoming events smoother, warmer and better.',
+    thanks_upfront: '',
+    subtitle: 'Thanks for being there. Your feedback makes the next night better.',
+    rating_effort_hint: 'One tap is enough. Everything after it is up to you.',
     rating_label: 'How would you rate the event overall?',
     positive_label: 'What stood out in a positive way?',
     positive_placeholder: 'Music, atmosphere, people, location or a special moment ...',
