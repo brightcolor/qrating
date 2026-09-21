@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { api } from './lib/api.js';
+import { API_BASE, api, readResponse } from './lib/api.js';
+import { guestApiPath } from './guest/guestPath.js';
 import { FeedbackFlow, GuestScreen, GuestStage, eventImage } from './guest/FeedbackFlow.jsx';
 import { assetUrl } from './lib/api.js';
 import { WaitingScreen } from './guest/Upcoming.jsx';
@@ -24,17 +25,24 @@ function useAsync(fn, deps = []) {
   return state;
 }
 
-function PublicFeedback({ mode, identifier, source }) {
-  const search = new URLSearchParams(window.location.search);
-  const language = search.get('lang');
+// index.html asked the server for this very page before the bundle arrived. Taking that
+// answer, once, keeps a visit at one request — and therefore at one counted scan.
+function loadGuest(path) {
+  const early = window.__qratingGuest;
+  if (early && API_BASE === '/api') {
+    window.__qratingGuest = null;
+    // A request that never reached the server counted nothing; asking again is safe.
+    return early.then(readResponse, () => api(path));
+  }
+  return api(path);
+}
+
+function PublicFeedback({ mode, source }) {
+  const language = new URLSearchParams(window.location.search).get('lang');
   const lang = language === 'en' ? 'en' : 'de';
   // A preview link from the admin area opens the page outside the feedback window.
-  const parameters = new URLSearchParams();
-  if (language) parameters.set('lang', language);
-  if (search.get('preview')) parameters.set('preview', search.get('preview'));
-  const suffix = parameters.toString() ? `?${parameters}` : '';
-  const path = mode === 'event' ? `/public/e/${identifier}${suffix}` : `/public/f/${identifier}${source ? `/${source}` : ''}${suffix}`;
-  const { loading, data, error } = useAsync(() => api(path), [path]);
+  const path = guestApiPath(window.location.pathname, window.location.search);
+  const { loading, data, error } = useAsync(() => loadGuest(path), [path]);
 
   if (loading) {
     return <GuestScreen lang={lang} loading>
@@ -141,10 +149,10 @@ function closedNotice(closed, lang) {
 export default function PublicApp() {
   const path = window.location.pathname;
   if (path.startsWith('/datenschutz/')) return <PublicPrivacy slug={path.split('/')[2]} />;
-  if (path.startsWith('/e/')) return <PublicFeedback mode="event" identifier={path.split('/')[2]} source={new URLSearchParams(window.location.search).get('source')} />;
+  if (path.startsWith('/e/')) return <PublicFeedback mode="event" source={new URLSearchParams(window.location.search).get('source')} />;
   if (path.startsWith('/f/')) {
     const parts = path.split('/').filter(Boolean);
-    return <PublicFeedback mode="dynamic" identifier={parts[1]} source={parts[2] || new URLSearchParams(window.location.search).get('source')} />;
+    return <PublicFeedback mode="dynamic" source={parts[2] || new URLSearchParams(window.location.search).get('source')} />;
   }
   return <React.Suspense fallback={null}><SiteApp /></React.Suspense>;
 }

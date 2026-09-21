@@ -17,13 +17,38 @@
     </style>
     <script>
       // Website pages: load the texts while the scripts download, and hide scroll-in elements before the first paint.
-      // Guest pages start on their dark stage right away.
+      // Guest pages start on their dark stage right away, and ask the server for their event
+      // while the bundles are still on the way, instead of after them.
+      // qrating:guest-path:start
+      function guestApiPath(pathname, search) {
+        var query = new URLSearchParams(search);
+        var keep = new URLSearchParams();
+        if (query.get('lang')) keep.set('lang', query.get('lang'));
+        if (query.get('preview')) keep.set('preview', query.get('preview'));
+        var suffix = keep.toString() ? '?' + keep.toString() : '';
+        if (pathname.indexOf('/e/') === 0) return '/public/e/' + pathname.split('/')[2] + suffix;
+        if (pathname.indexOf('/f/') === 0) {
+          var parts = pathname.split('/').filter(Boolean);
+          var source = parts[2] || query.get('source');
+          return '/public/f/' + parts[1] + (source ? '/' + source : '') + suffix;
+        }
+        return null;
+      }
+      // qrating:guest-path:end
       (function () {
         var root = document.documentElement;
         if (/^\/(e|f)\//.test(window.location.pathname)) {
           root.classList.add('guest-html');
           var themeColor = document.querySelector('meta[name="theme-color"]');
           if (themeColor) themeColor.setAttribute('content', '#140f1c');
+          var guestPath = window.URLSearchParams && guestApiPath(window.location.pathname, window.location.search);
+          if (guestPath && window.fetch) {
+            window.__qratingGuest = fetch('/api' + guestPath, {
+              credentials: 'include',
+              headers: { 'content-type': 'application/json' }
+            });
+            window.__qratingGuest.catch(function () {});
+          }
           return;
         }
         if (/^\/(admin|e|f)(\/|$)/.test(window.location.pathname)) return;

@@ -4,6 +4,14 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.56.0] - 2026-09-21
+
+### Changed
+
+- The guest page reaches its stars sooner on a weak phone network. It used to wait on three steps in a row: the base bundle, then the guest parts, then the question to the server. The question to the server now starts from the page itself before any bundle has arrived, and the guest parts load alongside the base bundle. The website and the admin area load nothing extra.
+- A visit still sends exactly one request for its event, so it still counts as one scan. A test holds the early request and the one in the bundle to the same address.
+- Version bumped to `0.56.0`.
+
 ## [0.55.0] - 2026-09-21
 
 ### Changed
