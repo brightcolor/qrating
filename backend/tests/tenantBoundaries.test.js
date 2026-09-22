@@ -217,6 +217,47 @@ describe('a session', () => {
     expect(refused.body.error).toContain('Einladungs-E-Mail');
   });
 
+  it('follows a role an owner changes, from the next request on', async () => {
+    const member = await account(other.organization.id, 'rolle@stadthalle.test', 'admin');
+    const allowed = await request('PATCH', '/admin/branding', { cookie: member.cookie, body: { footerText: 'Bis bald' } });
+    expect(allowed.status).toBe(200);
+
+    const demoted = await request('PATCH', `/admin/users/${member.user.id}`, { cookie: other.owner.cookie, body: { role: 'support' } });
+    expect(demoted.status).toBe(200);
+
+    // The cookie still says admin; the account says support, and the account decides.
+    const refused = await request('PATCH', '/admin/branding', { cookie: member.cookie, body: { footerText: 'Noch einmal' } });
+    const me = await request('GET', '/admin/me', { cookie: member.cookie });
+    expect(refused.status).toBe(403);
+    expect(me.body.role).toBe('support');
+
+    await request('PATCH', `/admin/users/${member.user.id}`, { cookie: other.owner.cookie, body: { role: 'event_manager' } });
+    expect((await request('PATCH', '/admin/branding', { cookie: member.cookie, body: { footerText: 'Wieder da' } })).status).toBe(200);
+  });
+
+  it('ends a visit to another tenant once the platform role is taken away', async () => {
+    const entered = await request('POST', `/admin/platform/organizations/${other.organization.id}/enter`, { cookie: platformCookie });
+    expect(entered.status).toBe(200);
+    expect((await request('GET', '/admin/events', { cookie: entered.cookie })).status).toBe(200);
+
+    await query("UPDATE users SET platform_admin = false WHERE email = 'plattform@example.test'");
+    const refused = await request('GET', '/admin/events', { cookie: entered.cookie });
+    await query("UPDATE users SET platform_admin = true WHERE email = 'plattform@example.test'");
+
+    expect(refused.status).toBe(401);
+    expect(refused.body.error).toContain('Plattform-Rolle');
+  });
+
+  it('ends for an account that moved to another organization', async () => {
+    const member = await account(other.organization.id, 'umgezogen@stadthalle.test', 'admin');
+    await query('UPDATE users SET organization_id = $2 WHERE id = $1', [member.user.id, foreignEvent.organization_id]);
+
+    const refused = await request('GET', '/admin/events', { cookie: member.cookie });
+
+    expect(refused.status).toBe(401);
+    expect(refused.body.error).toContain('anderen Organisation');
+  });
+
   it('ends for an account that no longer exists', async () => {
     const member = await account(other.organization.id, 'geloescht@stadthalle.test', 'admin');
     await query('DELETE FROM users WHERE id = $1', [member.user.id]);

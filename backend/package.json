@@ -1,6 +1,6 @@
 {
   "name": "qrating-backend",
-  "version": "0.58.3",
+  "version": "0.58.4",
   "type": "module",
   "private": true,
   "scripts": {

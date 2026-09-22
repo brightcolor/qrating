@@ -26,8 +26,9 @@ const closedAccountMessages = {
   invited: 'Dein Konto ist noch nicht aktiviert. Öffne den Link aus deiner Einladungs-E-Mail und lege dort ein Passwort fest.'
 };
 
-// A signed cookie proves who signed in, and the account decides whether that still counts:
-// every request reads its status, so disabling an account ends its sessions at once.
+// A signed cookie proves who signed in, and the account decides what that is worth now:
+// every request reads status, role and platform role, so disabling an account ends its
+// sessions at once and a changed role applies from the next request on.
 export async function requireAdmin(req, res, next) {
   const token = req.cookies?.qrating_admin;
   if (!token) return sendError(req, res, 401, 'Du bist nicht angemeldet. Bitte melde dich an.');
@@ -39,15 +40,30 @@ export async function requireAdmin(req, res, next) {
     return sendError(req, res, 401, 'Deine Sitzung ist abgelaufen. Bitte melde dich erneut an.');
   }
 
+  const refuse = (message) => {
+    clearAdminCookie(res);
+    return sendError(req, res, 401, message);
+  };
+
   try {
-    const account = (await query('SELECT status FROM users WHERE id = $1', [session.sub])).rows[0];
-    if (!account || account.status !== 'active') {
-      clearAdminCookie(res);
-      return sendError(req, res, 401, account
-        ? closedAccountMessages[account.status] || 'Dein Konto ist gesperrt. Ein Admin deiner Organisation kann es wieder aktivieren.'
-        : 'Dein Konto gibt es nicht mehr. Bitte melde dich mit einem anderen Konto an.');
+    const account = (await query(
+      'SELECT status, role, organization_id, platform_admin FROM users WHERE id = $1',
+      [session.sub]
+    )).rows[0];
+    if (!account) return refuse('Dein Konto gibt es nicht mehr. Bitte melde dich mit einem anderen Konto an.');
+    if (account.status !== 'active') {
+      return refuse(closedAccountMessages[account.status] || 'Dein Konto ist gesperrt. Ein Admin deiner Organisation kann es wieder aktivieren.');
     }
-    req.admin = session;
+    const platformAdmin = Boolean(account.platform_admin);
+    if (session.acting) {
+      // A visit to another tenant rests on the platform role; without it the visit ends.
+      if (!platformAdmin) return refuse('Deine Plattform-Rolle wurde entzogen, damit endet der Besuch im Mandanten. Bitte melde dich erneut an.');
+    } else if (session.organizationId !== account.organization_id) {
+      return refuse('Dein Konto gehört inzwischen zu einer anderen Organisation. Bitte melde dich erneut an.');
+    }
+    // At home the role counts as the account holds it now. On a visit to another tenant the
+    // platform role works with the full rights it entered with.
+    req.admin = { ...session, platformAdmin, role: session.acting ? session.role : account.role };
     next();
   } catch (error) {
     next(error);

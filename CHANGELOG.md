@@ -4,6 +4,17 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.58.4] - 2026-09-22
+
+### Security
+
+- A changed role applies from the next request on. The session cookie carried the role of the moment of sign-in, so a person an owner set from admin to support kept admin rights until the cookie expired; every admin request now takes the role from the account.
+- A visit of a platform admin to another tenant ends once the platform role is taken away, and a session ends when its account belongs to another organization than the one it signed in to.
+
+### Changed
+
+- Version bumped to `0.58.4`.
+
 ## [0.58.3] - 2026-09-22
 
 ### Security
