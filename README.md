@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.58.2
+**Version:** 0.58.3
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -518,6 +518,8 @@ Admin areas include events, analytics, exports, forms, texts, QR sources, Pretix
 
 Admin authentication uses the `qrating_admin` HTTP-only cookie. The frontend does not store session tokens in `localStorage` or expose them to JavaScript.
 
+Every admin request reads the status of the account behind the cookie. Disabling an account, setting it back to invited or deleting it ends its sessions at once: the next request answers HTTP 401 with the reason and clears the cookie.
+
 Two-factor authentication can be enabled under **Einstellungen → Sicherheit**. It uses standard TOTP apps and provides one-time recovery codes during setup. For an account with a second factor, a password opens no session on its own, wherever it was entered: at the sign-in, after a password reset and when an invitation is accepted, the code from the app completes the sign-in (`POST /admin/login/2fa`).
 
 ## Tests And CI
@@ -597,7 +599,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.58.2`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.58.3`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

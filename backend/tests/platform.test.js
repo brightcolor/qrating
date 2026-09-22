@@ -266,10 +266,13 @@ describe('platform administration', () => {
 
     const override = await request('PATCH', '/admin/billing/override', { cookie: platformCookie, body: { plan: 'pro' } });
     const plans = await request('PATCH', '/admin/billing/plans', { cookie: platformCookie, body: { plans: [] } });
+    const tenants = await request('GET', '/admin/platform/organizations', { cookie: platformCookie });
     await query("UPDATE users SET status = 'active' WHERE id = $1", [platformUser.id]);
 
-    expect([override.status, plans.status]).toEqual([403, 403]);
-    expect(override.body.error).toContain('Plattform-Admins');
+    // The session ends with the account, before any rule about plans is asked.
+    expect([override.status, plans.status, tenants.status]).toEqual([401, 401, 401]);
+    expect(override.body.error).toContain('deaktiviert');
+    expect((await request('GET', '/admin/platform/organizations', { cookie: platformCookie })).status).toBe(200);
   });
 
 });

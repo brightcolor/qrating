@@ -4,6 +4,16 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.58.3] - 2026-09-22
+
+### Security
+
+- Disabling an account ends its sessions at once. Every admin request now reads the status of the account behind the session cookie; a disabled account, one set back to invited and a deleted one get 401 with the reason, and the cookie is cleared. Before, a signed cookie stayed valid for up to twelve hours after the account was switched off.
+
+### Changed
+
+- Version bumped to `0.58.3`.
+
 ## [0.58.2] - 2026-09-22
 
 ### Security

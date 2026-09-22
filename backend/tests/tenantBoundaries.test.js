@@ -190,6 +190,44 @@ describe('an invitation', () => {
   });
 });
 
+describe('a session', () => {
+  it('ends the moment its account is disabled, and holds again once it is active', async () => {
+    const member = await account(other.organization.id, 'kollege@stadthalle.test', 'admin');
+    expect((await request('GET', '/admin/events', { cookie: member.cookie })).status).toBe(200);
+
+    await query("UPDATE users SET status = 'disabled' WHERE id = $1", [member.user.id]);
+    const refused = await request('GET', '/admin/events', { cookie: member.cookie });
+
+    expect(refused.status).toBe(401);
+    expect(refused.body.error).toContain('deaktiviert');
+    // The browser is told to drop the cookie as well.
+    expect(refused.cookie).toBe('qrating_admin=');
+
+    await query("UPDATE users SET status = 'active' WHERE id = $1", [member.user.id]);
+    expect((await request('GET', '/admin/events', { cookie: member.cookie })).status).toBe(200);
+  });
+
+  it('ends for an account that is waiting for its invitation again', async () => {
+    const member = await account(other.organization.id, 'zurueckgesetzt@stadthalle.test', 'support');
+    await query("UPDATE users SET status = 'invited' WHERE id = $1", [member.user.id]);
+
+    const refused = await request('GET', '/admin/me', { cookie: member.cookie });
+
+    expect(refused.status).toBe(401);
+    expect(refused.body.error).toContain('Einladungs-E-Mail');
+  });
+
+  it('ends for an account that no longer exists', async () => {
+    const member = await account(other.organization.id, 'geloescht@stadthalle.test', 'admin');
+    await query('DELETE FROM users WHERE id = $1', [member.user.id]);
+
+    const refused = await request('PATCH', '/admin/me/preferences', { cookie: member.cookie, body: { adminTheme: 'plakat' } });
+
+    expect(refused.status).toBe(401);
+    expect(refused.body.error).toContain('gibt es nicht mehr');
+  });
+});
+
 describe('an account with a second factor', () => {
   it('gets no session from a reset link alone', async () => {
     const guarded = await account(other.organization.id, 'zweiter-faktor@stadthalle.test', 'admin', 'two_factor_enabled = true');

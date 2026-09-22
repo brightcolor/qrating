@@ -1,5 +1,7 @@
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
+import { query } from '../db/pool.js';
+import { clearAdminCookie } from '../utils/security.js';
 import { sendError } from './errors.js';
 
 // Platform admins work in their own organization and can step into another one; `acting` marks that visit.
@@ -18,15 +20,37 @@ export function signAdmin(user, { organizationId = user.organization_id, role = 
   );
 }
 
-export function requireAdmin(req, res, next) {
+// What a session hears once its account is no longer in use.
+const closedAccountMessages = {
+  disabled: 'Dein Konto ist deaktiviert. Ein Admin deiner Organisation kann es wieder aktivieren.',
+  invited: 'Dein Konto ist noch nicht aktiviert. Öffne den Link aus deiner Einladungs-E-Mail und lege dort ein Passwort fest.'
+};
+
+// A signed cookie proves who signed in, and the account decides whether that still counts:
+// every request reads its status, so disabling an account ends its sessions at once.
+export async function requireAdmin(req, res, next) {
   const token = req.cookies?.qrating_admin;
   if (!token) return sendError(req, res, 401, 'Du bist nicht angemeldet. Bitte melde dich an.');
 
+  let session;
   try {
-    req.admin = jwt.verify(token, env.sessionSecret);
-    next();
+    session = jwt.verify(token, env.sessionSecret);
   } catch {
-    sendError(req, res, 401, 'Deine Sitzung ist abgelaufen. Bitte melde dich erneut an.');
+    return sendError(req, res, 401, 'Deine Sitzung ist abgelaufen. Bitte melde dich erneut an.');
+  }
+
+  try {
+    const account = (await query('SELECT status FROM users WHERE id = $1', [session.sub])).rows[0];
+    if (!account || account.status !== 'active') {
+      clearAdminCookie(res);
+      return sendError(req, res, 401, account
+        ? closedAccountMessages[account.status] || 'Dein Konto ist gesperrt. Ein Admin deiner Organisation kann es wieder aktivieren.'
+        : 'Dein Konto gibt es nicht mehr. Bitte melde dich mit einem anderen Konto an.');
+    }
+    req.admin = session;
+    next();
+  } catch (error) {
+    next(error);
   }
 }
 
