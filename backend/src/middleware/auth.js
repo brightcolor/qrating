@@ -53,13 +53,13 @@ export function requireRole(minimumRole) {
 }
 
 // The platform role decides over all organizations, so it is read from the database on every use.
-export function requirePlatformAdmin(db) {
+export function requirePlatformAdmin(db, refusal = 'Diese Ansicht gehört der Plattform-Verwaltung. Dein Konto verwaltet einen einzelnen Mandanten.') {
   return async (req, res, next) => {
     try {
       if (!req.admin) return sendError(req, res, 401, 'Du bist nicht angemeldet. Bitte melde dich an.');
       const result = await db.query('SELECT platform_admin FROM users WHERE id = $1 AND status = $2', [req.admin.sub, 'active']);
       if (!result.rows[0]?.platform_admin) {
-        return sendError(req, res, 403, 'Diese Ansicht gehört der Plattform-Verwaltung. Dein Konto verwaltet einen einzelnen Mandanten.');
+        return sendError(req, res, 403, refusal);
       }
       next();
     } catch (error) {

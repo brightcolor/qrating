@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.58.0
+**Version:** 0.58.1
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -236,6 +236,7 @@ This keeps the product matrix visible without letting visitors self-upgrade.
 The product website (`/`, `/faq`, `/impressum`, `/datenschutz`) is a separate bundle with its own design:
 
 - texts, section headings, button labels, and an optional event photo come from the Website admin area; an empty heading shows the default text
+- only platform admins save these texts: `PATCH /api/admin/site-content` answers 403 to every account of a single tenant, its owner included
 - plan cards read the plan matrix; request buttons open an email to the contact address
 - the QR code in the header area encodes the link of the second button on the feedback domain, so visitors can scan it and try the guest page
 - fonts are bundled with Fontsource and load from the own domain
@@ -590,7 +591,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.58.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.58.1`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

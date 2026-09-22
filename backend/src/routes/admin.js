@@ -2,7 +2,7 @@ import express from 'express';
 import { productCredit, renderQrSvg } from '../utils/qrCode.js';
 import bcrypt from 'bcryptjs';
 import { query, withTransaction } from '../db/pool.js';
-import { canAccessEvent, hasRole, requireAdmin, requireRole } from '../middleware/auth.js';
+import { canAccessEvent, hasRole, requireAdmin, requirePlatformAdmin, requireRole } from '../middleware/auth.js';
 import { httpError } from '../middleware/errors.js';
 import { env } from '../config/env.js';
 import { decryptSecret, encryptSecret, hashValue } from '../utils/crypto.js';
@@ -45,7 +45,10 @@ adminRouter.get('/site-content', async (req, res, next) => {
   }
 });
 
-adminRouter.patch('/site-content', requireRole('admin'), async (req, res, next) => {
+// The product website belongs to the whole installation, so the platform role alone changes it.
+const siteContentRefusal = 'Die Produktwebsite ändern nur Plattform-Admins. Frag einen Plattform-Admin, wenn dort etwas angepasst werden soll.';
+
+adminRouter.patch('/site-content', requirePlatformAdmin({ query }, siteContentRefusal), async (req, res, next) => {
   try {
     const site = await updateSiteContent({ query }, req.body.content || req.body, req.admin.sub);
     res.json({ content: site.content, updatedAt: site.updated_at, updatedBy: site.updated_by });

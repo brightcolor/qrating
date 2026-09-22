@@ -4,6 +4,17 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.58.1] - 2026-09-22
+
+### Security
+
+- Only platform admins change the product website. The admin area had shown the page to the platform role alone, while `PATCH /api/admin/site-content` still accepted every admin and owner of a tenant; the server now answers them with 403.
+
+### Changed
+
+- A refused change of plans tells the account to ask a platform admin. The previous text sent it to a place under Mandanten where the role cannot be given.
+- Version bumped to `0.58.1`.
+
 ## [0.58.0] - 2026-09-21
 
 ### Added

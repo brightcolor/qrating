@@ -176,7 +176,7 @@ export async function getPublicPricingPlans(db) {
 
 export async function updateBillingPlans(db, userId, incomingPlans = []) {
   const user = (await db.query('SELECT id, email, platform_admin FROM users WHERE id = $1', [userId])).rows[0] || {};
-  if (!canOverrideBilling(user)) throw httpError(403, 'Tarife dürfen nur Plattform-Admins ändern. Diese Rolle vergibt ein Plattform-Admin unter Mandanten.');
+  if (!canOverrideBilling(user)) throw httpError(403, 'Tarife ändern nur Plattform-Admins. Frag einen Plattform-Admin, wenn ein Tarif angepasst werden soll.');
   const allowed = new Set(defaultPlanDefinitions.map((plan) => plan.id));
   const normalized = incomingPlans
     .map((plan) => normalizePlan({
@@ -278,7 +278,7 @@ export async function getBillingOverview(db, organizationId, userId) {
 export async function applyBillingOverride(db, organizationId, userId, { plan, expiresAt = null, reason = '' }) {
   if (!['free', 'pro', 'business'].includes(plan)) throw httpError(400, 'Diesen Tarif gibt es nicht. Wähle Free, Pro oder Business.');
   const user = (await db.query('SELECT id, email, platform_admin FROM users WHERE id = $1', [userId])).rows[0] || {};
-  if (!canOverrideBilling(user)) throw httpError(403, 'Tarife freischalten dürfen nur Plattform-Admins. Diese Rolle vergibt ein Plattform-Admin unter Mandanten.');
+  if (!canOverrideBilling(user)) throw httpError(403, 'Tarife schalten nur Plattform-Admins frei. Frag einen Plattform-Admin, wenn deine Organisation einen anderen Tarif braucht.');
   const result = await db.query(
     `UPDATE organizations
      SET billing_override_plan = $2,

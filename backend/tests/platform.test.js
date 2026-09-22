@@ -178,6 +178,41 @@ describe('platform administration', () => {
     expect(list.body.error).toContain('Plattform-Verwaltung');
   });
 
+  it('lets only the platform role change the product website', async () => {
+    const before = (await request('GET', '/public/site')).body.content;
+    const owner = (await query(
+      `INSERT INTO users (organization_id, name, email, password_hash, role, status)
+       VALUES ($1, 'Hallenchefin', 'halle@example.test', 'x', 'owner', 'active')
+       RETURNING *`,
+      [secondOrganizationId]
+    )).rows[0];
+    const { signAdmin } = await import('../src/middleware/auth.js');
+
+    // The owner holds the highest role of a tenant and still reaches no further than the tenant.
+    const refused = await request('PATCH', '/admin/site-content', {
+      cookie: `qrating_admin=${signAdmin(owner)}`,
+      body: { content: { ...before, headline: 'Vom Mandanten geändert' } }
+    });
+    expect(refused.status).toBe(403);
+    expect(refused.body.error).toContain('Plattform-Admins');
+    expect((await request('GET', '/public/site')).body.content.headline).toBe(before.headline);
+
+    const saved = await request('PATCH', '/admin/site-content', {
+      cookie: platformCookie,
+      body: { content: { ...before, headline: 'Von der Plattform geändert' } }
+    });
+    expect(saved.status).toBe(200);
+
+    // Inside a visited tenant the account keeps its platform role.
+    const entered = await request('POST', `/admin/platform/organizations/${secondOrganizationId}/enter`, { cookie: platformCookie });
+    const visiting = await request('PATCH', '/admin/site-content', {
+      cookie: entered.cookie,
+      body: { content: { ...before, headline: 'Beim Besuch geändert' } }
+    });
+    expect(visiting.status).toBe(200);
+    expect((await request('GET', '/public/site')).body.content.headline).toBe('Beim Besuch geändert');
+  });
+
   it('sends the report of a visited tenant to the platform account itself', async () => {
     const entered = await request('POST', `/admin/platform/organizations/${secondOrganizationId}/enter`, { cookie: platformCookie });
     const visiting = entered.cookie;
