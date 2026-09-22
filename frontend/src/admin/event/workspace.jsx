@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api, assetUrl } from '../../lib/api.js';
 import { useAdmin } from '../context.js';
 import { eventTabs } from '../navigation.js';
-import { Button, ErrorBox, Icon, Loading, Notice, Page, Stars, Tabs, useAsync } from '../ui.jsx';
+import { Button, ErrorBox, EventsUnavailable, Icon, Loading, Notice, Page, Stars, Tabs, useAsync } from '../ui.jsx';
 import { EventSwitcher, PreviewButton, ReportMenu } from './actions.jsx';
 import { Analytics, InboxStream, KpiInline } from './analytics.jsx';
 import { dateBlock, formatDateLine, formatLongDate, formatWhen, kpis, recentActivity, roundInfo, timelineModel } from './model.js';
@@ -14,18 +14,25 @@ import { EventsTable } from '../pages/events.jsx';
 export function EventWorkspace({ eventId, tab }) {
   const { events, eventsState, currentEvent, go, theme, reloadEvents } = useAdmin();
   const [message, setMessage] = useState('');
+  const [fallback, setFallback] = useState(null);
   const [reload, setReload] = useState(0);
   const event = events.find((item) => item.id === eventId) || null;
 
-  // An address without an event, or with one that is gone, opens the current event instead
+  // An address without an event, or with one that is not in the list, opens the current event
   // and says so. The address follows, so a reload lands on the same page.
   useEffect(() => {
     if (eventsState.loading || event || !currentEvent) return;
-    if (eventId) setMessage('Dieses Event gibt es nicht mehr. Hier ist das aktuelle.');
+    if (eventId) setFallback({ eventId: currentEvent.id, tab });
     go({ page: 'event', eventId: currentEvent.id, tab }, { replace: true });
   }, [eventId, event, eventsState.loading, currentEvent, tab, go]);
 
-  const { data: analytics, error } = useAsync(() => (event ? api(`/admin/events/${event.id}/analytics`) : Promise.resolve(null)), [event?.id, reload]);
+  // The numbers carry the event they belong to; while the next event loads, the page shows
+  // none, so no figure of the event before stands under the new name.
+  const { data: loaded, error } = useAsync(
+    () => (event ? api(`/admin/events/${event.id}/analytics`).then((data) => ({ eventId: event.id, data })) : Promise.resolve(null)),
+    [event?.id, reload]
+  );
+  const analytics = loaded && loaded.eventId === event?.id ? loaded.data : null;
   const refresh = () => {
     setReload((value) => value + 1);
     reloadEvents();
@@ -33,9 +40,15 @@ export function EventWorkspace({ eventId, tab }) {
 
   if (!event) {
     if (eventsState.loading) return <Loading />;
+    if (eventsState.error) return <Page title="Events"><EventsUnavailable error={eventsState.error} onRetry={reloadEvents} /></Page>;
     return <Page title="Events"><p className="text-q-muted">Noch kein Event. Lege unter Events eines an oder hole deine Events aus Pretix.</p>
       <div><Button variant="primary" icon="plus" onClick={() => go({ page: 'events' })}>Event anlegen</Button></div></Page>;
   }
+
+  // The note about the link stays with the page it led to and goes once the person moves on.
+  const fallbackNote = fallback && fallback.eventId === event.id && fallback.tab === tab
+    ? 'Das verlinkte Event steht nicht in deiner Eventliste. Hier ist das aktuelle.'
+    : '';
 
   const setTab = (id) => go({ page: 'event', eventId: event.id, tab: id });
   const content = tab === 'fragen' ? <QuestionsTab event={event} onChanged={reloadEvents} />
@@ -45,6 +58,7 @@ export function EventWorkspace({ eventId, tab }) {
   const Frame = frames[theme.id] || BandFrame;
   const shared = { event, tab, setTab, analytics, onMessage: setMessage, onChanged: refresh };
   return <div className={`ws ws-${theme.id}`}>
+    <Notice message={fallbackNote} className="mb-3" />
     <Notice message={message} className="mb-3" />
     <ErrorBox error={error} className="mb-3" />
     <Frame {...shared}>{content}</Frame>
@@ -218,6 +232,8 @@ function CrumbFrame({ event, tab, setTab, onMessage, children }) {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const target = e.target;
       if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return;
+      // An open search or drawer lies over the tabs; the digits belong to it.
+      if (document.querySelector('[aria-modal="true"]')) return;
       const index = Number(e.key) - 1;
       if (index >= 0 && index < eventTabs.length) setTab(eventTabs[index].id);
     };

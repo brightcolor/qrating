@@ -21,8 +21,10 @@ export function AuthGate({ onLogin }) {
     if (setup?.setupRequired) return { setup };
     try {
       return { setup, me: await api('/admin/me') };
-    } catch {
-      return { setup };
+    } catch (err) {
+      // Without a session the sign-in follows; any other failure is shown with its reason.
+      if (err?.status === 401) return { setup };
+      throw err;
     }
   }, []);
   useEffect(() => {
@@ -76,11 +78,41 @@ function FirstAdminSetup({ setup, onLogin }) {
   </AuthShell>;
 }
 
+// The second step for an account with a second factor. It follows the password wherever the
+// password was typed in: at the sign-in, after a reset and with an invitation.
+function TwoFactorStep({ challenge, intro, onLogin, onBack }) {
+  const [code, setCode] = useState('');
+  const [error, setError] = useState('');
+
+  async function submit(e) {
+    e.preventDefault();
+    setError('');
+    try {
+      const data = await api('/admin/login/2fa', {
+        method: 'POST',
+        body: JSON.stringify({ challengeToken: challenge.challengeToken, code })
+      });
+      onLogin(data.user);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  return <AuthShell title="2FA bestätigen">
+    <form onSubmit={submit} className="grid gap-3">
+      <p className="text-q-muted">{intro || 'Gib den Code aus deiner Authenticator-App oder einen Recovery-Code ein.'}</p>
+      <Field label="Code"><Input value={code} onChange={(e) => setCode(e.target.value)} autoFocus inputMode="numeric" autoComplete="one-time-code" /></Field>
+      {error && <p role="alert" className="q-notice q-notice-error">{error}</p>}
+      <Button type="submit" variant="primary">Anmelden</Button>
+      {onBack && <Button variant="ghost" onClick={onBack}>Zurück zur Anmeldung</Button>}
+    </form>
+  </AuthShell>;
+}
+
 function Login({ onLogin }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [twoFactor, setTwoFactor] = useState(null);
-  const [twoFactorCode, setTwoFactorCode] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
@@ -95,23 +127,8 @@ function Login({ onLogin }) {
       const data = await api('/admin/login', { method: 'POST', body: JSON.stringify({ email, password }) });
       if (data.twoFactorRequired) {
         setTwoFactor(data);
-        setMessage('Bitte bestätige die Anmeldung mit dem Code aus deiner Authenticator-App.');
         return;
       }
-      onLogin(data.user);
-    } catch (err) {
-      setError(err.message);
-    }
-  }
-
-  async function submitTwoFactor(e) {
-    e.preventDefault();
-    setError('');
-    try {
-      const data = await api('/admin/login/2fa', {
-        method: 'POST',
-        body: JSON.stringify({ challengeToken: twoFactor.challengeToken, code: twoFactorCode })
-      });
       onLogin(data.user);
     } catch (err) {
       setError(err.message);
@@ -133,16 +150,7 @@ function Login({ onLogin }) {
     }
   }
 
-  if (twoFactor) return <AuthShell title="2FA bestätigen">
-    <form onSubmit={submitTwoFactor} className="grid gap-3">
-      <p className="text-q-muted">Gib den Code aus deiner Authenticator-App oder einen Recovery-Code ein.</p>
-      <Field label="Code"><Input value={twoFactorCode} onChange={(e) => setTwoFactorCode(e.target.value)} autoFocus inputMode="numeric" autoComplete="one-time-code" /></Field>
-      {error && <p role="alert" className="q-notice q-notice-error">{error}</p>}
-      <Notice message={message} />
-      <Button type="submit" variant="primary">Anmelden</Button>
-      <Button variant="ghost" onClick={() => setTwoFactor(null)}>Zurück zur Anmeldung</Button>
-    </form>
-  </AuthShell>;
+  if (twoFactor) return <TwoFactorStep challenge={twoFactor} onLogin={onLogin} onBack={() => setTwoFactor(null)} />;
 
   return <AuthShell title="Anmelden">
     <form onSubmit={submit} className="grid gap-3">
@@ -160,6 +168,7 @@ export function AcceptInvite({ token, onLogin }) {
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [twoFactor, setTwoFactor] = useState(null);
   async function submit(e) {
     e.preventDefault();
     setError('');
@@ -173,11 +182,16 @@ export function AcceptInvite({ token, onLogin }) {
     }
     try {
       const data = await api('/admin/accept-invite', { method: 'POST', body: JSON.stringify({ token, name, password }) });
+      if (data.twoFactorRequired) {
+        setTwoFactor(data);
+        return;
+      }
       onLogin(data.user);
     } catch (err) {
       setError(err.message);
     }
   }
+  if (twoFactor) return <TwoFactorStep challenge={twoFactor} intro="Dein Passwort ist gespeichert. Bestätige die Anmeldung mit dem Code aus deiner Authenticator-App oder einem Recovery-Code." onLogin={onLogin} />;
   return <AuthShell title="Einladung abschließen">
     <form onSubmit={submit} className="grid gap-3">
       <Field label="Dein Name"><Input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" /></Field>
@@ -191,6 +205,7 @@ export function AcceptInvite({ token, onLogin }) {
 export function ResetPassword({ token, onLogin }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [twoFactor, setTwoFactor] = useState(null);
   async function submit(e) {
     e.preventDefault();
     setError('');
@@ -204,11 +219,16 @@ export function ResetPassword({ token, onLogin }) {
     }
     try {
       const data = await api('/admin/password-reset/confirm', { method: 'POST', body: JSON.stringify({ token, password }) });
+      if (data.twoFactorRequired) {
+        setTwoFactor(data);
+        return;
+      }
       onLogin(data.user);
     } catch (err) {
       setError(err.message);
     }
   }
+  if (twoFactor) return <TwoFactorStep challenge={twoFactor} intro="Dein neues Passwort ist gespeichert. Bestätige die Anmeldung mit dem Code aus deiner Authenticator-App oder einem Recovery-Code." onLogin={onLogin} />;
   return <AuthShell title="Passwort neu setzen">
     <form onSubmit={submit} className="grid gap-3">
       <Field label="Neues Passwort" hint="Mindestens 10 Zeichen."><Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" /></Field>

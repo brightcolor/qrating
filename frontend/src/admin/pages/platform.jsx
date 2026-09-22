@@ -9,7 +9,9 @@ import { SectionTabs } from './settings.jsx';
 // The pages of the platform role: all tenants, the product website, the plans.
 export function PlatformPage({ section }) {
   const { theme, go, me } = useAdmin();
-  if (me && !me.platformAdmin) {
+  // The role is known once the account has loaded; until then the page shows nothing of it.
+  if (!me) return <Loading />;
+  if (!me.platformAdmin) {
     return <Page title="Plattform"><p className="text-q-muted">Diese Seiten gehören der Plattform-Rolle. Frag einen Plattform-Admin, wenn du hier etwas ändern möchtest.</p></Page>;
   }
   const Section = { mandanten: Tenants, website: Website, tarife: Plans }[section] || Tenants;

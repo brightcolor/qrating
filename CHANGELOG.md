@@ -4,6 +4,39 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.58.2] - 2026-09-22
+
+### Security
+
+- Every role reaches only the events of its own organization. The check behind the evaluation, the QR numbers, the image cache, the report mail, forms and callbacks let an owner, admin or event manager of one tenant read another tenant's event whose id they knew, the guests' texts included; such an event now answers with 404. The report job checks the organization as well.
+- An invitation no longer takes over an existing account. It renews an open invitation of the same organization; for an address that belongs to an account in use, or to any account of another organization, it answers 409 and leaves the account as it is. Before, the owner of a tenant on Business could invite the address of any account, the platform account included, and sign in with it.
+- An account with a second factor gets no session from a password reset link or an invitation alone. Both end at the code from the app, like the sign-in.
+- A disabled platform account keeps no rights over plans, even while an older session cookie of it is still valid.
+
+### Fixed
+
+- Saving the status, the image or the upcoming events of an event keeps its end and the hours of its round. Before, each of these saves emptied both.
+- Retention periods take whole days from 1 on. A negative period or zero, sent past the form, would have let the next deletion run take all feedback. An empty field for callback numbers is refused; the privacy page names the 90 days the deletion job uses.
+- The wallboard quotes a guest only when the guest agreed to be quoted.
+- Pages that need the list of events say why it failed and offer to load it again. Before, they said there was no event yet and offered to create one.
+- Signing out opens a fresh page, so the next account on the same device sees nothing of the previous one. A failed sign-out says so.
+- A failure while loading the own account is shown with its reason; only an ended session leads back to the sign-in.
+- Choices of a look are saved in order, so the last click is the one the account keeps. A failed save returns to the look the account keeps and names it.
+- An address with a broken percent sign opens the overview; before, the page stayed blank.
+- After a switch of events, the evaluation and the wallboard show no figures of the event before.
+- The search of the look Kommandozeile closes with Escape wherever the focus sits, keeps Tab inside, and returns the focus on closing; the digits for the tabs wait while it is open. On a Mac it opens with Cmd K, and Ctrl K stays with the text fields.
+- The drawer on a phone closes with the back button and when the screen turns wide.
+- Saving one text of the guest page keeps what was typed into the others.
+- The assignments of the team belong to the event they were loaded for, so a quick switch never saves the ticks of one event into another.
+- The platform pages wait for the account before they show anything.
+- Error messages name the current places of the admin area, such as Plattform → Tarife and Einstellungen → Verbindungen.
+
+### Changed
+
+- Migration `033` adds indexes for the answers of a vote, the questions of a form and the forms of an event, which the evaluation, the callbacks and the wallboard look up.
+- `PATCH /api/admin/me/preferences` without `adminTheme` leaves the chosen look as it is.
+- Version bumped to `0.58.2`.
+
 ## [0.58.1] - 2026-09-22
 
 ### Security

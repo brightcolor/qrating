@@ -228,7 +228,7 @@ export class NotificationService {
         text: source ? lowRatingDetailMessage(source.event, source.feedback) : payload.text
       });
       if (result?.skipped) {
-        throw httpError(400, 'Der E-Mail-Versand ist nicht eingerichtet oder ausgeschaltet. Richte ihn unter SMTP ein und aktiviere ihn.');
+        throw httpError(400, 'Der E-Mail-Versand ist nicht eingerichtet oder ausgeschaltet. Richte ihn unter Einstellungen → Verbindungen ein und aktiviere ihn.');
       }
       return result;
     }

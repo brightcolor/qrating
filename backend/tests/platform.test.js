@@ -260,4 +260,16 @@ describe('platform administration', () => {
     expect(sent.body.message || sent.body.error).toMatch(/Benutzerkonto/);
   });
 
+  it('takes the plans away from a platform account once it is disabled, even with a valid cookie', async () => {
+    const platformUser = (await query("SELECT id FROM users WHERE email = 'platform@example.test'")).rows[0];
+    await query("UPDATE users SET status = 'disabled' WHERE id = $1", [platformUser.id]);
+
+    const override = await request('PATCH', '/admin/billing/override', { cookie: platformCookie, body: { plan: 'pro' } });
+    const plans = await request('PATCH', '/admin/billing/plans', { cookie: platformCookie, body: { plans: [] } });
+    await query("UPDATE users SET status = 'active' WHERE id = $1", [platformUser.id]);
+
+    expect([override.status, plans.status]).toEqual([403, 403]);
+    expect(override.body.error).toContain('Plattform-Admins');
+  });
+
 });

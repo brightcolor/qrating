@@ -104,7 +104,7 @@ describe('BillingService', () => {
     env.billingAdminEmails = ['owner@example.com'];
     const db = {
       query: vi.fn(async (sql) => {
-        if (sql.includes('FROM users')) return { rows: [{ email: 'owner@example.com' }] };
+        if (sql.includes('FROM users')) return { rows: [{ email: 'owner@example.com', status: 'active' }] };
         if (sql.includes('FROM billing_plans')) return { rows: dbPlanRows };
         return { rows: [] };
       })

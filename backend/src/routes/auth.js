@@ -73,6 +73,23 @@ async function completeLogin(res, user, secondFactorResult = { recoveryHashes: n
   return publicUser(user);
 }
 
+// A password alone opens no session for an account with a second factor, however it was
+// typed in: at the sign-in, after a reset or with an invitation. Such an account gets a short
+// challenge, and the code from the app completes the sign-in under /login/2fa.
+async function beginSession(res, user) {
+  if (!user.two_factor_enabled) return { user: await completeLogin(res, user) };
+  const challengeToken = randomToken(32);
+  await query(
+    `UPDATE users
+     SET two_factor_challenge_hash = $2,
+         two_factor_challenge_expires_at = now() + interval '10 minutes',
+         updated_at = now()
+     WHERE id = $1`,
+    [user.id, hashValue(challengeToken)]
+  );
+  return { twoFactorRequired: true, challengeToken, user: { email: user.email, name: user.name } };
+}
+
 authRouter.get('/setup/status', async (req, res, next) => {
   try {
     const userCount = Number((await query('SELECT count(*)::int AS count FROM users')).rows[0]?.count || 0);
@@ -166,23 +183,7 @@ authRouter.post('/login', authLimiter, async (req, res, next) => {
     }
     if (user.status === 'disabled') throw httpError(403, 'Dieses Konto ist deaktiviert. Ein Admin deiner Organisation kann es wieder aktivieren.');
     if (user.status === 'invited') throw httpError(403, 'Dieses Konto ist noch nicht aktiviert. Öffne den Link aus deiner Einladungs-E-Mail und lege dort ein Passwort fest.');
-    if (user.two_factor_enabled) {
-      const challengeToken = randomToken(32);
-      await query(
-        `UPDATE users
-         SET two_factor_challenge_hash = $2,
-             two_factor_challenge_expires_at = now() + interval '10 minutes',
-             updated_at = now()
-         WHERE id = $1`,
-        [user.id, hashValue(challengeToken)]
-      );
-      return res.json({
-        twoFactorRequired: true,
-        challengeToken,
-        user: { email: user.email, name: user.name }
-      });
-    }
-    res.json({ user: await completeLogin(res, user) });
+    res.json(await beginSession(res, user));
   } catch (error) {
     next(error);
   }
@@ -244,7 +245,7 @@ authRouter.post('/accept-invite', authLimiter, async (req, res, next) => {
        RETURNING *`,
       [user.id, passwordHash, name]
     )).rows[0];
-    res.json({ user: await completeLogin(res, updated) });
+    res.json(await beginSession(res, updated));
   } catch (error) {
     next(error);
   }
@@ -304,7 +305,7 @@ authRouter.post('/password-reset/confirm', authLimiter, async (req, res, next) =
        RETURNING *`,
       [user.id, passwordHash]
     )).rows[0];
-    res.json({ user: await completeLogin(res, updated) });
+    res.json(await beginSession(res, updated));
   } catch (error) {
     next(error);
   }
@@ -346,17 +347,22 @@ authRouter.get('/me', requireAdmin, async (req, res, next) => {
 });
 
 // The look of the admin area belongs to the person, in whichever tenant they are working.
-// An unknown name is kept out; the page itself falls back to the default look for anything
-// it does not know, so an older name left behind by a later release does no harm.
+// Only a name in the shape of a look is stored. The page falls back to the default look for
+// a name it does not know, so a name left behind by an older release does no harm.
+// A request without `adminTheme` leaves the choice as it is.
 authRouter.patch('/me/preferences', requireAdmin, async (req, res, next) => {
   try {
+    const named = Object.hasOwn(req.body || {}, 'adminTheme');
     const theme = req.body?.adminTheme ?? null;
     if (theme !== null && (typeof theme !== 'string' || !/^[a-z0-9-]{1,40}$/.test(theme))) {
       throw httpError(400, 'Dieses Design gibt es nicht. Wähle eines unter Einstellungen → Darstellung.');
     }
     const updated = (await query(
-      'UPDATE users SET admin_theme = $2, updated_at = now() WHERE id = $1 RETURNING admin_theme',
-      [req.admin.sub, theme]
+      `UPDATE users
+       SET admin_theme = CASE WHEN $3::boolean THEN $2 ELSE admin_theme END, updated_at = now()
+       WHERE id = $1
+       RETURNING admin_theme`,
+      [req.admin.sub, theme, named]
     )).rows[0];
     if (!updated) throw httpError(404, 'Dein Benutzerkonto wurde nicht gefunden. Bitte melde dich erneut an.');
     res.json({ adminTheme: updated.admin_theme });

@@ -24,7 +24,7 @@ function answerText(value) {
 export async function eventVoices(db, eventId, limit = 100) {
   const votes = (await db.query(
     `SELECT fr.id, fr.rating, fr.submitted_at, fr.completed_at, fr.source_type,
-            fr.comment_positive, fr.comment_improvement, fr.general_comment,
+            fr.comment_positive, fr.comment_improvement, fr.general_comment, fr.testimonial_allowed,
             qs.label AS source_label,
             lrc.id AS case_id, lrc.status AS case_status,
             (lrc.contact_phone_encrypted IS NOT NULL) AS case_has_phone
@@ -67,6 +67,8 @@ export async function eventVoices(db, eventId, limit = 100) {
       source: vote.source_label || null,
       sourceType: vote.source_type,
       texts,
+      // Only a guest who agreed to it may be quoted where others can read along.
+      testimonialAllowed: Boolean(vote.testimonial_allowed),
       caseId: vote.case_id || null,
       caseStatus: vote.case_status || null,
       caseOpen: openCaseStatuses.includes(vote.case_status),

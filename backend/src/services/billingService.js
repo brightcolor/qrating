@@ -175,7 +175,7 @@ export async function getPublicPricingPlans(db) {
 }
 
 export async function updateBillingPlans(db, userId, incomingPlans = []) {
-  const user = (await db.query('SELECT id, email, platform_admin FROM users WHERE id = $1', [userId])).rows[0] || {};
+  const user = (await db.query('SELECT id, email, platform_admin, status FROM users WHERE id = $1', [userId])).rows[0] || {};
   if (!canOverrideBilling(user)) throw httpError(403, 'Tarife ändern nur Plattform-Admins. Frag einen Plattform-Admin, wenn ein Tarif angepasst werden soll.');
   const allowed = new Set(defaultPlanDefinitions.map((plan) => plan.id));
   const normalized = incomingPlans
@@ -243,7 +243,10 @@ export function effectiveBillingPlan(organization, now = new Date()) {
 }
 
 // The platform role decides over the plans of every tenant; the mail list stays as a fallback.
+// Either way the account has to be in use: a disabled account keeps no rights over plans,
+// even while an older session cookie of it is still valid.
 function canOverrideBilling(user) {
+  if (user.status !== 'active') return false;
   return Boolean(user.platform_admin) || env.billingAdminEmails.includes(String(user.email || '').toLowerCase());
 }
 
@@ -266,7 +269,7 @@ function publicBilling(organization, user) {
 
 export async function getBillingOverview(db, organizationId, userId) {
   const org = (await db.query('SELECT * FROM organizations WHERE id = $1', [organizationId])).rows[0];
-  const user = (await db.query('SELECT id, email, platform_admin FROM users WHERE id = $1', [userId])).rows[0] || {};
+  const user = (await db.query('SELECT id, email, platform_admin, status FROM users WHERE id = $1', [userId])).rows[0] || {};
   const plans = await getBillingPlans(db);
   return {
     billing: publicBilling(org, user),
@@ -277,7 +280,7 @@ export async function getBillingOverview(db, organizationId, userId) {
 
 export async function applyBillingOverride(db, organizationId, userId, { plan, expiresAt = null, reason = '' }) {
   if (!['free', 'pro', 'business'].includes(plan)) throw httpError(400, 'Diesen Tarif gibt es nicht. Wähle Free, Pro oder Business.');
-  const user = (await db.query('SELECT id, email, platform_admin FROM users WHERE id = $1', [userId])).rows[0] || {};
+  const user = (await db.query('SELECT id, email, platform_admin, status FROM users WHERE id = $1', [userId])).rows[0] || {};
   if (!canOverrideBilling(user)) throw httpError(403, 'Tarife schalten nur Plattform-Admins frei. Frag einen Plattform-Admin, wenn deine Organisation einen anderen Tarif braucht.');
   const result = await db.query(
     `UPDATE organizations

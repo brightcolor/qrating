@@ -3,7 +3,7 @@ import { api } from '../../lib/api.js';
 import { useAdmin } from '../context.js';
 import { eventLabel, formatDate } from '../eventLabel.js';
 import { settingsParts, settingsSections } from '../navigation.js';
-import { shellListsSections, themes } from '../themes.js';
+import { shellListsSections, themeFor, themes } from '../themes.js';
 import { Button, Check, ErrorBox, Field, Icon, Input, Loading, Notice, Page, Panel, Select, Tabs, TextArea, errorNotice, useAsync } from '../ui.jsx';
 import { SecurityCenter, Operations } from './security.jsx';
 
@@ -130,7 +130,11 @@ function Team() {
   const [reload, setReload] = useState(0);
   const { data: users, loading, error } = useAsync(() => api('/admin/users'), [reload]);
   const [selectedEvent, setSelectedEvent] = useState('');
-  const [assignments, setAssignments] = useState([]);
+  // The ticks belong to one event. After a switch, the list and the save button wait for the
+  // answer about the new event, so the ticks of one event never land on another.
+  const [loadedAssignments, setLoadedAssignments] = useState({ eventId: null, rows: [] });
+  const assignments = loadedAssignments.eventId === selectedEvent ? loadedAssignments.rows : [];
+  const setAssignments = (rows) => setLoadedAssignments({ eventId: selectedEvent, rows });
   const [invite, setInvite] = useState({ name: '', email: '', role: 'support' });
   const [message, setMessage] = useState('');
 
@@ -139,8 +143,14 @@ function Team() {
   }, [events, selectedEvent]);
 
   useEffect(() => {
-    if (!selectedEvent) return;
-    api(`/admin/events/${selectedEvent}/assignments`).then(setAssignments).catch((err) => setMessage(errorNotice(err)));
+    if (!selectedEvent) return undefined;
+    let active = true;
+    api(`/admin/events/${selectedEvent}/assignments`)
+      .then((rows) => active && setLoadedAssignments({ eventId: selectedEvent, rows }))
+      .catch((err) => active && setMessage(errorNotice(err)));
+    return () => {
+      active = false;
+    };
   }, [selectedEvent, reload]);
 
   async function inviteUser(e) {
@@ -211,7 +221,7 @@ function Team() {
             <Check label="Rückruf-Meldungen" checked={assignment.notify_low_rating} onChange={toggle(index, 'notify_low_rating')} />
           </div>)}
         </div>
-        <Button variant="primary" className="mt-3" onClick={saveAssignments}>Zuständigkeiten speichern</Button>
+        <Button variant="primary" className="mt-3" onClick={saveAssignments} disabled={loadedAssignments.eventId !== selectedEvent}>Zuständigkeiten speichern</Button>
       </Panel>
     </div>
     <Panel title="Rollen und Zugang">
@@ -682,7 +692,7 @@ function Design() {
       await chooseTheme(id);
       setMessage(`Design „${themes.find((item) => item.id === id).name}“ gespeichert. Es gilt für dein Konto, auf jedem Gerät.`);
     } catch (err) {
-      setMessage(errorNotice({ message: `Das Design ist nur in diesem Browser aktiv, gespeichert wurde es nicht: ${err.message}` }));
+      setMessage(errorNotice({ message: `Das Design wurde nicht gespeichert, es bleibt bei „${themeFor(err.keptTheme).name}“. ${err.message}` }));
     }
   }
 

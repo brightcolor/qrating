@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.58.1
+**Version:** 0.58.2
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -114,7 +114,9 @@ After setup:
 
 ## Tenants
 
-An installation carries as many organizations (tenants) as needed. Each one has its own events, forms, texts, QR codes, guests, and users; every query runs inside one organization.
+An installation carries as many organizations (tenants) as needed. Each one has its own events, forms, texts, QR codes, guests, and users; every query runs inside one organization. An event of another organization answers every role with HTTP 404, the owner included, and roles below Event Manager need an assignment to the event as well.
+
+An invitation renews only an open invitation of the same organization. For an address that already belongs to an account in use, or to any account of another organization, it answers HTTP 409 and leaves that account as it is.
 
 The account that completes the first-admin setup also runs the platform. Under Plattform → Mandanten it sees every organization with its plan, events, feedback count, users, and Pretix connections, creates further tenants, and enters one to work inside it. While a platform admin works in another tenant, a banner names it and offers the way back, and entering and leaving are written to the audit log of that tenant.
 
@@ -466,6 +468,10 @@ Handing personal data to a newsletter system belongs in the privacy statement of
 
 Feedback can be anonymous. Newsletter opt-ins are stored separately with consent text and timestamp. New newsletter emails are encrypted at rest and additionally stored as a normalized keyed hash/domain pair for deduplication and reporting without exposing the raw address. Low-rating callback phone numbers and contact notes are encrypted at rest and can be anonymized through retention jobs.
 
+Retention periods are whole days from 1 on; the API answers anything else with HTTP 400 and a reason. An empty period for feedback or newsletter entries keeps them; callback numbers always have a period, 90 days unless set otherwise, and the privacy page states the same.
+
+The wallboard hangs where guests read along. It shows numbers, and it quotes the words of a guest only when that guest agreed to be quoted (`testimonial_allowed`).
+
 The public API returns only visitor-safe event and organization fields. Public status endpoints do not expose internal IDs, Pretix payloads, settings payloads, event tokens, synchronization metadata, or admin-only fields.
 
 Outbound notifications are intentionally redacted:
@@ -512,7 +518,7 @@ Admin areas include events, analytics, exports, forms, texts, QR sources, Pretix
 
 Admin authentication uses the `qrating_admin` HTTP-only cookie. The frontend does not store session tokens in `localStorage` or expose them to JavaScript.
 
-Two-factor authentication can be enabled under **Einstellungen → Sicherheit**. It uses standard TOTP apps and provides one-time recovery codes during setup.
+Two-factor authentication can be enabled under **Einstellungen → Sicherheit**. It uses standard TOTP apps and provides one-time recovery codes during setup. For an account with a second factor, a password opens no session on its own, wherever it was entered: at the sign-in, after a password reset and when an invitation is accepted, the code from the app completes the sign-in (`POST /admin/login/2fa`).
 
 ## Tests And CI
 
@@ -591,7 +597,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.58.1`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.58.2`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

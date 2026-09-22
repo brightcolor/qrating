@@ -31,7 +31,7 @@ import {
 } from '../services/billingService.js';
 import { getQuestionProfile, questionProfiles, toProfileQuestionRows } from '../services/questionProfiles.js';
 import { writeAudit } from '../services/auditService.js';
-import { eventStats, eventVoices } from '../services/voiceService.js';
+import { eventStats, eventVoices, openCaseStatuses } from '../services/voiceService.js';
 
 export const adminRouter = express.Router();
 adminRouter.use(requireAdmin);
@@ -84,6 +84,8 @@ adminRouter.patch('/billing/plans', requireRole('admin'), async (req, res, next)
 });
 
 async function ensureEventAccess(req, eventId) {
+  // An event of another organization answers like one that no longer exists.
+  await loadEvent(req, eventId);
   if (!(await canAccessEvent({ query }, req.admin, eventId))) {
     throw httpError(403, 'Du hast für dieses Event keine Berechtigung. Ein Event-Manager oder Admin kann dich dem Event zuweisen.');
   }
@@ -134,7 +136,7 @@ async function ensureActiveEventLimit(req) {
     [req.admin.organizationId]
   )).rows[0]?.count || 0);
   if (count >= plan.limits.activeEvents) {
-    throw httpError(402, `Der Tarif ${plan.name} erlaubt höchstens ${plan.limits.activeEvents} aktive Events. Für weitere Events braucht deine Organisation einen größeren Tarif; ein Plattform-Admin kann ihn unter Plan & Billing freischalten.`);
+    throw httpError(402, `Der Tarif ${plan.name} erlaubt höchstens ${plan.limits.activeEvents} aktive Events. Für weitere Events braucht deine Organisation einen größeren Tarif; ein Plattform-Admin schaltet ihn unter Plattform → Tarife frei.`);
   }
   return plan;
 }
@@ -147,7 +149,7 @@ async function ensureFormLimit(req) {
     [req.admin.organizationId]
   )).rows[0]?.count || 0);
   if (count >= plan.limits.templates) {
-    throw httpError(402, `Der Tarif ${plan.name} erlaubt höchstens ${plan.limits.templates} Formulare und Fragenprofile. Für weitere braucht deine Organisation einen größeren Tarif; ein Plattform-Admin kann ihn unter Plan & Billing freischalten.`);
+    throw httpError(402, `Der Tarif ${plan.name} erlaubt höchstens ${plan.limits.templates} Formulare und Fragenprofile. Für weitere braucht deine Organisation einen größeren Tarif; ein Plattform-Admin schaltet ihn unter Plattform → Tarife frei.`);
   }
   return plan;
 }
@@ -324,6 +326,7 @@ adminRouter.get('/events/:id', async (req, res, next) => {
 adminRouter.get('/events/:id/assignments', async (req, res, next) => {
   try {
     if (!hasRole(req.admin.role, 'event_manager')) throw httpError(403, 'Event-Zuweisungen können nur Event-Manager, Admins und Owner ändern.');
+    await loadEvent(req, req.params.id);
     const result = await query(
       `SELECT u.id AS user_id, u.name, u.email, COALESCE(uea.notify_low_rating, false) AS notify_low_rating,
               uea.id IS NOT NULL AS assigned
@@ -342,7 +345,8 @@ adminRouter.get('/events/:id/assignments', async (req, res, next) => {
 adminRouter.put('/events/:id/assignments', async (req, res, next) => {
   try {
     if (!hasRole(req.admin.role, 'event_manager')) throw httpError(403, 'Event-Zuweisungen können nur Event-Manager, Admins und Owner ändern.');
-    await ensurePlanFeature(req, 'teams', 'Event-Zuweisungen gehören zum Tarif Business. Ein Plattform-Admin kann ihn unter Plan & Billing freischalten.');
+    await ensurePlanFeature(req, 'teams', 'Event-Zuweisungen gehören zum Tarif Business. Ein Plattform-Admin schaltet ihn unter Plattform → Tarife frei.');
+    await loadEvent(req, req.params.id);
     const assignments = Array.isArray(req.body.assignments) ? req.body.assignments : [];
     const wanted = assignments.filter((item) => item.assigned);
     // The team of an event is made of accounts of this organization. The list the page
@@ -393,11 +397,13 @@ adminRouter.patch('/events/:id', async (req, res, next) => {
         name = COALESCE($3, name),
         location = COALESCE($4, location),
         date_from = COALESCE($5, date_from),
-        date_to = $6,
+        -- Empty is a value here (no end, no hours), so both change only when the request names
+        -- them; saving the status or the image alone keeps the end of the event.
+        date_to = CASE WHEN $19::boolean THEN $6::timestamptz ELSE date_to END,
         feedback_enabled = COALESCE($7, feedback_enabled),
         status = COALESCE($8, status),
         feedback_window_days = COALESCE($9, feedback_window_days),
-        feedback_window_hours = $10,
+        feedback_window_hours = CASE WHEN $20::boolean THEN $10::int ELSE feedback_window_hours END,
         resolver_priority = COALESCE($11, resolver_priority),
         upcoming_enabled = COALESCE($16, upcoming_enabled),
         ticket_link_enabled = COALESCE($18, ticket_link_enabled),
@@ -426,7 +432,9 @@ adminRouter.patch('/events/:id', async (req, res, next) => {
         image.alt,
         req.body.upcomingEnabled === undefined ? null : Boolean(req.body.upcomingEnabled),
         req.body.upcomingEventIds === undefined ? null : JSON.stringify(cleanEventIds(req.body.upcomingEventIds)),
-        req.body.ticketLinkEnabled === undefined ? null : Boolean(req.body.ticketLinkEnabled)
+        req.body.ticketLinkEnabled === undefined ? null : Boolean(req.body.ticketLinkEnabled),
+        Object.hasOwn(req.body, 'dateTo'),
+        Object.hasOwn(req.body, 'feedbackWindowHours')
       ]
     );
     if (!result.rows[0]) throw httpError(404, 'Dieses Event gibt es nicht mehr oder es gehört zu einer anderen Organisation. Lade die Liste neu.');
@@ -545,10 +553,10 @@ adminRouter.get('/events/:id/analytics', async (req, res, next) => {
     }));
     const voices = await eventVoices({ query }, req.params.id);
     const cases = await query(
-      `SELECT count(*) FILTER (WHERE status IN ('open','contact_planned'))::int AS open,
-              count(*) FILTER (WHERE status IN ('open','contact_planned') AND contact_phone_encrypted IS NOT NULL)::int AS open_with_phone
+      `SELECT count(*) FILTER (WHERE status = ANY($2::text[]))::int AS open,
+              count(*) FILTER (WHERE status = ANY($2::text[]) AND contact_phone_encrypted IS NOT NULL)::int AS open_with_phone
        FROM low_rating_cases WHERE event_id = $1`,
-      [req.params.id]
+      [req.params.id, openCaseStatuses]
     );
     res.json({
       abandoned,
@@ -798,7 +806,7 @@ adminRouter.post('/events/:id/report-email', async (req, res, next) => {
       [req.admin.organizationId]
     )).rows.length > 0;
     if (!smtpEnabled) {
-      throw httpError(400, 'Der E-Mail-Versand ist nicht eingerichtet oder ausgeschaltet. Richte ihn unter SMTP ein, dann verschickt qrating den Report.');
+      throw httpError(400, 'Der E-Mail-Versand ist nicht eingerichtet oder ausgeschaltet. Richte ihn unter Einstellungen → Verbindungen ein, dann verschickt qrating den Report.');
     }
     const job = await enqueueJob({ query }, req.admin.organizationId, 'report.email', {
       eventId: req.params.id,
@@ -1528,7 +1536,7 @@ adminRouter.get('/users', async (req, res, next) => {
 
 adminRouter.post('/users/invite', requireRole('owner'), async (req, res, next) => {
   try {
-    await ensurePlanFeature(req, 'teams', 'Weitere Benutzer einladen gehört zum Tarif Business. Ein Plattform-Admin kann ihn unter Plan & Billing freischalten.');
+    await ensurePlanFeature(req, 'teams', 'Weitere Benutzer einladen gehört zum Tarif Business. Ein Plattform-Admin schaltet ihn unter Plattform → Tarife frei.');
     const email = String(req.body.email || '').trim().toLowerCase();
     const name = String(req.body.name || email.split('@')[0] || 'Neuer User').trim();
     const role = req.body.role || 'support';
@@ -1537,6 +1545,8 @@ adminRouter.post('/users/invite', requireRole('owner'), async (req, res, next) =
     if (!allowedRoles.includes(role)) throw httpError(400, 'Diese Rolle gibt es nicht. Wähle Support, Analyst, Event Manager, Admin oder Owner.');
     const token = randomToken(32);
     const passwordHash = await bcrypt.hash(randomToken(32), 12);
+    // A second invitation renews an open one of this organization. An account that is in
+    // use, or that belongs to another organization, stays exactly as it is.
     const user = (await query(
       `INSERT INTO users (
         organization_id, name, email, password_hash, role, status, invite_token_hash, invite_expires_at, invited_at
@@ -1546,14 +1556,17 @@ adminRouter.post('/users/invite', requireRole('owner'), async (req, res, next) =
       DO UPDATE SET
         name = EXCLUDED.name,
         role = EXCLUDED.role,
-        status = 'invited',
         invite_token_hash = EXCLUDED.invite_token_hash,
         invite_expires_at = EXCLUDED.invite_expires_at,
         invited_at = now(),
         updated_at = now()
+      WHERE users.organization_id = EXCLUDED.organization_id AND users.status = 'invited'
       RETURNING id, name, email, role, status, invite_expires_at`,
       [req.admin.organizationId, name, email, passwordHash, role, hashValue(token)]
     )).rows[0];
+    if (!user) {
+      throw httpError(409, 'Zu dieser E-Mail-Adresse gibt es schon ein Konto. Gehört die Person zu deinem Team, findest du sie unter Einstellungen → Team. Sonst wende dich an einen Plattform-Admin.');
+    }
     const inviteUrl = `${env.adminAppUrl}/admin/accept-invite?token=${token}`;
     const smtp = new SmtpService({ query });
     const mail = await smtp.sendMail(req.admin.organizationId, {
@@ -1609,8 +1622,26 @@ adminRouter.get('/branding', async (req, res, next) => {
   }
 });
 
+// A deletion period counts whole days from 1 on; zero or less would let the next run of the
+// deletion job take everything. Where the field allows it, empty means keeping the data.
+// A request without the field gets null back, which leaves the stored period as it is.
+function retentionDays(body, key, refusal, { emptyKeeps = true } = {}) {
+  if (!Object.hasOwn(body, key)) return null;
+  const raw = body[key];
+  if ((raw === '' || raw === null) && emptyKeeps) return null;
+  const days = Number(raw);
+  if (raw === '' || raw === null || typeof raw === 'boolean' || !Number.isInteger(days) || days < 1) throw httpError(400, refusal);
+  return days;
+}
+
 adminRouter.patch('/branding', requireRole('event_manager'), async (req, res, next) => {
   try {
+    const phoneDays = retentionDays(req.body, 'retentionLowRatingPhoneDays',
+      'Die Löschfrist für Rückrufnummern muss eine ganze Zahl ab 1 sein, zum Beispiel 90.', { emptyKeeps: false });
+    const feedbackDays = retentionDays(req.body, 'retentionFeedbackDays',
+      'Die Löschfrist für Bewertungen muss eine ganze Zahl ab 1 sein. Lass das Feld leer, wenn die Bewertungen bleiben sollen.');
+    const newsletterDays = retentionDays(req.body, 'retentionNewsletterDays',
+      'Die Löschfrist für Newsletter-Anmeldungen muss eine ganze Zahl ab 1 sein. Lass das Feld leer, wenn die Anmeldungen bleiben sollen.');
     const result = await query(
       `UPDATE organizations
        SET name = COALESCE($2, name),
@@ -1654,9 +1685,9 @@ adminRouter.patch('/branding', requireRole('event_manager'), async (req, res, ne
         req.body.facebookUrl,
         req.body.defaultLanguage,
         req.body.branding ? JSON.stringify(req.body.branding) : null,
-        req.body.retentionLowRatingPhoneDays === undefined ? null : Number(req.body.retentionLowRatingPhoneDays),
-        req.body.retentionFeedbackDays === undefined || req.body.retentionFeedbackDays === '' ? null : Number(req.body.retentionFeedbackDays),
-        req.body.retentionNewsletterDays === undefined || req.body.retentionNewsletterDays === '' ? null : Number(req.body.retentionNewsletterDays),
+        phoneDays,
+        feedbackDays,
+        newsletterDays,
         req.body.wallboardSettings ? JSON.stringify(req.body.wallboardSettings) : null,
         req.body.qrMarkEnabled === undefined ? null : Boolean(req.body.qrMarkEnabled),
         req.body.productCreditEnabled === undefined ? null : Boolean(req.body.productCreditEnabled),

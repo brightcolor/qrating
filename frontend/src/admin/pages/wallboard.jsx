@@ -2,12 +2,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../../lib/api.js';
 import { useAdmin } from '../context.js';
 import { eventLabel } from '../eventLabel.js';
-import { formatAverage, hourColumns, relativeTime } from '../event/model.js';
-import { Button, Check, ErrorBox, Field, Input, Notice, Page, Panel, Select, Stars, errorNotice, useAsync } from '../ui.jsx';
+import { formatAverage, hourColumns, relativeTime, wallboardQuotes } from '../event/model.js';
+import { Button, Check, ErrorBox, EventsUnavailable, Field, Input, Notice, Page, Panel, Select, Stars, errorNotice, useAsync } from '../ui.jsx';
 
 // A screen for the wall of the venue: the numbers of one event, refreshed by itself.
 export function WallboardPage({ eventId: wantedId }) {
-  const { events, currentEvent, go } = useAdmin();
+  const { events, eventsState, currentEvent, go, reloadEvents } = useAdmin();
   const { data: branding } = useAsync(() => api('/admin/branding'), []);
   const [settings, setSettings] = useState(null);
   const [message, setMessage] = useState('');
@@ -26,7 +26,12 @@ export function WallboardPage({ eventId: wantedId }) {
     return () => clearInterval(timer);
   }, [refresh]);
 
-  const { data, error } = useAsync(() => (eventId ? api(`/admin/events/${eventId}/analytics`) : Promise.resolve(null)), [eventId, tick]);
+  // The numbers carry their event, so a switch never shows the figures of the one before.
+  const { data: loaded, error } = useAsync(
+    () => (eventId ? api(`/admin/events/${eventId}/analytics`).then((result) => ({ eventId, result })) : Promise.resolve(null)),
+    [eventId, tick]
+  );
+  const data = loaded && loaded.eventId === eventId ? loaded.result : null;
 
   async function saveSettings(e) {
     e.preventDefault();
@@ -41,7 +46,7 @@ export function WallboardPage({ eventId: wantedId }) {
 
   const columns = hourColumns(data?.timeline || [], { columns: 10, zone: event?.event_timezone });
   const dark = settings?.dark !== false;
-  const voices = (data?.voices || []).filter((voice) => voice.texts?.length).slice(0, 3);
+  const voices = wallboardQuotes(data?.voices);
 
   return <Page title="Wallboard" subtitle="Für den Bildschirm im Saal. Aktualisiert sich von selbst." actions={<>
     <Select value={eventId} onChange={(e) => go({ page: 'wallboard', eventId: e.target.value }, { replace: true })} aria-label="Event">
@@ -49,6 +54,7 @@ export function WallboardPage({ eventId: wantedId }) {
     </Select>
     <Button icon="wallboard" onClick={() => board.current?.requestFullscreen?.()}>Vollbild</Button>
   </>}>
+    <EventsUnavailable error={events.length ? null : eventsState.error} onRetry={reloadEvents} />
     <ErrorBox error={error} />
     <section ref={board} className="grid content-start gap-5 rounded-2xl p-6" style={{ background: dark ? '#0B0F14' : '#F5F6F8', color: dark ? '#fff' : '#111827', minHeight: 420 }}>
       <div className="flex flex-wrap items-baseline justify-between gap-3">

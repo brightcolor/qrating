@@ -7,6 +7,7 @@ import { AdminContext } from './admin/context.js';
 import { AcceptInvite, AuthGate, ResetPassword } from './admin/auth.jsx';
 import { navGroups, navKeyFor, pathForRoute, routeFromLocation, routeTitle, sameRoute } from './admin/navigation.js';
 import { ActingBanner, Shell } from './admin/shells.jsx';
+import { Notice, errorNotice } from './admin/ui.jsx';
 import { readCachedTheme, themeFor, writeCachedTheme } from './admin/themes.js';
 import { loadThemeFonts } from './admin/themeFonts.js';
 import { pickCurrentEvent } from './admin/event/model.js';
@@ -40,15 +41,26 @@ function AdminApp() {
   const [eventsState, setEventsState] = useState({ loading: true, error: null });
   // A message that outlives a change of look: the new frame mounts the page afresh.
   const [flash, setFlash] = useState('');
+  // A message about the session itself, shown above every page.
+  const [sessionNotice, setSessionNotice] = useState('');
 
   const theme = useMemo(() => applyTheme(themeId), [themeId]);
+
+  // Choices of a look go to the server one after the other, so the last click is the one the
+  // account keeps. `saved` is the look the server confirmed last; a failed choice returns to it.
+  const themeSaves = useRef({ chain: Promise.resolve(), latest: 0, pending: 0, saved: themeId });
 
   const loadMe = useCallback(async () => {
     const data = await api('/admin/me');
     setMe(data);
+    const saves = themeSaves.current;
     if (data?.adminTheme !== undefined) {
-      setThemeId(data.adminTheme);
-      writeCachedTheme(data.adminTheme);
+      saves.saved = data.adminTheme;
+      // A choice still on its way wins over the account value that was read before it.
+      if (!saves.pending) {
+        setThemeId(data.adminTheme);
+        writeCachedTheme(data.adminTheme);
+      }
     }
     return data;
   }, []);
@@ -66,7 +78,11 @@ function AdminApp() {
 
   useEffect(() => {
     if (!authenticated) return;
-    loadMe().catch(() => setAuthenticated(false));
+    // Only an ended session leads back to the sign-in; any other failure is said out loud.
+    loadMe().catch((error) => {
+      if (error?.status === 401) setAuthenticated(false);
+      else setSessionNotice(errorNotice({ message: `Dein Konto ließ sich nicht laden. ${error?.message || ''} Lade die Seite neu, sobald qrating wieder erreichbar ist.`.replace(/\s+/g, ' ').trim() }));
+    });
     reloadEvents();
   }, [authenticated, loadMe, reloadEvents]);
 
@@ -104,18 +120,40 @@ function AdminApp() {
     if (!replace) window.scrollTo(0, 0);
   }, []);
 
-  const chooseTheme = useCallback(async (id) => {
+  const chooseTheme = useCallback((id) => {
+    const saves = themeSaves.current;
+    const ticket = ++saves.latest;
+    saves.pending += 1;
     setThemeId(id);
     writeCachedTheme(id);
-    const saved = await api('/admin/me/preferences', { method: 'PATCH', body: JSON.stringify({ adminTheme: id }) });
-    setMe((old) => (old ? { ...old, adminTheme: saved.adminTheme } : old));
-    return saved;
+    const request = saves.chain.then(() => api('/admin/me/preferences', { method: 'PATCH', body: JSON.stringify({ adminTheme: id }) }));
+    saves.chain = request.catch(() => null);
+    return request.then((saved) => {
+      saves.saved = saved.adminTheme;
+      setMe((old) => (old ? { ...old, adminTheme: saved.adminTheme } : old));
+      return saved;
+    }, (error) => {
+      // The newest choice failed: the page returns to the look the account really keeps.
+      if (ticket === saves.latest) {
+        setThemeId(saves.saved);
+        writeCachedTheme(saves.saved);
+      }
+      throw Object.assign(error, { keptTheme: saves.saved });
+    }).finally(() => {
+      saves.pending -= 1;
+    });
   }, []);
 
   const logout = useCallback(async () => {
-    await api('/admin/logout', { method: 'POST', body: JSON.stringify({}) }).catch(() => null);
-    setAuthenticated(false);
-    setMe(null);
+    setSessionNotice('');
+    try {
+      await api('/admin/logout', { method: 'POST', body: JSON.stringify({}) });
+    } catch (error) {
+      setSessionNotice(errorNotice({ message: `Das Abmelden hat nicht geklappt, du bist noch angemeldet. ${error?.message || ''} Versuch es gleich noch einmal.`.replace(/\s+/g, ' ').trim() }));
+      return;
+    }
+    // A fresh page keeps nothing of this account for whoever signs in next on this device.
+    window.location.assign('/admin');
   }, []);
 
   const inbox = theme.id === 'posteingang';
@@ -154,6 +192,7 @@ function AdminApp() {
       onLogout={logout}
     >
       <ActingBanner me={me} />
+      <Notice message={sessionNotice} className="mb-3" />
       <Page route={route} />
     </Shell>
   </AdminContext.Provider>;

@@ -244,6 +244,16 @@ export function Loading({ text = 'Wird geladen …' }) {
   return <p className="text-q-muted">{text}</p>;
 }
 
+// Where a page needs the list of events and could not load it: the reason and another try.
+// "No event yet" in its place would send people off to create an event they already have.
+export function EventsUnavailable({ error, onRetry, className = '' }) {
+  if (!error) return null;
+  return <div className={`grid gap-2 ${className}`.trim()}>
+    <p role="alert" className="q-notice q-notice-error">Die Events ließen sich nicht laden. {error?.message || String(error)}</p>
+    <div><Button icon="refresh" onClick={onRetry}>Erneut laden</Button></div>
+  </div>;
+}
+
 export function Empty({ children }) {
   return <p className="text-q-muted">{children}</p>;
 }

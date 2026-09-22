@@ -17,9 +17,8 @@ export function GuestPage({ section }) {
 }
 
 function Texts() {
-  const [reload, setReload] = useState(0);
   const [language, setLanguage] = useState('de');
-  const { data, loading, error } = useAsync(() => api(`/admin/text-templates?language=${language}`), [reload, language]);
+  const { data, loading, error } = useAsync(() => api(`/admin/text-templates?language=${language}`), [language]);
   const [drafts, setDrafts] = useState({});
   const [message, setMessage] = useState('');
 
@@ -34,8 +33,9 @@ function Texts() {
     setMessage('');
     try {
       await api('/admin/text-templates', { method: 'POST', body: JSON.stringify({ key, value: drafts[key], language, scope: 'public' }) });
+      // The field already shows what was saved. Loading the list again would reset every
+      // other field and throw away what someone typed there and has not saved yet.
       setMessage(`„${textLabels[key]?.[0] || key}“ gespeichert.`);
-      setReload(reload + 1);
     } catch (err) {
       setMessage(errorNotice(err));
     }

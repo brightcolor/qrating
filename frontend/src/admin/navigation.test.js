@@ -109,6 +109,12 @@ describe('addresses that name no page', () => {
     expect(routeFromLocation('/administration')).toBe(null);
   });
 
+  it('names no page for a broken percent sign, where decoding would stop the whole page', () => {
+    expect(routeFromLocation('/admin/r%FCckrufe')).toBe(null);
+    expect(routeFromLocation('/admin/events/%C3/fragen')).toBe(null);
+    expect(routeFromLocation('/admin/r%C3%BCckrufe')).toBe(null);
+  });
+
   it('finds no event page without an event and sends the list instead', () => {
     expect(pathForRoute({ page: 'event', eventId: null, tab: 'fragen' })).toBe('/admin/events');
   });

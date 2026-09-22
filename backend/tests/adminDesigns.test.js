@@ -87,6 +87,15 @@ describe('each person picks the look of the admin area', () => {
 
     expect(anonymous.status).toBe(401);
   });
+
+  it('keeps the choice when a request does not name it', async () => {
+    await request('PATCH', '/admin/me/preferences', { cookie: ownerCookie, body: { adminTheme: 'plakat' } });
+
+    const saved = await request('PATCH', '/admin/me/preferences', { cookie: ownerCookie, body: {} });
+
+    expect(saved.body.adminTheme).toBe('plakat');
+    await request('PATCH', '/admin/me/preferences', { cookie: ownerCookie, body: { adminTheme: null } });
+  });
 });
 
 describe('the evaluation lists what guests said', () => {
@@ -108,7 +117,7 @@ describe('the evaluation lists what guests said', () => {
 
     expect(analytics.status).toBe(200);
     const voice = analytics.body.voices.find((item) => item.texts.some((text) => text.value === 'Als das Licht ausging'));
-    expect(voice).toMatchObject({ rating: 5, completed: true, source: 'Bar', caseOpen: false });
+    expect(voice).toMatchObject({ rating: 5, completed: true, source: 'Bar', caseOpen: false, testimonialAllowed: false });
     expect(voice.texts).toEqual([
       { label: 'Was war dein Moment des Abends?', value: 'Als das Licht ausging' },
       { label: 'Was besser werden soll', value: 'Mehr Wasser an der Bar' }
@@ -125,6 +134,29 @@ describe('the evaluation lists what guests said', () => {
     expect(voice).toMatchObject({ caseOpen: true, caseHasPhone: true, caseStatus: 'open' });
     expect(voice.caseId).toBeTruthy();
     expect(analytics.body.cases).toMatchObject({ open: 1, open_with_phone: 1 });
+  });
+
+  it('keeps the callback number out of every list, whatever the list shows', async () => {
+    const answers = await Promise.all([
+      request('GET', `/admin/events/${event.id}/analytics`, { cookie: ownerCookie }),
+      request('GET', '/admin/low-rating-cases', { cookie: ownerCookie }),
+      request('GET', '/admin/events?stats=1', { cookie: ownerCookie })
+    ]);
+
+    for (const answer of answers) {
+      expect(answer.status).toBe(200);
+      expect(JSON.stringify(answer.body).replace(/\s/g, '')).not.toContain('01512345678');
+    }
+  });
+
+  it('marks the guests who agreed to be quoted', async () => {
+    const sent = await send('stimme-3', { rating: 5, testimonialAllowed: true, commentPositive: 'Die beste Nacht des Sommers' });
+    expect(sent.status).toBe(201);
+
+    const analytics = await request('GET', `/admin/events/${event.id}/analytics`, { cookie: ownerCookie });
+
+    const voice = analytics.body.voices.find((item) => item.texts.some((text) => text.value === 'Die beste Nacht des Sommers'));
+    expect(voice.testimonialAllowed).toBe(true);
   });
 
   it('shows in the list of calls what the guest wrote to the questions of the form', async () => {
@@ -151,13 +183,89 @@ describe('the evaluation lists what guests said', () => {
 
 describe('the event list carries its numbers when asked', () => {
   it('adds the numbers of every event, and only when asked', async () => {
+    // The expected numbers come from the table, so the test holds in any order and alone.
+    await send('stimme-zahlen', { rating: 4 });
+    const expected = (await query(
+      `SELECT count(*)::int AS votes, round(avg(rating)::numeric, 1)::float AS average,
+              count(*) FILTER (WHERE completed_at IS NULL)::int AS only_stars,
+              (SELECT count(*) FROM low_rating_cases WHERE event_id = $1 AND status IN ('open', 'contact_planned'))::int AS open_cases
+       FROM feedback_responses WHERE event_id = $1`,
+      [event.id]
+    )).rows[0];
+
     const plain = await request('GET', '/admin/events', { cookie: ownerCookie });
     const withStats = await request('GET', '/admin/events?stats=1', { cookie: ownerCookie });
 
     expect(plain.body[0].stats).toBe(undefined);
     const demo = withStats.body.find((item) => item.id === event.id);
-    expect(demo.stats).toMatchObject({ votes: 3, averageRating: 2.7, onlyStars: 0, openCases: 0, questionCount: 3 });
-    expect(demo.stats.spark.reduce((sum, count) => sum + count, 0)).toBe(3);
+    expect(demo.stats).toMatchObject({
+      votes: expected.votes,
+      averageRating: expected.average,
+      onlyStars: expected.only_stars,
+      openCases: expected.open_cases,
+      questionCount: 3
+    });
+    expect(expected.votes).toBeGreaterThan(0);
+    expect(demo.stats.spark.reduce((sum, count) => sum + count, 0)).toBe(expected.votes);
+  });
+});
+
+describe('saving part of an event', () => {
+  it('keeps the end of the event and the hours of the round', async () => {
+    await query(
+      "UPDATE events SET date_to = timestamptz '2026-10-03 02:00+02', feedback_window_hours = 6 WHERE id = $1",
+      [event.id]
+    );
+
+    for (const body of [{ status: 'active' }, { upcomingEnabled: true, upcomingEventIds: [], ticketLinkEnabled: true }, { imageUrl: '', imageAlt: '' }]) {
+      const saved = await request('PATCH', `/admin/events/${event.id}`, { cookie: ownerCookie, body });
+      expect(saved.status).toBe(200);
+      expect(new Date(saved.body.date_to).toISOString()).toBe('2026-10-03T00:00:00.000Z');
+      expect(saved.body.feedback_window_hours).toBe(6);
+    }
+  });
+
+  it('still clears both when the request names them empty', async () => {
+    const saved = await request('PATCH', `/admin/events/${event.id}`, { cookie: ownerCookie, body: { dateTo: null, feedbackWindowHours: null } });
+
+    expect(saved.body).toMatchObject({ date_to: null, feedback_window_hours: null });
+  });
+});
+
+describe('the deletion periods', () => {
+  it('take whole days from one on, with a reason a person can read', async () => {
+    const refused = await Promise.all([
+      request('PATCH', '/admin/branding', { cookie: ownerCookie, body: { retentionFeedbackDays: -1 } }),
+      request('PATCH', '/admin/branding', { cookie: ownerCookie, body: { retentionFeedbackDays: 0 } }),
+      request('PATCH', '/admin/branding', { cookie: ownerCookie, body: { retentionNewsletterDays: 'abc' } }),
+      request('PATCH', '/admin/branding', { cookie: ownerCookie, body: { retentionNewsletterDays: 2.5 } }),
+      request('PATCH', '/admin/branding', { cookie: ownerCookie, body: { retentionLowRatingPhoneDays: '' } })
+    ]);
+
+    expect(refused.map((answer) => answer.status)).toEqual([400, 400, 400, 400, 400]);
+    expect(refused[0].body.error).toContain('Löschfrist für Bewertungen');
+    expect(refused[2].body.error).toContain('Löschfrist für Newsletter-Anmeldungen');
+    expect(refused[4].body.error).toContain('Löschfrist für Rückrufnummern');
+  });
+
+  it('keep the data when the field for feedback is left empty', async () => {
+    const saved = await request('PATCH', '/admin/branding', { cookie: ownerCookie, body: { retentionFeedbackDays: 30, retentionNewsletterDays: null } });
+    const cleared = await request('PATCH', '/admin/branding', { cookie: ownerCookie, body: { retentionFeedbackDays: '' } });
+
+    expect(saved.body).toMatchObject({ retention_feedback_days: 30, retention_newsletter_days: null });
+    expect(cleared.body.retention_feedback_days).toBe(null);
+  });
+});
+
+describe('the lookups of the evaluation', () => {
+  it('find the answers, questions and forms through an index', async () => {
+    const indexes = (await query(
+      `SELECT indexname FROM pg_indexes
+       WHERE indexname IN ('idx_feedback_answers_response', 'idx_feedback_questions_form', 'idx_feedback_forms_event')
+       ORDER BY indexname`
+    )).rows.map((row) => row.indexname);
+
+    expect(indexes).toEqual(['idx_feedback_answers_response', 'idx_feedback_forms_event', 'idx_feedback_questions_form']);
   });
 });
 

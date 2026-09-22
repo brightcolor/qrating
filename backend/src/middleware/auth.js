@@ -68,7 +68,11 @@ export function requirePlatformAdmin(db, refusal = 'Diese Ansicht gehört der Pl
   };
 }
 
+// Every role reaches only the events of the organization the session works in; below
+// event_manager the account needs an assignment to the event as well.
 export async function canAccessEvent(db, admin, eventId) {
+  const own = await db.query('SELECT 1 FROM events WHERE id = $1 AND organization_id = $2', [eventId, admin.organizationId]);
+  if (!own.rows.length) return false;
   if (hasRole(admin.role, 'event_manager')) return true;
   const result = await db.query(
     `SELECT 1 FROM user_event_assignments

@@ -79,7 +79,13 @@ function withPart(section, part) {
 export function routeFromLocation(pathname = '', search = '') {
   const path = String(pathname).replace(/\/+$/, '') || adminBase;
   if (path !== adminBase && !path.startsWith(`${adminBase}/`)) return null;
-  const parts = path.slice(adminBase.length).split('/').filter(Boolean).map(decodeURIComponent);
+  let parts;
+  try {
+    parts = path.slice(adminBase.length).split('/').filter(Boolean).map(decodeURIComponent);
+  } catch {
+    // A broken percent sign names no page; the overview opens and the address is straightened.
+    return null;
+  }
   const query = new URLSearchParams(String(search).replace(/^\?/, ''));
   if (parts.length === 0) {
     // The website links to the plan with a query of its own; both spellings exist.

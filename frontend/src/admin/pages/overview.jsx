@@ -2,12 +2,12 @@ import React from 'react';
 import { API_BASE, api } from '../../lib/api.js';
 import { useAdmin } from '../context.js';
 import { eventPhase, formatAverage, formatDayTime, roundInfo } from '../event/model.js';
-import { Button, ButtonLink, ErrorBox, Loading, Page, Panel, Stars, useAsync } from '../ui.jsx';
+import { Button, ButtonLink, ErrorBox, EventsUnavailable, Loading, Page, Panel, Stars, useAsync } from '../ui.jsx';
 import { caseTexts } from './callbacks.jsx';
 
 // The first page after sign-in: what runs now, what needs a call, what comes next.
 export function Overview() {
-  const { events, eventsState, currentEvent, go, me } = useAdmin();
+  const { events, eventsState, currentEvent, go, me, reloadEvents } = useAdmin();
   const { data: dashboard, error } = useAsync(() => api('/admin/dashboard'), []);
   const { data: cases } = useAsync(() => api('/admin/low-rating-cases'), []);
   const openCases = (cases || []).filter((item) => ['open', 'contact_planned'].includes(item.status));
@@ -17,7 +17,8 @@ export function Overview() {
   const stats = currentEvent?.stats || {};
 
   return <Page title="Übersicht" subtitle={me?.organization_name}>
-    <ErrorBox error={error || eventsState.error} />
+    <ErrorBox error={error} />
+    <EventsUnavailable error={eventsState.error} onRetry={reloadEvents} />
     {eventsState.loading && !events.length && <Loading />}
     <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
       <Panel title={round?.state === 'open' ? 'Läuft gerade' : 'Als Nächstes'} note={round?.label}>
@@ -42,7 +43,7 @@ export function Overview() {
             <Button icon="questions" onClick={() => go({ page: 'event', eventId: currentEvent.id, tab: 'fragen' })}>Fragen</Button>
             <Button icon="qr" onClick={() => go({ page: 'event', eventId: currentEvent.id, tab: 'qr' })}>QR & Aushang</Button>
           </div>
-        </div> : <div className="grid gap-3">
+        </div> : eventsState.error ? <p className="text-q-muted">Sobald die Eventliste geladen ist, steht hier das aktuelle Event.</p> : <div className="grid gap-3">
           <p className="text-q-muted">Noch kein Event. Lege eines an oder hole deine Events aus Pretix.</p>
           <div className="flex flex-wrap gap-2">
             <Button variant="primary" icon="plus" onClick={() => go({ page: 'events' })}>Event anlegen</Button>

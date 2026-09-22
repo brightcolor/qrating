@@ -106,7 +106,8 @@ export function privacySections(organization = {}, { newsletter = null, mailHost
       items: [
         periodSentence(organization.retention_feedback_days, 'Bewertungen und Besuche der Gästeseite'),
         periodSentence(organization.retention_newsletter_days, 'Anmeldungen zum Newsletter'),
-        periodSentence(organization.retention_low_rating_phone_days, 'Telefonnummern aus einem Rückrufwunsch')
+        // The deletion job falls back to 90 days for callback numbers, and the page says so too.
+        periodSentence(Number(organization.retention_low_rating_phone_days) || 90, 'Telefonnummern aus einem Rückrufwunsch')
       ]
     },
     {

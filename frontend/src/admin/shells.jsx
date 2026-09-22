@@ -92,10 +92,21 @@ function MobileChrome({ title, subtitle, groups, activeKey, go, counts, me, onLo
       setState((current) => nextMenuState(current, 'close'));
       opener.current?.focus();
     };
+    // The back button leaves the page behind the drawer, so the drawer goes along.
+    const onBack = () => setState((current) => nextMenuState(current, 'close'));
+    // A screen that turns wide shows the frame of the look; the drawer and its scroll lock go.
+    const wide = window.matchMedia?.('(min-width: 1024px)');
+    const onWide = (event) => {
+      if (event.matches) setState((current) => nextMenuState(nextMenuState(current, 'close'), 'gone'));
+    };
     document.addEventListener('keydown', onKey);
+    window.addEventListener('popstate', onBack);
+    wide?.addEventListener?.('change', onWide);
     return () => {
       document.body.style.overflow = previous;
       document.removeEventListener('keydown', onKey);
+      window.removeEventListener('popstate', onBack);
+      wide?.removeEventListener?.('change', onWide);
     };
   }, [mounted]);
 
@@ -329,18 +340,54 @@ function EventListShell({ groups, activeKey, go, counts, me, events, route, onLo
 
 // ------------------------------------------------------------------ 6: command bar
 
+const onMac = () => typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent || '');
+const searchShortcut = () => (onMac() ? '⌘ K' : 'Strg K');
+
 export function CommandPalette({ open, onClose, go, events, me }) {
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState(0);
   const input = useRef(null);
+  const dialog = useRef(null);
+  // The frame hands in a fresh close function on every render; the key handler reads the newest.
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   const entries = useMemo(() => commandEntries({ events, platformAdmin: me?.platformAdmin, eventDate: (event) => formatDay(event.date_from, event.event_timezone) }), [events, me?.platformAdmin]);
   const hits = useMemo(() => searchCommands(entries, query), [entries, query]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) return undefined;
     setQuery('');
     setSelected(0);
+    // Focus goes into the search and, once the palette closes, back to where it came from.
+    const before = document.activeElement;
     setTimeout(() => input.current?.focus(), 0);
+    // Escape closes the palette wherever the focus sits inside it, and Tab stays inside.
+    const onKey = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeRef.current();
+        return;
+      }
+      if (event.key !== 'Tab' || !dialog.current) return;
+      const focusable = [...dialog.current.querySelectorAll('input, button')];
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!dialog.current.contains(document.activeElement)) {
+        event.preventDefault();
+        first?.focus();
+      } else if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      if (before && typeof before.focus === 'function' && document.contains(before)) before.focus();
+    };
   }, [open]);
 
   useEffect(() => setSelected(0), [query]);
@@ -357,13 +404,12 @@ export function CommandPalette({ open, onClose, go, events, me }) {
     if (event.key === 'ArrowDown') { event.preventDefault(); setSelected((index) => Math.min(hits.length - 1, index + 1)); }
     if (event.key === 'ArrowUp') { event.preventDefault(); setSelected((index) => Math.max(0, index - 1)); }
     if (event.key === 'Enter') { event.preventDefault(); choose(hits[selected]); }
-    if (event.key === 'Escape') { event.preventDefault(); onClose(); }
   }
 
   let lastGroup = null;
   return <>
     <div className="q-palette-scrim" onClick={onClose} aria-hidden="true" />
-    <div className="q-palette" role="dialog" aria-modal="true" aria-label="Suchen und springen">
+    <div ref={dialog} className="q-palette" role="dialog" aria-modal="true" aria-label="Suchen und springen">
       <div className="q-palette-input">
         <Icon name="search" size={18} />
         <input ref={input} value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={onKey} placeholder="Event, Seite oder Einstellung suchen …" aria-label="Suchen" aria-controls="palette-list" aria-activedescendant={hits[selected] ? `hit-${selected}` : undefined} />
@@ -399,8 +445,8 @@ function CommandShell({ go, counts, me, onLogout, onSearch, children }) {
           ? <button type="button" className="q-topbar-org" onClick={() => go({ page: 'platform', section: 'mandanten' })}>{me?.organization_name}<Icon name="chevronDown" size={14} /></button>
           : <span className="q-topbar-org">{me?.organization_name}</span>}
       </div>
-      <button type="button" className="q-cmd" onClick={onSearch} aria-label="Suchen und springen (Strg K)">
-        <Icon name="search" size={17} /><span className="grow">Suchen oder springen …</span><kbd className="q-kbd">Strg K</kbd>
+      <button type="button" className="q-cmd" onClick={onSearch} aria-label={`Suchen und springen (${searchShortcut()})`}>
+        <Icon name="search" size={17} /><span className="grow">Suchen oder springen …</span><kbd className="q-kbd">{searchShortcut()}</kbd>
       </button>
       <div className="q-cmdbar-right">
         <button type="button" className="q-btn q-btn-ghost q-btn-icon" aria-label="Rückrufe" onClick={() => go({ page: 'callbacks' })}>
@@ -421,11 +467,13 @@ export function Shell(props) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const command = theme.shell === 'command';
 
-  // Strg K and Cmd K open the search of the command look from anywhere.
+  // Strg K, and Cmd K on a Mac, open the search of the command look from anywhere. On a Mac,
+  // Ctrl K stays with the text fields, where it deletes to the end of the line.
   useEffect(() => {
     if (!command) return undefined;
     const onKey = (event) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+      const combo = onMac() ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+      if (combo && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         setPaletteOpen(true);
       }

@@ -106,7 +106,8 @@ export class JobWorker {
 
   async handleReportEmail(job) {
     const { eventId, userId } = job.payload;
-    const event = (await this.db.query('SELECT * FROM events WHERE id = $1', [eventId])).rows[0];
+    // The report covers an event of the organization that asked for it, and no other.
+    const event = (await this.db.query('SELECT * FROM events WHERE id = $1 AND organization_id = $2', [eventId, job.organization_id])).rows[0];
     const user = (await this.db.query('SELECT * FROM users WHERE id = $1', [userId])).rows[0];
     if (!event || !user) throw new Error('Der Report entfällt: Das Event oder das Benutzerkonto wurde inzwischen gelöscht.');
     const summary = await this.db.query(
@@ -131,7 +132,7 @@ export class JobWorker {
       attachments: [{ filename: buildDownloadName({ event, kind: 'Bericht', extension: 'pdf' }).name, content: pdf }]
     });
     if (sent?.skipped) {
-      throw new Error('Der Report wurde nicht verschickt: Der E-Mail-Versand ist nicht eingerichtet oder ausgeschaltet. Richte ihn unter SMTP ein.');
+      throw new Error('Der Report wurde nicht verschickt: Der E-Mail-Versand ist nicht eingerichtet oder ausgeschaltet. Richte ihn unter Einstellungen → Verbindungen ein.');
     }
   }
 

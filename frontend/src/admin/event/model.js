@@ -85,6 +85,11 @@ export function relativeTime(value, now = new Date()) {
   return days === 1 ? 'vor 1 Tag' : `vor ${days} Tagen`;
 }
 
+// The wallboard hangs where guests read along, so it quotes only guests who agreed to it.
+export function wallboardQuotes(voices = [], count = 3) {
+  return (voices || []).filter((voice) => voice.testimonialAllowed && voice.texts?.length).slice(0, count);
+}
+
 const statusWords = { draft: 'Entwurf', closed: 'Beendet', archived: 'Archiviert' };
 
 // Where the round of an event stands: before, open, over, or switched off.

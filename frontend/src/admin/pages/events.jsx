@@ -3,12 +3,12 @@ import { api } from '../../lib/api.js';
 import { useAdmin } from '../context.js';
 import { dateBlock, eventPhase, formatAverage, formatDateLine, formatDayTime, roundInfo } from '../event/model.js';
 import { eventGroups } from '../shells.jsx';
-import { Button, ErrorBox, Field, Icon, Input, Loading, Page, Panel } from '../ui.jsx';
+import { Button, ErrorBox, EventsUnavailable, Field, Icon, Input, Loading, Page, Panel } from '../ui.jsx';
 
 // All events of the organisation. A new event starts here; everything about one event lives
 // inside it (workspace.jsx).
 export function EventsPage() {
-  const { theme, events, eventsState } = useAdmin();
+  const { theme, events, eventsState, reloadEvents } = useAdmin();
   const [creating, setCreating] = useState(false);
   const actions = <Button variant="primary" icon="plus" onClick={() => setCreating(!creating)}>Neues Event</Button>;
   if (theme.id === 'tabellenwerk') {
@@ -19,9 +19,9 @@ export function EventsPage() {
   }
   return <Page title="Events" subtitle="Events aus Pretix kommen von selbst dazu. Von Hand angelegte stehen daneben." actions={actions}>
     {creating && <EventCreate onDone={() => setCreating(false)} />}
-    <ErrorBox error={eventsState.error} />
+    <EventsUnavailable error={eventsState.error} onRetry={reloadEvents} />
     {eventsState.loading && !events.length && <Loading />}
-    {!eventsState.loading && !events.length && <Panel><p className="text-q-muted">Noch kein Event. Lege eines an oder verbinde Pretix unter Einstellungen → Verbindungen.</p></Panel>}
+    {!eventsState.loading && !eventsState.error && !events.length && <Panel><p className="text-q-muted">Noch kein Event. Lege eines an oder verbinde Pretix unter Einstellungen → Verbindungen.</p></Panel>}
     {eventGroups(events).map((group) => <Panel key={group.phase} title={group.title} note={`${group.events.length}`}>
       <div className="grid">
         {group.events.map((event) => <EventRow key={event.id} event={event} phase={group.phase} />)}
@@ -131,6 +131,7 @@ export function EventsTable({ selectedId = null, selectedTab = 'auswertung', onC
       <label className="search"><Icon name="search" size={15} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Event suchen" aria-label="Event suchen" /></label>
     </div>
     {creating && <div className="p-3"><EventCreate onDone={() => setCreating(false)} /></div>}
+    <EventsUnavailable error={eventsState.error} onRetry={reloadEvents} className="p-3" />
     <div className="overflow-x-auto">
       <table className="q-table master">
         <thead><tr><th>Event</th><th>Datum</th><th>Stand</th><th className="r">Scans</th><th className="r">Stimmen</th><th className="r">Schnitt</th><th className="r">nur Sterne</th><th className="r">Abgeschickt</th><th className="r">Rückrufe</th><th className="r">Fragen</th><th>Verlauf</th></tr></thead>
@@ -153,7 +154,7 @@ export function EventsTable({ selectedId = null, selectedTab = 'auswertung', onC
               <td className="spark"><Spark values={stats.spark} /></td>
             </tr>;
           })}
-          {!list.length && <tr><td colSpan={11} className="text-q-muted">Keine Events in dieser Auswahl.</td></tr>}
+          {!list.length && !eventsState.error && <tr><td colSpan={11} className="text-q-muted">Keine Events in dieser Auswahl.</td></tr>}
         </tbody>
       </table>
     </div>
