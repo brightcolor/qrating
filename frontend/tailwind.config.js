@@ -1,7 +1,11 @@
+import { screens } from './src/admin/screens.js';
+
 export default {
   content: ['./index.html', './src/**/*.{js,jsx}'],
   theme: {
     extend: {
+      // The drawer for phones switches at the same width in script (src/admin/screens.js).
+      screens,
       fontFamily: {
         sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
         // Public website

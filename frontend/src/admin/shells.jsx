@@ -3,6 +3,7 @@ import { api } from '../lib/api.js';
 import { commandEntries, searchCommands } from './commandSearch.js';
 import { dateBlock, eventPhase, formatDay } from './event/model.js';
 import { menuMounted, menuShown, nextMenuState } from './navigation.js';
+import { wideScreenQuery } from './screens.js';
 import { Button, Icon, useDismiss } from './ui.jsx';
 
 // The frames around the pages. Each look picks one; all of them read the same menu groups
@@ -95,7 +96,7 @@ function MobileChrome({ title, subtitle, groups, activeKey, go, counts, me, onLo
     // The back button leaves the page behind the drawer, so the drawer goes along.
     const onBack = () => setState((current) => nextMenuState(current, 'close'));
     // A screen that turns wide shows the frame of the look; the drawer and its scroll lock go.
-    const wide = window.matchMedia?.('(min-width: 1024px)');
+    const wide = window.matchMedia?.(wideScreenQuery);
     const onWide = (event) => {
       if (event.matches) setState((current) => nextMenuState(nextMenuState(current, 'close'), 'gone'));
     };

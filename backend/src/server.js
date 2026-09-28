@@ -9,12 +9,13 @@ import { adminRouter } from './routes/admin.js';
 import { securityRouter } from './routes/security.js';
 import { platformRouter } from './routes/platform.js';
 import { eventPreviewRouter } from './routes/eventPreview.js';
-import { publicRouter } from './routes/public.js';
+import { publicRouter, setupHeader, setupUrlHeader } from './routes/public.js';
 import { errorHandler, notFound } from './middleware/errors.js';
 import { runMigrations, seedDefaultData } from './db/bootstrap.js';
 import { JobWorker } from './services/jobService.js';
 import { query } from './db/pool.js';
 import { corsOrigin } from './utils/security.js';
+import { announceSetupCode } from './services/setupService.js';
 
 const app = express();
 
@@ -24,7 +25,9 @@ app.use(cors({
   origin: corsOrigin,
   credentials: true,
   methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['content-type', 'authorization']
+  allowedHeaders: ['content-type', 'authorization'],
+  // Public pages read these two to lead to the first setup while it is open.
+  exposedHeaders: [setupHeader, setupUrlHeader]
 }));
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
@@ -56,6 +59,7 @@ app.use(errorHandler);
 if (process.env.NODE_ENV !== 'test') {
   await runMigrations();
   await seedDefaultData();
+  await announceSetupCode({ query });
   const worker = new JobWorker({ query }, { intervalMs: env.workerIntervalMs });
   worker.start();
   app.listen(env.port, () => {

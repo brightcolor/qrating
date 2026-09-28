@@ -1,4 +1,5 @@
 import express from 'express';
+import { env } from '../config/env.js';
 import { query } from '../db/pool.js';
 import { requireAdmin, requirePlatformAdmin, signAdmin } from '../middleware/auth.js';
 import { httpError } from '../middleware/errors.js';
@@ -60,17 +61,16 @@ platformRouter.post('/organizations', async (req, res, next) => {
     if (!slug) throw httpError(400, 'Aus dem Namen ließ sich kein Slug bilden. Trage einen eigenen Slug aus Buchstaben und Ziffern ein.');
     const taken = await query('SELECT 1 FROM organizations WHERE slug = $1', [slug]);
     if (taken.rows.length) throw httpError(409, `Den Slug „${slug}“ nutzt bereits ein anderer Mandant. Wähle einen anderen.`);
+    const color = req.body.primaryColor || env.newOrganizationColor;
+    if (!/^#[0-9a-fA-F]{6}$/.test(color)) {
+      throw httpError(400, `Die Farbe muss im Format #RRGGBB stehen, zum Beispiel ${env.newOrganizationColor}.`);
+    }
 
     const created = (await query(
       `INSERT INTO organizations (name, slug, primary_color, privacy_text)
        VALUES ($1, $2, $3, $4)
        RETURNING *`,
-      [
-        name,
-        slug,
-        req.body.primaryColor || '#2563eb',
-        'Feedback ist anonym möglich. E-Mail-Adressen werden nur für den gewählten Zweck gespeichert.'
-      ]
+      [name, slug, color, env.newOrganizationPrivacyText]
     )).rows[0];
 
     await writeAudit({ query }, {

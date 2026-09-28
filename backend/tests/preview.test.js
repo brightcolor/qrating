@@ -4,6 +4,7 @@ import { db, query } from '../src/db/pool.js';
 import { runMigrations, seedDefaultData } from '../src/db/bootstrap.js';
 import { app } from '../src/server.js';
 import { createPreviewToken, previewValidityMs, verifyPreviewToken } from '../src/utils/previewLink.js';
+import { freshSetupCode } from './support/setupCode.js';
 
 vi.mock('../src/db/pool.js', async () => {
   const { createPglitePool } = await import('./support/pglitePool.js');
@@ -47,6 +48,7 @@ describe('preview of the guest page', () => {
     baseUrl = `http://127.0.0.1:${server.address().port}`;
     const setup = await request('POST', '/admin/setup/first-admin', {
       body: {
+        setupCode: await freshSetupCode(),
         name: 'Owner',
         email: 'owner@example.test',
         password: 'test-password-123',

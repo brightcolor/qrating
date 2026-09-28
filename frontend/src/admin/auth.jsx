@@ -1,9 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
+import { adminBase } from '../lib/paths.js';
+import { takeSessionEnd } from './sessionEnd.js';
 import { Button, Field, Input, Notice, useAsync } from './ui.jsx';
 
 // Sign-in, first setup, invitations and password resets. They appear before anyone is
 // signed in, in the look the browser remembers or in the default look.
+
+// How long a password has to be, as the server's setting says; null until it answered.
+function usePasswordLength(known = null) {
+  const { data } = useAsync(() => (known ? Promise.resolve(null) : api('/admin/password-policy')), [known]);
+  return known || data?.minLength || null;
+}
+
+const lengthHint = (minLength) => (minLength ? `Mindestens ${minLength} Zeichen.` : null);
+const tooShort = (password, minLength) => Boolean(minLength) && password.length < minLength;
 
 function AuthShell({ title, children }) {
   return <div className="flex min-h-screen items-center justify-center bg-q-bg p-4">
@@ -17,13 +28,19 @@ function AuthShell({ title, children }) {
 
 export function AuthGate({ onLogin }) {
   const { data, loading, error } = useAsync(async () => {
-    const setup = await api('/admin/setup/status');
+    let setup = null;
+    try {
+      setup = await api('/admin/setup/status');
+    } catch (err) {
+      // Once the first account exists the setup answers 404, and the sign-in follows.
+      if (err?.status !== 404) throw err;
+    }
     if (setup?.setupRequired) return { setup };
     try {
-      return { setup, me: await api('/admin/me') };
+      return { me: await api('/admin/me') };
     } catch (err) {
       // Without a session the sign-in follows; any other failure is shown with its reason.
-      if (err?.status === 401) return { setup };
+      if (err?.status === 401) return {};
       throw err;
     }
   }, []);
@@ -43,17 +60,23 @@ export function AuthGate({ onLogin }) {
 
 function FirstAdminSetup({ setup, onLogin }) {
   const [form, setForm] = useState({
-    organizationName: setup?.organization?.name || 'Demo Events',
-    organizationSlug: setup?.organization?.slug || 'demo-events',
+    setupCode: '',
+    organizationName: setup?.organization?.name || '',
+    organizationSlug: setup?.organization?.slug || '',
     name: '',
     email: '',
     password: ''
   });
   const [error, setError] = useState('');
+  const minLength = setup?.passwordMinLength || null;
 
   async function submit(e) {
     e.preventDefault();
     setError('');
+    if (tooShort(form.password, minLength)) {
+      setError(`Das Passwort muss mindestens ${minLength} Zeichen lang sein.`);
+      return;
+    }
     try {
       const data = await api('/admin/setup/first-admin', { method: 'POST', body: JSON.stringify(form) });
       onLogin(data.user);
@@ -63,14 +86,17 @@ function FirstAdminSetup({ setup, onLogin }) {
   }
 
   return <AuthShell title="qrating einrichten">
-    <p className="mb-4 text-q-muted">Diese Installation hat noch keinen Admin. Der erste Account wird Owner und kann danach weitere Benutzer einladen.</p>
+    <p className="mb-4 text-q-muted">Diese Installation hat noch keinen Admin. Das erste Konto wird Owner, führt die Plattform und lädt danach weitere Personen ein.</p>
     <form onSubmit={submit} className="grid gap-3">
+      <Field label="Einrichtungscode" hint={`Er steht im Log des Backends. Einen neuen Code zeigt: ${setup?.setupCodeCommand || ''}`}>
+        <Input value={form.setupCode} onChange={(e) => setForm({ ...form, setupCode: e.target.value })} autoComplete="off" autoFocus required />
+      </Field>
       <Field label="Organisation"><Input value={form.organizationName} onChange={(e) => setForm({ ...form, organizationName: e.target.value })} required /></Field>
       <Field label="Organisations-Slug"><Input value={form.organizationSlug} onChange={(e) => setForm({ ...form, organizationSlug: e.target.value })} required /></Field>
       <Field label="Dein Name"><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></Field>
       <Field label="E-Mail"><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required /></Field>
-      <Field label="Passwort" hint="Bitte nutze ein eigenes Passwort mit mindestens 10 Zeichen. qrating legt keinen Default-Admin an.">
-        <Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} minLength={10} required />
+      <Field label="Passwort" hint={lengthHint(minLength)}>
+        <Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} minLength={minLength || undefined} autoComplete="new-password" required />
       </Field>
       {error && <p role="alert" className="q-notice q-notice-error">{error}</p>}
       <Button type="submit" variant="primary">Ersten Admin anlegen</Button>
@@ -79,7 +105,10 @@ function FirstAdminSetup({ setup, onLogin }) {
 }
 
 // The second step for an account with a second factor. It follows the password wherever the
-// password was typed in: at the sign-in, after a reset and with an invitation.
+// password was typed in: at the sign-in, after a reset and with an invitation. After a reset or
+// an invitation the way back leads to the sign-in, where the new password already works.
+const toSignIn = () => window.location.assign(adminBase);
+
 function TwoFactorStep({ challenge, intro, onLogin, onBack }) {
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
@@ -114,7 +143,11 @@ function Login({ onLogin }) {
   const [password, setPassword] = useState('');
   const [twoFactor, setTwoFactor] = useState(null);
   const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
+  // A session that ended in the middle of work says why, once.
+  const [message, setMessage] = useState(() => {
+    const reason = takeSessionEnd();
+    return reason ? `Du wurdest abgemeldet. ${reason}` : '';
+  });
 
   async function submit(e) {
     e.preventDefault();
@@ -169,6 +202,7 @@ export function AcceptInvite({ token, onLogin }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [twoFactor, setTwoFactor] = useState(null);
+  const minLength = usePasswordLength();
   async function submit(e) {
     e.preventDefault();
     setError('');
@@ -176,8 +210,8 @@ export function AcceptInvite({ token, onLogin }) {
       setError('Der Einladungslink ist unvollständig. Öffne ihn direkt aus der Einladungs-E-Mail.');
       return;
     }
-    if (password.length < 10) {
-      setError('Das Passwort muss mindestens 10 Zeichen lang sein.');
+    if (tooShort(password, minLength)) {
+      setError(`Das Passwort muss mindestens ${minLength} Zeichen lang sein.`);
       return;
     }
     try {
@@ -191,11 +225,11 @@ export function AcceptInvite({ token, onLogin }) {
       setError(err.message);
     }
   }
-  if (twoFactor) return <TwoFactorStep challenge={twoFactor} intro="Dein Passwort ist gespeichert. Bestätige die Anmeldung mit dem Code aus deiner Authenticator-App oder einem Recovery-Code." onLogin={onLogin} />;
+  if (twoFactor) return <TwoFactorStep challenge={twoFactor} intro="Dein Passwort ist gespeichert. Bestätige die Anmeldung mit dem Code aus deiner Authenticator-App oder einem Recovery-Code. Du kannst dich auch später mit dem neuen Passwort anmelden." onLogin={onLogin} onBack={toSignIn} />;
   return <AuthShell title="Einladung abschließen">
     <form onSubmit={submit} className="grid gap-3">
       <Field label="Dein Name"><Input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" /></Field>
-      <Field label="Neues Passwort" hint="Mindestens 10 Zeichen."><Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" /></Field>
+      <Field label="Neues Passwort" hint={lengthHint(minLength)}><Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" /></Field>
       {error && <p role="alert" className="q-notice q-notice-error">{error}</p>}
       <Button type="submit" variant="primary">Account aktivieren</Button>
     </form>
@@ -206,6 +240,7 @@ export function ResetPassword({ token, onLogin }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [twoFactor, setTwoFactor] = useState(null);
+  const minLength = usePasswordLength();
   async function submit(e) {
     e.preventDefault();
     setError('');
@@ -213,8 +248,8 @@ export function ResetPassword({ token, onLogin }) {
       setError('Der Link zum Zurücksetzen ist unvollständig. Öffne ihn direkt aus der E-Mail.');
       return;
     }
-    if (password.length < 10) {
-      setError('Das Passwort muss mindestens 10 Zeichen lang sein.');
+    if (tooShort(password, minLength)) {
+      setError(`Das Passwort muss mindestens ${minLength} Zeichen lang sein.`);
       return;
     }
     try {
@@ -228,10 +263,10 @@ export function ResetPassword({ token, onLogin }) {
       setError(err.message);
     }
   }
-  if (twoFactor) return <TwoFactorStep challenge={twoFactor} intro="Dein neues Passwort ist gespeichert. Bestätige die Anmeldung mit dem Code aus deiner Authenticator-App oder einem Recovery-Code." onLogin={onLogin} />;
+  if (twoFactor) return <TwoFactorStep challenge={twoFactor} intro="Dein neues Passwort ist gespeichert. Bestätige die Anmeldung mit dem Code aus deiner Authenticator-App oder einem Recovery-Code. Du kannst dich auch später mit dem neuen Passwort anmelden." onLogin={onLogin} onBack={toSignIn} />;
   return <AuthShell title="Passwort neu setzen">
     <form onSubmit={submit} className="grid gap-3">
-      <Field label="Neues Passwort" hint="Mindestens 10 Zeichen."><Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" /></Field>
+      <Field label="Neues Passwort" hint={lengthHint(minLength)}><Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" /></Field>
       {error && <p role="alert" className="q-notice q-notice-error">{error}</p>}
       <Button type="submit" variant="primary">Passwort speichern</Button>
     </form>

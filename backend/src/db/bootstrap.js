@@ -30,12 +30,14 @@ export async function seedDefaultData() {
     const existing = await client.query('SELECT 1 FROM organizations LIMIT 1');
     if (existing.rows.length) return;
 
+    // Ticket shop, website and social links stay empty: the first setup turns this organization
+    // into a real one, and guests would otherwise follow example addresses.
     const organization = (await client.query(
-      `INSERT INTO organizations (name, slug, primary_color, privacy_text, ticketshop_url, website_url, instagram_url)
-       VALUES ($1, $2, '#2563eb', 'Feedback ist anonym möglich. E-Mail-Adressen werden nur für den gewählten Zweck gespeichert.', 'https://tickets.example.com', 'https://example.com', 'https://instagram.com/example')
+      `INSERT INTO organizations (name, slug, primary_color, privacy_text)
+       VALUES ($1, $2, $3, $4)
        ON CONFLICT (slug) DO NOTHING
        RETURNING *`,
-      [env.organizationName, env.organizationSlug]
+      [env.organizationName, env.organizationSlug, env.newOrganizationColor, env.newOrganizationPrivacyText]
     )).rows[0];
     // A second backend instance seeded concurrently.
     if (!organization) return;

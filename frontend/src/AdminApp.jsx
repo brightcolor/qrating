@@ -2,12 +2,15 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './styles/index.css';
 import './admin/admin.css';
 import './admin/admin-event.css';
-import { api } from './lib/api.js';
+import { api, onSessionEnded } from './lib/api.js';
+import { adminBase } from './lib/paths.js';
 import { AdminContext } from './admin/context.js';
 import { AcceptInvite, AuthGate, ResetPassword } from './admin/auth.jsx';
 import { navGroups, navKeyFor, pathForRoute, routeFromLocation, routeTitle, sameRoute } from './admin/navigation.js';
 import { ActingBanner, Shell } from './admin/shells.jsx';
 import { Notice, errorNotice } from './admin/ui.jsx';
+import { rememberSessionEnd } from './admin/sessionEnd.js';
+import { createThemeQueue } from './admin/themeQueue.js';
 import { readCachedTheme, themeFor, writeCachedTheme } from './admin/themes.js';
 import { loadThemeFonts } from './admin/themeFonts.js';
 import { pickCurrentEvent } from './admin/event/model.js';
@@ -46,24 +49,38 @@ function AdminApp() {
 
   const theme = useMemo(() => applyTheme(themeId), [themeId]);
 
-  // Choices of a look go to the server one after the other, so the last click is the one the
-  // account keeps. `saved` is the look the server confirmed last; a failed choice returns to it.
-  const themeSaves = useRef({ chain: Promise.resolve(), latest: 0, pending: 0, saved: themeId });
+  // Choices of a look go to the server one after the other (themeQueue.js).
+  const themes = useRef(null);
+  if (!themes.current) {
+    themes.current = createThemeQueue(
+      (id) => api('/admin/me/preferences', { method: 'PATCH', body: JSON.stringify({ adminTheme: id }) }),
+      themeId
+    );
+  }
 
   const loadMe = useCallback(async () => {
+    const mark = themes.current.mark();
     const data = await api('/admin/me');
     setMe(data);
-    const saves = themeSaves.current;
-    if (data?.adminTheme !== undefined) {
-      saves.saved = data.adminTheme;
-      // A choice still on its way wins over the account value that was read before it.
-      if (!saves.pending) {
-        setThemeId(data.adminTheme);
-        writeCachedTheme(data.adminTheme);
-      }
+    // A choice made while the account was read wins over what the reading brought back.
+    if (data?.adminTheme !== undefined && themes.current.accepts(mark)) {
+      themes.current.confirm(data.adminTheme);
+      setThemeId(data.adminTheme);
+      writeCachedTheme(data.adminTheme);
     }
     return data;
   }, []);
+
+  // A session that ends in the middle of work, because the account was disabled or got a new
+  // password, leads to a fresh sign-in page that names the reason. Registered before the first
+  // reading of the account, so that reading is covered as well.
+  useEffect(() => {
+    if (!authenticated) return undefined;
+    return onSessionEnded((message) => {
+      rememberSessionEnd(message);
+      window.location.assign(adminBase);
+    });
+  }, [authenticated]);
 
   const reloadEvents = useCallback(async () => {
     setEventsState((old) => ({ ...old, loading: true }));
@@ -76,15 +93,20 @@ function AdminApp() {
     }
   }, []);
 
+  // Reads the account again, for pages that changed it. An ended session is handled above; any
+  // other failure is said out loud, so no page is left with an unanswered error.
+  const reloadMe = useCallback(() => loadMe().catch((error) => {
+    if (error?.status !== 401) {
+      setSessionNotice(errorNotice({ message: `Dein Konto ließ sich nicht laden. ${error?.message || ''} Lade die Seite neu, sobald qrating wieder erreichbar ist.`.replace(/\s+/g, ' ').trim() }));
+    }
+    return null;
+  }), [loadMe]);
+
   useEffect(() => {
     if (!authenticated) return;
-    // Only an ended session leads back to the sign-in; any other failure is said out loud.
-    loadMe().catch((error) => {
-      if (error?.status === 401) setAuthenticated(false);
-      else setSessionNotice(errorNotice({ message: `Dein Konto ließ sich nicht laden. ${error?.message || ''} Lade die Seite neu, sobald qrating wieder erreichbar ist.`.replace(/\s+/g, ' ').trim() }));
-    });
+    reloadMe();
     reloadEvents();
-  }, [authenticated, loadMe, reloadEvents]);
+  }, [authenticated, reloadMe, reloadEvents]);
 
   // Back and forward in the browser move through the admin area like links.
   useEffect(() => {
@@ -121,26 +143,18 @@ function AdminApp() {
   }, []);
 
   const chooseTheme = useCallback((id) => {
-    const saves = themeSaves.current;
-    const ticket = ++saves.latest;
-    saves.pending += 1;
     setThemeId(id);
     writeCachedTheme(id);
-    const request = saves.chain.then(() => api('/admin/me/preferences', { method: 'PATCH', body: JSON.stringify({ adminTheme: id }) }));
-    saves.chain = request.catch(() => null);
-    return request.then((saved) => {
-      saves.saved = saved.adminTheme;
-      setMe((old) => (old ? { ...old, adminTheme: saved.adminTheme } : old));
-      return saved;
+    return themes.current.choose(id).then((result) => {
+      setMe((old) => (old ? { ...old, adminTheme: result.saved } : old));
+      return result;
     }, (error) => {
       // The newest choice failed: the page returns to the look the account really keeps.
-      if (ticket === saves.latest) {
-        setThemeId(saves.saved);
-        writeCachedTheme(saves.saved);
+      if (error.newest) {
+        setThemeId(error.keptTheme);
+        writeCachedTheme(error.keptTheme);
       }
-      throw Object.assign(error, { keptTheme: saves.saved });
-    }).finally(() => {
-      saves.pending -= 1;
+      throw error;
     });
   }, []);
 
@@ -153,7 +167,7 @@ function AdminApp() {
       return;
     }
     // A fresh page keeps nothing of this account for whoever signs in next on this device.
-    window.location.assign('/admin');
+    window.location.assign(adminBase);
   }, []);
 
   const inbox = theme.id === 'posteingang';
@@ -174,7 +188,7 @@ function AdminApp() {
   if (!authenticated) return <AuthGate onLogin={() => setAuthenticated(true)} />;
 
   const context = {
-    me, theme, chooseTheme, route, go, events, eventsState, reloadEvents, currentEvent, reloadMe: loadMe, flash, setFlash
+    me, theme, chooseTheme, route, go, events, eventsState, reloadEvents, currentEvent, reloadMe, flash, setFlash
   };
 
   return <AdminContext.Provider value={context}>

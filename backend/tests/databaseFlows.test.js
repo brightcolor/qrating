@@ -6,6 +6,7 @@ import { runMigrations, seedDefaultData } from '../src/db/bootstrap.js';
 import { app } from '../src/server.js';
 import { PretixService } from '../src/services/pretixService.js';
 import { encryptSecret } from '../src/utils/crypto.js';
+import { freshSetupCode } from './support/setupCode.js';
 
 vi.mock('../src/db/pool.js', async () => {
   const { createPglitePool } = await import('./support/pglitePool.js');
@@ -144,6 +145,7 @@ describe('backend flows against PostgreSQL', () => {
   it('keeps starting after the first admin renamed the organization', async () => {
     const setup = await request('POST', '/admin/setup/first-admin', {
       body: {
+        setupCode: await freshSetupCode(),
         name: 'Test Owner',
         email: 'owner@example.test',
         password: 'test-password-123',
@@ -510,5 +512,22 @@ describe('backend flows against PostgreSQL', () => {
     const unknownRoute = await request('GET', '/public/gibt-es-nicht');
     expect(unknownRoute.status).toBe(404);
     expect(unknownRoute.body.error).toContain('Diese Funktion gibt es auf dem Server nicht.');
+  });
+
+  it('clears the example addresses of earlier releases and keeps the ones an organization entered', async () => {
+    const organization = (await query('SELECT id FROM organizations ORDER BY created_at LIMIT 1')).rows[0];
+    await query(
+      `UPDATE organizations
+       SET ticketshop_url = 'https://tickets.example.com', website_url = 'https://www.beispiel-halle.de',
+           instagram_url = 'https://instagram.com/example'
+       WHERE id = $1`,
+      [organization.id]
+    );
+
+    const migration = await readFile(new URL('../../database/migrations/036_example_addresses.sql', import.meta.url), 'utf8');
+    await query(migration);
+
+    const after = (await query('SELECT ticketshop_url, website_url, instagram_url FROM organizations WHERE id = $1', [organization.id])).rows[0];
+    expect(after).toEqual({ ticketshop_url: null, website_url: 'https://www.beispiel-halle.de', instagram_url: null });
   });
 });

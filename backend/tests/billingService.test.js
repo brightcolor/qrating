@@ -127,4 +127,16 @@ describe('BillingService', () => {
     expect(result.length).toBe(3);
     expect(db.query).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO billing_plans'), expect.any(Array));
   });
+
+  it('takes the plans away from a platform account that is disabled', async () => {
+    const db = {
+      query: vi.fn(async (sql) => {
+        if (sql.includes('FROM users')) return { rows: [{ email: 'owner@example.com', platform_admin: true, status: 'disabled' }] };
+        return { rows: dbPlanRows };
+      })
+    };
+
+    await expect(updateBillingPlans(db, 'user-1', [])).rejects.toMatchObject({ status: 403 });
+    expect(db.query.mock.calls.some(([sql]) => sql.includes('INSERT INTO billing_plans'))).toBe(false);
+  });
 });

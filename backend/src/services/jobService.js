@@ -14,7 +14,7 @@ export async function enqueueJob(db, organizationId, jobType, payload, options =
       organizationId,
       jobType,
       JSON.stringify(payload || {}),
-      options.maxAttempts || 5,
+      options.maxAttempts || env.jobMaxAttempts,
       options.runAfter || null
     ]
   );
@@ -87,10 +87,10 @@ export class JobWorker {
         `UPDATE background_jobs
          SET status = $2,
              last_error = $3,
-             run_after = CASE WHEN $2 = 'queued' THEN now() + interval '2 minutes' ELSE run_after END,
+             run_after = CASE WHEN $2 = 'queued' THEN now() + ($4 * interval '1 minute') ELSE run_after END,
              updated_at = now()
          WHERE id = $1`,
-        [job.id, failed ? 'failed' : 'queued', error.message]
+        [job.id, failed ? 'failed' : 'queued', error.message, env.jobRetryMinutes]
       );
     }
   }
@@ -121,7 +121,7 @@ export class JobWorker {
     const distribution = await this.db.query('SELECT rating, count(*)::int AS count FROM feedback_responses WHERE event_id = $1 GROUP BY rating ORDER BY rating', [event.id]);
     const timeline = await this.db.query(`SELECT date_trunc('hour', submitted_at) AS bucket, count(*)::int AS count, round(avg(rating)::numeric, 2) AS average_rating FROM feedback_responses WHERE event_id = $1 GROUP BY bucket ORDER BY bucket`, [event.id]);
     const questionStats = await this.db.query(`SELECT q.label, q.question_type, fa.answer_value, count(*)::int AS count FROM feedback_answers fa JOIN feedback_questions q ON q.id = fa.feedback_question_id JOIN feedback_responses fr ON fr.id = fa.feedback_response_id WHERE fr.event_id = $1 AND q.show_in_dashboard = true GROUP BY q.label, q.question_type, fa.answer_value ORDER BY q.label, count DESC`, [event.id]);
-    const comments = await this.db.query(`SELECT rating, comment_positive, comment_improvement, general_comment, submitted_at FROM feedback_responses WHERE event_id = $1 ORDER BY submitted_at DESC LIMIT 50`, [event.id]);
+    const comments = await this.db.query(`SELECT rating, comment_positive, comment_improvement, general_comment, submitted_at FROM feedback_responses WHERE event_id = $1 ORDER BY submitted_at DESC LIMIT $2`, [event.id, env.reportCommentsLimit]);
     const organization = (await this.db.query('SELECT name, primary_color FROM organizations WHERE id = $1', [event.organization_id])).rows[0];
     const pdf = buildEventReportPdf({ event, organization, summary: summary.rows[0], distribution: distribution.rows, timeline: timeline.rows, questionStats: questionStats.rows, comments: comments.rows });
     const notification = new NotificationService(this.db);
@@ -164,10 +164,11 @@ export class JobWorker {
              AND bj.status IN ('queued','running')
              AND (bj.payload->>'connectionId')::uuid = pc.id
          )
-       LIMIT 20`
+       LIMIT $1`,
+      [env.schedulerBatchSize]
     );
     for (const connection of connections.rows) {
-      await enqueueJob(this.db, connection.organization_id, 'pretix.sync', { connectionId: connection.id }, { maxAttempts: 3 });
+      await enqueueJob(this.db, connection.organization_id, 'pretix.sync', { connectionId: connection.id }, { maxAttempts: env.pretixSyncMaxAttempts });
       await this.db.query(
         `UPDATE pretix_connections
          SET next_sync_at = now() + (sync_interval_minutes * interval '1 minute')
@@ -176,20 +177,28 @@ export class JobWorker {
       );
     }
 
+    // One deletion run per organization and interval. Any run counts, a finished one as well;
+    // otherwise the next round of the planner starts a new run right after the last one ended.
     const organizations = await this.db.query(
       `SELECT id FROM organizations o
        WHERE NOT EXISTS (
          SELECT 1 FROM background_jobs bj
          WHERE bj.organization_id = o.id
            AND bj.job_type = 'privacy.retention'
-           AND bj.status IN ('queued','running')
-           AND bj.created_at > now() - interval '12 hours'
+           AND bj.created_at > now() - ($1 * interval '1 hour')
        )
-       LIMIT 20`
+       LIMIT $2`,
+      [env.retentionIntervalHours, env.schedulerBatchSize]
     );
     for (const organization of organizations.rows) {
-      await enqueueJob(this.db, organization.id, 'privacy.retention', {}, { maxAttempts: 2 });
+      await enqueueJob(this.db, organization.id, 'privacy.retention', {}, { maxAttempts: env.retentionJobMaxAttempts });
     }
+
+    // Finished jobs leave the list after a while; failed ones stay for the look at what went wrong.
+    await this.db.query(
+      `DELETE FROM background_jobs WHERE status = 'done' AND updated_at < now() - ($1 * interval '1 day')`,
+      [env.jobHistoryDays]
+    );
   }
 
   async handlePrivacyRetention(job) {
@@ -199,47 +208,72 @@ export class JobWorker {
       [job.organization_id]
     )).rows[0];
     if (!org) return;
-    await this.db.query(
-      `UPDATE low_rating_cases
-       SET contact_phone_encrypted = null,
-           contact_note = null,
-           contact_note_encrypted = null,
-           internal_note = COALESCE(internal_note, '') || CASE WHEN internal_note IS NULL OR internal_note = '' THEN '' ELSE E'\n' END || 'Telefon-/Kontaktangaben automatisch nach Aufbewahrungsfrist gelöscht.',
-           updated_at = now()
-       WHERE organization_id = $1
-         AND (
-           contact_phone_encrypted IS NOT NULL
-           OR contact_note_encrypted IS NOT NULL
-           OR contact_note IS NOT NULL
-         )
-         AND (
-           retention_until <= now()
-           OR created_at < now() - ($2 * interval '1 day')
-         )`,
-      [job.organization_id, Number(org.retention_low_rating_phone_days || 90)]
-    );
-    if (org.retention_feedback_days) {
+
+    // Each deletion runs for itself, so one that fails leaves the others their turn. A period
+    // outside the bounds of the settings deletes nothing and says why; guessing a shorter one
+    // would delete earlier than the privacy page promises.
+    const failures = [];
+    const periodOf = (value, subject) => {
+      const days = Number(value);
+      if (Number.isInteger(days) && days >= env.retentionMinDays && days <= env.retentionMaxDays) return days;
+      failures.push(`Die Löschfrist für ${subject} steht auf „${value}“ und liegt außerhalb von ${env.retentionMinDays} bis ${env.retentionMaxDays} Tagen; korrigiere sie unter Einstellungen → Organisation.`);
+      return null;
+    };
+    const step = async (run) => {
+      try {
+        await run();
+      } catch (error) {
+        failures.push(error.message);
+      }
+    };
+
+    const phoneDays = periodOf(Number(org.retention_low_rating_phone_days) || env.retentionPhoneDefaultDays, 'Rückrufnummern');
+    if (phoneDays) {
+      await step(() => this.db.query(
+        `UPDATE low_rating_cases
+         SET contact_phone_encrypted = null,
+             contact_note = null,
+             contact_note_encrypted = null,
+             internal_note = COALESCE(internal_note, '') || CASE WHEN internal_note IS NULL OR internal_note = '' THEN '' ELSE E'\n' END || 'Telefon-/Kontaktangaben automatisch nach Aufbewahrungsfrist gelöscht.',
+             updated_at = now()
+         WHERE organization_id = $1
+           AND (
+             contact_phone_encrypted IS NOT NULL
+             OR contact_note_encrypted IS NOT NULL
+             OR contact_note IS NOT NULL
+           )
+           AND (
+             retention_until <= now()
+             OR created_at < now() - ($2 * interval '1 day')
+           )`,
+        [job.organization_id, phoneDays]
+      ));
+    }
+    const feedbackDays = org.retention_feedback_days ? periodOf(org.retention_feedback_days, 'Bewertungen') : null;
+    if (feedbackDays) {
       // Visits of the guest page follow the feedback: same organization, same period.
-      await this.db.query(
+      await step(() => this.db.query(
         `DELETE FROM guest_sessions
          WHERE organization_id = $1
            AND started_at < now() - ($2 * interval '1 day')`,
-        [job.organization_id, Number(org.retention_feedback_days)]
-      );
-      await this.db.query(
+        [job.organization_id, feedbackDays]
+      ));
+      await step(() => this.db.query(
         `DELETE FROM feedback_responses
          WHERE organization_id = $1
            AND submitted_at < now() - ($2 * interval '1 day')`,
-        [job.organization_id, Number(org.retention_feedback_days)]
-      );
+        [job.organization_id, feedbackDays]
+      ));
     }
-    if (org.retention_newsletter_days) {
-      await this.db.query(
+    const newsletterDays = org.retention_newsletter_days ? periodOf(org.retention_newsletter_days, 'Newsletter-Anmeldungen') : null;
+    if (newsletterDays) {
+      await step(() => this.db.query(
         `DELETE FROM newsletter_optins
          WHERE organization_id = $1
            AND consent_given_at < now() - ($2 * interval '1 day')`,
-        [job.organization_id, Number(org.retention_newsletter_days)]
-      );
+        [job.organization_id, newsletterDays]
+      ));
     }
+    if (failures.length) throw new Error(`Der Löschlauf ist nur teilweise gelaufen. ${failures.join(' ')}`);
   }
 }

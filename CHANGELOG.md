@@ -4,6 +4,38 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.59.0] - 2026-09-29
+
+### Security
+
+- The first setup asks for a setup code that only the operator can read. While no account exists, the backend writes a fresh code to its log at every start, and `docker compose exec backend node src/cli/setup-code.js` shows a new one. Before, whoever reached a freshly started installation first could create its first account and with it the platform role. Once an account exists, both setup routes answer 404; while the setup is open, the website and the guest pages lead to it (migration `034`).
+- An owner can no longer take over another account of the organization. Setting an account back to "invited" and inviting its address again used to hand the owner a link that replaced the password, the platform account included. "Invited" now comes from an invitation alone, and a new invitation renews only one that nobody took up.
+- Team changes follow rules: nobody changes their own role or access, the last active owner of an organization stays, a platform account answers to the platform role only, and invitations and changes of role, access and name are written to the audit log.
+- A new password, set through a reset link or an invitation, ends every session signed before it (migration `035`).
+- The mail server belongs to admins; forms, questions, texts of the guest page, QR sources, event settings and Pretix connections belong to event managers and above. Before, every role could change them, and whoever changed the mail server could read the password reset links of the organization.
+- Texts, QR sources and callback cases refuse the ids of another organization, and a failed Pretix sync writes its note only to a connection of its own organization.
+- A visit of a platform admin to an organization that was removed ends with a message; `/admin/me` answered 500 there.
+
+### Fixed
+
+- A deletion period beyond the calendar no longer stops the deletion run of the whole organization. Periods lie between `RETENTION_MIN_DAYS` and `RETENTION_MAX_DAYS`, each deletion runs for itself, and the job names what failed.
+- The deletion run starts once per `RETENTION_INTERVAL_HOURS`. Before, it started again right after the last one had finished, about once a minute per organization. Finished jobs leave the list after `JOB_HISTORY_DAYS`.
+- The wallboard shows numbers only. Its quotes could only come from requests built by hand, since the guest page never asks for consent to be quoted.
+- A session that ends in the middle of work leads to the sign-in with its reason, and a failure while reading the own account shows up on the page.
+- A wrong password or code when switching off 2FA counts as an input error and keeps the session.
+- The look chosen last is the one the account keeps, also when an older reading of the account arrives later; an older failed choice stays quiet.
+- After a password reset or an invitation, the step for the second factor offers the way to the sign-in.
+- Sign-in and password reset find an address typed with spaces or capitals.
+- A platform admin reads and unlocks plans whatever role the account holds at home.
+- New organizations get no example addresses, and migration `036` clears the untouched example addresses of earlier releases; guests could be sent to an example ticket shop.
+- The feedback round of an event takes whole days and hours from 0 up to `FEEDBACK_WINDOW_MAX_DAYS` and `FEEDBACK_WINDOW_MAX_HOURS`.
+
+### Changed
+
+- Every value that shapes what qrating does is a setting with a default and bounds in `backend/src/config/env.js`: sessions, sign-in limits, password length, validity of invitations and reset links, deletion periods, job intervals, list lengths, the reload of the wallboard, upcoming events and the defaults of new organizations. A value outside its bounds stops the start with a message that names it. `docker-compose.yml` passes each one on; the README and `.env.example` list them all.
+- The account behind a session is read once per request, however many routers ask.
+- Version bumped to `0.59.0`.
+
 ## [0.58.4] - 2026-09-22
 
 ### Security

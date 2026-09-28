@@ -4,8 +4,9 @@
 // A route is a small object: { page: 'event', eventId, tab }, { page: 'settings', section,
 // part }, and so on. pathForRoute() turns it into an address, routeFromLocation() reads one
 // back. Addresses the admin area had before the reorganisation still lead to their page.
+import { adminBase } from '../lib/paths.js';
 
-export const adminBase = '/admin';
+export { adminBase };
 
 // Addresses under /admin that carry a flow of their own and never name a page.
 // An invite and a password reset arrive with a token and have to stay untouched.

@@ -1,5 +1,6 @@
 // What guests said, one entry per vote, and the numbers an event list shows beside each event.
 // Both feed the admin area: the evaluation of an event and the overview of all events.
+import { env } from '../config/env.js';
 
 // Names for the three free-text fields every vote can carry, next to the questions of the form.
 const commentLabels = {
@@ -21,7 +22,7 @@ function answerText(value) {
 // The newest votes of an event with everything written along the way: the free-text fields
 // and the answers to text questions of the form, in the order of the form. The QR source says
 // where the guest scanned, the case says whether the organizer still owes a call.
-export async function eventVoices(db, eventId, limit = 100) {
+export async function eventVoices(db, eventId, limit = env.analyticsVoicesLimit) {
   const votes = (await db.query(
     `SELECT fr.id, fr.rating, fr.submitted_at, fr.completed_at, fr.source_type,
             fr.comment_positive, fr.comment_improvement, fr.general_comment, fr.testimonial_allowed,

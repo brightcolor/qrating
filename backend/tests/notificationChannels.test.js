@@ -4,6 +4,7 @@ import { db, query } from '../src/db/pool.js';
 import { runMigrations, seedDefaultData } from '../src/db/bootstrap.js';
 import { app } from '../src/server.js';
 import { NotificationService } from '../src/services/notificationService.js';
+import { freshSetupCode } from './support/setupCode.js';
 
 vi.mock('../src/db/pool.js', async () => {
   const { createPglitePool } = await import('./support/pglitePool.js');
@@ -64,6 +65,7 @@ describe('notification channels of a visited tenant', () => {
 
     const setup = await request('POST', '/admin/setup/first-admin', {
       body: {
+        setupCode: await freshSetupCode(),
         name: 'Platform Owner',
         email: 'platform@example.test',
         password: 'test-password-123',

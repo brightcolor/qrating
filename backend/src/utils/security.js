@@ -38,16 +38,16 @@ export function adminCookieOptions() {
     sameSite: 'lax',
     secure: env.nodeEnv === 'production',
     path: '/',
-    maxAge: 12 * 60 * 60 * 1000
+    maxAge: env.adminSessionHours * 60 * 60 * 1000
   };
 }
 
 export function setAdminCookie(res, token) {
-  res.cookie('qrating_admin', token, adminCookieOptions());
+  res.cookie(env.adminCookieName, token, adminCookieOptions());
 }
 
 export function clearAdminCookie(res) {
-  res.clearCookie('qrating_admin', { path: '/', sameSite: 'lax', secure: env.nodeEnv === 'production' });
+  res.clearCookie(env.adminCookieName, { path: '/', sameSite: 'lax', secure: env.nodeEnv === 'production' });
 }
 
 export function emailDomain(email) {

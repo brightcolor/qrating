@@ -118,7 +118,9 @@ const eventStatusNotices = {
 };
 
 export function EventSettingsTab({ event, onChanged }) {
-  const { events, go } = useAdmin();
+  const { events, go, me } = useAdmin();
+  // How many events can be picked by hand is a setting of the server; it arrives with the account.
+  const upcomingMax = me?.settings?.upcomingEventsMax || null;
   const [message, setMessage] = useState('');
   const [image, setImage] = useState({ imageUrl: event.image_url || '', imageAlt: event.image_alt || '' });
   const [upcoming, setUpcoming] = useState({ enabled: event.upcoming_enabled !== false, ids: Array.isArray(event.upcoming_event_ids) ? event.upcoming_event_ids : [], tickets: event.ticket_link_enabled !== false });
@@ -176,7 +178,10 @@ export function EventSettingsTab({ event, onChanged }) {
     }
   }
 
-  const toggleUpcoming = (id) => setUpcoming((current) => ({ ...current, ids: current.ids.includes(id) ? current.ids.filter((item) => item !== id) : [...current.ids, id].slice(0, 5) }));
+  const toggleUpcoming = (id) => setUpcoming((current) => ({
+    ...current,
+    ids: current.ids.includes(id) ? current.ids.filter((item) => item !== id) : [...current.ids, id].slice(0, upcomingMax ?? undefined)
+  }));
 
   return <div className="grid gap-4">
     <Notice message={message} />
@@ -216,7 +221,7 @@ export function EventSettingsTab({ event, onChanged }) {
       <div className="grid gap-2">
         <Check label="Nach dem Feedback auf kommende Events hinweisen" checked={upcoming.enabled} onChange={(e) => setUpcoming({ ...upcoming, enabled: e.target.checked })} />
         <Check label="Ticketlink zeigen, solange der Vorverkauf läuft" checked={upcoming.tickets} onChange={(e) => setUpcoming({ ...upcoming, tickets: e.target.checked })} />
-        <p className="q-hint">Ohne Auswahl zeigt qrating die nächsten Events nach Datum. Wähle bis zu fünf, wenn es bestimmte sein sollen. Der Ticketlink erscheint nur, wenn Pretix den Verkauf offen meldet.</p>
+        <p className="q-hint">Ohne Auswahl zeigt qrating die nächsten Events nach Datum. Wähle {upcomingMax ? `bis zu ${upcomingMax}` : 'einige'}, wenn es bestimmte sein sollen. Der Ticketlink erscheint nur, wenn Pretix den Verkauf offen meldet.</p>
       </div>
       <div className="mt-3 grid gap-1.5 md:grid-cols-2">
         {events.filter((item) => item.id !== event.id).map((item) => <Check key={item.id} label={eventLabel(item)} checked={upcoming.ids.includes(item.id)} onChange={() => toggleUpcoming(item.id)} disabled={!upcoming.enabled} className="rounded-lg bg-q-sunken p-2" />)}

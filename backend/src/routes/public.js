@@ -19,8 +19,29 @@ import { creditFor, emailDomain, emailHash, publicEventStatus, publicOrganizatio
 import { describeWait } from '../middleware/errors.js';
 import { verifyPreviewToken } from '../utils/previewLink.js';
 import { privacyPage } from '../services/privacyService.js';
+import { setupOpen } from '../services/setupService.js';
 
 export const publicRouter = express.Router();
+
+// While the installation has no account yet, every page leads to the first setup. The answers
+// stay as they are; two headers tell the page where the setup waits. Nothing of that phase goes
+// into a browser cache: a later answer 304 would carry the old headers along and keep sending
+// guests to the setup long after it was done.
+export const setupHeader = 'x-qrating-setup';
+export const setupUrlHeader = 'x-qrating-setup-url';
+
+publicRouter.use(async (req, res, next) => {
+  try {
+    if (await setupOpen({ query })) {
+      res.setHeader(setupHeader, 'open');
+      res.setHeader(setupUrlHeader, `${env.adminAppUrl}/admin`);
+      res.setHeader('cache-control', 'no-store');
+    }
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
 
 // Joi reports field problems in English; guests get a German sentence per field.
 const feedbackFieldMessages = {

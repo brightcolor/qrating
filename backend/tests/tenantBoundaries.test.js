@@ -4,6 +4,7 @@ import { db, query } from '../src/db/pool.js';
 import { runMigrations, seedDefaultData } from '../src/db/bootstrap.js';
 import { app } from '../src/server.js';
 import { signAdmin } from '../src/middleware/auth.js';
+import { freshSetupCode } from './support/setupCode.js';
 
 vi.mock('../src/db/pool.js', async () => {
   const { createPglitePool } = await import('./support/pglitePool.js');
@@ -52,7 +53,7 @@ beforeAll(async () => {
   await once(server, 'listening');
   baseUrl = `http://127.0.0.1:${server.address().port}`;
   const setup = await request('POST', '/admin/setup/first-admin', {
-    body: { name: 'Plattform', email: 'plattform@example.test', password: 'test-password-123', organizationName: 'Beispiel Events' }
+    body: { setupCode: await freshSetupCode(), name: 'Plattform', email: 'plattform@example.test', password: 'test-password-123', organizationName: 'Beispiel Events' }
   });
   expect(setup.status).toBe(201);
   platformCookie = setup.cookie;

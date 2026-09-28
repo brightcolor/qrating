@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, api } from './api.js';
+import { ApiError, api, onSessionEnded } from './api.js';
 
 function respond(status, body, contentType = 'application/json; charset=utf-8') {
   const text = typeof body === 'string' ? body : JSON.stringify(body);
@@ -59,5 +59,85 @@ describe('api', () => {
   it('reports a web page where data was expected', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(respond(200, '<!doctype html><html></html>', 'text/html')));
     await expect(api('/admin/dashboard')).rejects.toThrow('Der Server hat eine Webseite statt Daten geschickt.');
+  });
+});
+
+// An answer with headers beyond the content type.
+function answer(status, body, headers = {}) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: new Headers({ 'content-type': 'application/json', ...headers }),
+    json: async () => body,
+    text: async () => JSON.stringify(body)
+  };
+}
+
+describe('a session that ends in the middle of work', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('reports the reason to the admin area', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => answer(401, { error: 'Dein Konto ist deaktiviert.' })));
+    const ended = vi.fn();
+    const stop = onSessionEnded(ended);
+
+    await expect(api('/admin/events')).rejects.toMatchObject({ status: 401 });
+
+    expect(ended).toHaveBeenCalledWith('Dein Konto ist deaktiviert.');
+    stop();
+  });
+
+  it('leaves a 401 of the sign-in forms to the form that sent it', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => answer(401, { error: 'E-Mail oder Passwort ist falsch.' })));
+    const ended = vi.fn();
+    const stop = onSessionEnded(ended);
+
+    await expect(api('/admin/login', { method: 'POST', body: '{}' })).rejects.toMatchObject({ status: 401 });
+    await expect(api('/admin/login/2fa', { method: 'POST', body: '{}' })).rejects.toMatchObject({ status: 401 });
+
+    expect(ended).not.toHaveBeenCalled();
+    stop();
+  });
+
+  it('reports nothing once the admin area stopped listening', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => answer(401, { error: 'Abgelaufen.' })));
+    const ended = vi.fn();
+
+    onSessionEnded(ended)();
+    await expect(api('/admin/events')).rejects.toMatchObject({ status: 401 });
+
+    expect(ended).not.toHaveBeenCalled();
+  });
+});
+
+describe('an installation that waits for its first setup', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('leads a public page to the setup', async () => {
+    const replace = vi.fn();
+    vi.stubGlobal('window', { location: { pathname: '/f/beispiel', replace } });
+    vi.stubGlobal('fetch', vi.fn(async () => answer(200, { ok: true }, {
+      'x-qrating-setup': 'open',
+      'x-qrating-setup-url': 'https://app.example.test/admin'
+    })));
+
+    const pending = api('/public/f/beispiel');
+    const outcome = await Promise.race([pending.then(() => 'answered'), new Promise((resolve) => setTimeout(() => resolve('waiting'), 20))]);
+
+    expect(replace).toHaveBeenCalledWith('https://app.example.test/admin');
+    expect(outcome).toBe('waiting');
+  });
+
+  it('keeps the admin area where it is, since the setup lives there', async () => {
+    const replace = vi.fn();
+    vi.stubGlobal('window', { location: { pathname: '/admin', replace } });
+    vi.stubGlobal('fetch', vi.fn(async () => answer(200, { setupRequired: true }, { 'x-qrating-setup': 'open' })));
+
+    expect(await api('/admin/setup/status')).toEqual({ setupRequired: true });
+    expect(replace).not.toHaveBeenCalled();
   });
 });

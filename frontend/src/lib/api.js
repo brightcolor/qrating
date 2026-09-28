@@ -1,5 +1,29 @@
+import { adminBase } from './paths.js';
+
 const configuredApiBase = import.meta.env.VITE_API_BASE_URL;
 const API_BASE = configuredApiBase === undefined ? '/api' : configuredApiBase.replace(/\/$/, '');
+
+// Requests whose 401 belongs to the form that sent them: signing in, the first setup, an
+// invitation, a reset. Any other 401 means the session has ended.
+const sessionForms = ['/admin/login', '/admin/logout', '/admin/setup/', '/admin/password-reset/', '/admin/accept-invite', '/admin/password-policy'];
+let sessionEnded = null;
+
+// The admin area listens here while someone is signed in, so a session that ends in the middle
+// of work leads back to the sign-in with its reason. Returns the way to stop listening.
+export function onSessionEnded(handler) {
+  sessionEnded = handler;
+  return () => {
+    if (sessionEnded === handler) sessionEnded = null;
+  };
+}
+
+// While an installation waits for its first setup, every public page leads there.
+function leadsToSetup(response) {
+  if (response.headers.get('x-qrating-setup') !== 'open') return false;
+  if (typeof window === 'undefined' || window.location.pathname.startsWith(adminBase)) return false;
+  window.location.replace(response.headers.get('x-qrating-setup-url') || adminBase);
+  return true;
+}
 
 // Used when a response carries no readable reason of its own (proxy pages, empty bodies).
 const statusMessages = {
@@ -57,6 +81,8 @@ export async function api(path, options = {}) {
       ? 'Keine Internetverbindung. Bitte prüfe deine Verbindung und versuche es erneut.'
       : 'Der Server ist gerade nicht erreichbar. Bitte prüfe deine Internetverbindung und versuche es erneut.');
   }
+  // The page is on its way to the setup; nothing after this answer is shown anymore.
+  if (leadsToSetup(response)) return new Promise(() => {});
   const isJson = response.headers.get('content-type')?.includes('application/json');
   let body = null;
   try {
@@ -66,11 +92,15 @@ export async function api(path, options = {}) {
   }
   if (!response.ok) {
     const serverMessage = isJson && typeof body?.error === 'string' ? body.error.trim() : '';
-    throw new ApiError(serverMessage || fallbackMessage(response.status), {
+    const error = new ApiError(serverMessage || fallbackMessage(response.status), {
       status: response.status,
       reference: isJson ? body?.reference || null : null,
       body: isJson ? body : null
     });
+    if (response.status === 401 && sessionEnded && !sessionForms.some((form) => path.startsWith(form))) {
+      sessionEnded(error.message);
+    }
+    throw error;
   }
   // A web page instead of data means the /api route ends at the wrong service.
   if (!isJson && typeof body === 'string' && body.trimStart().startsWith('<')) {

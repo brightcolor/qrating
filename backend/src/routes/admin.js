@@ -57,7 +57,9 @@ adminRouter.patch('/site-content', requirePlatformAdmin({ query }, siteContentRe
   }
 });
 
-adminRouter.get('/billing', requireRole('admin'), async (req, res, next) => {
+// The plan of the organization is a matter for its admins; the platform role reads it anywhere,
+// whatever role its account holds at home.
+adminRouter.get('/billing', requireRole('admin', { orPlatform: true }), async (req, res, next) => {
   try {
     res.json(await getBillingOverview({ query }, req.admin.organizationId, req.admin.sub));
   } catch (error) {
@@ -65,7 +67,9 @@ adminRouter.get('/billing', requireRole('admin'), async (req, res, next) => {
   }
 });
 
-adminRouter.patch('/billing/override', requireRole('admin'), async (req, res, next) => {
+// Unlocking a plan and editing the plans belong to the platform role; the billing service
+// checks it on the account itself.
+adminRouter.patch('/billing/override', async (req, res, next) => {
   try {
     await applyBillingOverride({ query }, req.admin.organizationId, req.admin.sub, req.body);
     res.json(await getBillingOverview({ query }, req.admin.organizationId, req.admin.sub));
@@ -74,7 +78,7 @@ adminRouter.patch('/billing/override', requireRole('admin'), async (req, res, ne
   }
 });
 
-adminRouter.patch('/billing/plans', requireRole('admin'), async (req, res, next) => {
+adminRouter.patch('/billing/plans', async (req, res, next) => {
   try {
     await updateBillingPlans({ query }, req.admin.sub, req.body.plans || []);
     res.json(await getBillingOverview({ query }, req.admin.organizationId, req.admin.sub));
@@ -261,6 +265,8 @@ adminRouter.get('/events', async (req, res, next) => {
 adminRouter.post('/events', requireRole('event_manager'), async (req, res, next) => {
   try {
     await ensureActiveEventLimit(req);
+    roundLength(req.body.feedbackWindowDays, env.feedbackWindowMaxDays, 'Tage');
+    roundLength(req.body.feedbackWindowHours, env.feedbackWindowMaxHours, 'Stunden');
     const organization = (await query('SELECT * FROM organizations WHERE id = $1', [req.admin.organizationId])).rows[0];
     const input = normalizeEventInput(req.body, organization);
     if (!input.name || !input.date_from) throw httpError(400, 'Bitte gib einen Eventnamen und ein Datum an.');
@@ -379,18 +385,31 @@ function cleanEventIds(value) {
   const list = Array.isArray(value) ? value : [];
   return list
     .filter((id) => typeof id === 'string' && /^[0-9a-f-]{36}$/i.test(id))
-    .slice(0, 5);
+    .slice(0, env.upcomingEventsMax);
 }
 
 // What an event can be: a draft, active and rateable, finished, or archived.
 const eventStatuses = ['draft', 'active', 'closed', 'archived'];
 
-adminRouter.patch('/events/:id', async (req, res, next) => {
+// Days and hours of a feedback round count from the end of the event and add up. A value that
+// is not given stays as it is; a given one is a whole number up to the bound of its setting.
+function roundLength(value, max, unit) {
+  if (value === undefined || value === null || value === '') return value === '' ? null : value;
+  const number = Number(value);
+  if (typeof value === 'boolean' || !Number.isInteger(number) || number < 0 || number > max) {
+    throw httpError(400, `Die ${unit} der Bewertungsrunde müssen eine ganze Zahl von 0 bis ${max} sein.`);
+  }
+  return number;
+}
+
+adminRouter.patch('/events/:id', requireRole('event_manager'), async (req, res, next) => {
   try {
     await ensureEventAccess(req, req.params.id);
     if (req.body.status !== undefined && req.body.status !== null && !eventStatuses.includes(req.body.status)) {
       throw httpError(400, `Den Status „${req.body.status}“ gibt es nicht. Möglich sind: ${eventStatuses.join(', ')}.`);
     }
+    const windowDays = roundLength(req.body.feedbackWindowDays, env.feedbackWindowMaxDays, 'Tage');
+    const windowHours = roundLength(req.body.feedbackWindowHours, env.feedbackWindowMaxHours, 'Stunden');
     const image = normalizeEventImageUpdate(req.body);
     const result = await query(
       `UPDATE events SET
@@ -423,8 +442,8 @@ adminRouter.patch('/events/:id', async (req, res, next) => {
         req.body.dateTo ?? null,
         req.body.feedbackEnabled,
         req.body.status,
-        req.body.feedbackWindowDays,
-        req.body.feedbackWindowHours ?? null,
+        windowDays,
+        windowHours ?? null,
         req.body.resolverPriority,
         image.mode,
         image.url,
@@ -472,8 +491,8 @@ adminRouter.get('/events/:id/analytics', async (req, res, next) => {
     );
     const comments = await query(
       `SELECT id, rating, comment_positive, comment_improvement, general_comment, newsletter_optin, submitted_at
-       FROM feedback_responses WHERE event_id = $1 ORDER BY submitted_at DESC LIMIT 100`,
-      [req.params.id]
+       FROM feedback_responses WHERE event_id = $1 ORDER BY submitted_at DESC LIMIT $2`,
+      [req.params.id, env.analyticsCommentsLimit]
     );
     const questionStats = await query(
       `SELECT q.id, q.internal_name, q.label, q.question_type, fa.answer_value, count(*)::int AS count
@@ -529,8 +548,8 @@ adminRouter.get('/events/:id/analytics', async (req, res, next) => {
        FROM guest_sessions
        WHERE event_id = $1 AND completed_at IS NULL AND draft IS NOT NULL
        ORDER BY last_seen_at DESC
-       LIMIT 200`,
-      [req.params.id]
+       LIMIT $2`,
+      [req.params.id, env.analyticsAbandonedLimit]
     );
     const questionLabels = await query(
       `SELECT q.internal_name, q.label
@@ -760,8 +779,8 @@ adminRouter.get('/events/:id/report.pdf', async (req, res, next) => {
        FROM feedback_responses
        WHERE event_id = $1
        ORDER BY submitted_at DESC
-       LIMIT 50`,
-      [event.id]
+       LIMIT $2`,
+      [event.id, env.reportCommentsLimit]
     );
     const reportOrganization = (await query('SELECT name, primary_color FROM organizations WHERE id = $1', [req.admin.organizationId])).rows[0];
     const pdf = buildEventReportPdf({
@@ -983,7 +1002,7 @@ adminRouter.get('/forms/profiles', async (req, res, next) => {
   }
 });
 
-adminRouter.post('/forms/from-profile', async (req, res, next) => {
+adminRouter.post('/forms/from-profile', requireRole('event_manager'), async (req, res, next) => {
   try {
     await ensureFormLimit(req);
     const eventId = req.body.eventId || null;
@@ -1057,7 +1076,7 @@ adminRouter.post('/forms/from-profile', async (req, res, next) => {
 // Ein Event bringt sein Formular schon mit, nur ohne Fragen. Eine Vorlage füllt
 // dieses Formular, statt ein zweites daneben zu legen -- die Gästeseite nimmt sonst
 // die Fragen beider und zeigt sie hintereinander.
-adminRouter.post('/forms/:id/apply-profile', async (req, res, next) => {
+adminRouter.post('/forms/:id/apply-profile', requireRole('event_manager'), async (req, res, next) => {
   try {
     const form = (await query(
       'SELECT * FROM feedback_forms WHERE id = $1 AND organization_id = $2',
@@ -1130,7 +1149,7 @@ adminRouter.get('/forms/:id', async (req, res, next) => {
   }
 });
 
-adminRouter.post('/forms', async (req, res, next) => {
+adminRouter.post('/forms', requireRole('event_manager'), async (req, res, next) => {
   try {
     await ensureFormLimit(req);
     if (req.body.eventId) await ensureEventAccess(req, req.body.eventId);
@@ -1153,7 +1172,7 @@ adminRouter.post('/forms', async (req, res, next) => {
   }
 });
 
-adminRouter.patch('/forms/:id', async (req, res, next) => {
+adminRouter.patch('/forms/:id', requireRole('event_manager'), async (req, res, next) => {
   try {
     const result = await query(
       `UPDATE feedback_forms
@@ -1172,7 +1191,7 @@ adminRouter.patch('/forms/:id', async (req, res, next) => {
   }
 });
 
-adminRouter.post('/forms/:id/save-profile', async (req, res, next) => {
+adminRouter.post('/forms/:id/save-profile', requireRole('event_manager'), async (req, res, next) => {
   try {
     await ensureFormLimit(req);
     const form = (await query(
@@ -1205,7 +1224,7 @@ adminRouter.post('/forms/:id/save-profile', async (req, res, next) => {
   }
 });
 
-adminRouter.post('/forms/:id/questions', async (req, res, next) => {
+adminRouter.post('/forms/:id/questions', requireRole('event_manager'), async (req, res, next) => {
   try {
     const form = (await query(
       'SELECT id FROM feedback_forms WHERE id = $1 AND organization_id = $2',
@@ -1234,7 +1253,7 @@ adminRouter.post('/forms/:id/questions', async (req, res, next) => {
   }
 });
 
-adminRouter.patch('/forms/:id/questions/:questionId', async (req, res, next) => {
+adminRouter.patch('/forms/:id/questions/:questionId', requireRole('event_manager'), async (req, res, next) => {
   try {
     const result = await query(
       `UPDATE feedback_questions SET
@@ -1281,7 +1300,7 @@ adminRouter.patch('/forms/:id/questions/:questionId', async (req, res, next) => 
   }
 });
 
-adminRouter.delete('/forms/:id/questions/:questionId', async (req, res, next) => {
+adminRouter.delete('/forms/:id/questions/:questionId', requireRole('event_manager'), async (req, res, next) => {
   try {
     await query(
       `DELETE FROM feedback_questions
@@ -1299,7 +1318,7 @@ adminRouter.delete('/forms/:id/questions/:questionId', async (req, res, next) =>
 
 // The order of the questions is the order of the guest flow. It arrives as the whole
 // list, so the numbers are rewritten in one go instead of one request per question.
-adminRouter.put('/forms/:id/question-order', async (req, res, next) => {
+adminRouter.put('/forms/:id/question-order', requireRole('event_manager'), async (req, res, next) => {
   try {
     const wanted = Array.isArray(req.body.order) ? req.body.order.map(String) : [];
     if (!wanted.length) throw httpError(400, 'Für die neue Reihenfolge fehlt die Liste der Fragen. Lade das Formular neu und versuche es erneut.');
@@ -1331,7 +1350,7 @@ adminRouter.put('/forms/:id/question-order', async (req, res, next) => {
   }
 });
 
-adminRouter.post('/forms/:id/duplicate', async (req, res, next) => {
+adminRouter.post('/forms/:id/duplicate', requireRole('event_manager'), async (req, res, next) => {
   try {
     await ensureFormLimit(req);
     const form = (await query(
@@ -1378,8 +1397,9 @@ adminRouter.get('/text-templates', async (req, res, next) => {
   }
 });
 
-adminRouter.post('/text-templates', async (req, res, next) => {
+adminRouter.post('/text-templates', requireRole('event_manager'), async (req, res, next) => {
   try {
+    if (req.body.eventId) await ensureEventAccess(req, req.body.eventId);
     const result = await query(
       `INSERT INTO text_templates (organization_id, event_id, language, style, scope, key, value)
        VALUES ($1,$2,$3,$4,$5,$6,$7)
@@ -1402,7 +1422,7 @@ adminRouter.post('/text-templates', async (req, res, next) => {
   }
 });
 
-adminRouter.patch('/text-templates/:id', async (req, res, next) => {
+adminRouter.patch('/text-templates/:id', requireRole('event_manager'), async (req, res, next) => {
   try {
     const result = await query(
       `UPDATE text_templates
@@ -1417,7 +1437,7 @@ adminRouter.patch('/text-templates/:id', async (req, res, next) => {
   }
 });
 
-adminRouter.post('/text-templates/reset', async (req, res, next) => {
+adminRouter.post('/text-templates/reset', requireRole('event_manager'), async (req, res, next) => {
   try {
     await query(
       `DELETE FROM text_templates
@@ -1449,8 +1469,9 @@ adminRouter.get('/qr-sources', async (req, res, next) => {
   }
 });
 
-adminRouter.post('/qr-sources', async (req, res, next) => {
+adminRouter.post('/qr-sources', requireRole('event_manager'), async (req, res, next) => {
   try {
+    if (req.body.eventId) await ensureEventAccess(req, req.body.eventId);
     const result = await query(
       `INSERT INTO qr_sources (organization_id, event_id, source_slug, label, type, active)
        VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
@@ -1469,7 +1490,7 @@ adminRouter.post('/qr-sources', async (req, res, next) => {
   }
 });
 
-adminRouter.patch('/qr-sources/:id', async (req, res, next) => {
+adminRouter.patch('/qr-sources/:id', requireRole('event_manager'), async (req, res, next) => {
   try {
     const result = await query(
       `UPDATE qr_sources
@@ -1484,7 +1505,7 @@ adminRouter.patch('/qr-sources/:id', async (req, res, next) => {
   }
 });
 
-adminRouter.delete('/qr-sources/:id', async (req, res, next) => {
+adminRouter.delete('/qr-sources/:id', requireRole('event_manager'), async (req, res, next) => {
   try {
     // The counted days stay. They take the current name along first, so a source renamed
     // after its last scan is still called what the admin called it.
@@ -1515,17 +1536,19 @@ adminRouter.get('/webhooks', requireRole('admin'), async (req, res, next) => {
   }
 });
 
+const teamColumns = 'id, name, email, role, status, platform_admin, invited_at, invite_expires_at, last_login_at, created_at';
+const teamRoles = ['support', 'analyst', 'event_manager', 'admin', 'owner'];
+const unknownRoleMessage = 'Diese Rolle gibt es nicht. Wähle Support, Analyst, Event Manager, Admin oder Owner.';
+
 adminRouter.get('/users', async (req, res, next) => {
   try {
     const result = hasRole(req.admin.role, 'event_manager')
       ? await query(
-        `SELECT id, name, email, role, status, invited_at, invite_expires_at, last_login_at, created_at
-         FROM users WHERE organization_id = $1 ORDER BY name`,
+        `SELECT ${teamColumns} FROM users WHERE organization_id = $1 ORDER BY name`,
         [req.admin.organizationId]
       )
       : await query(
-        `SELECT id, name, email, role, status, invited_at, invite_expires_at, last_login_at, created_at
-         FROM users WHERE organization_id = $1 AND id = $2 ORDER BY name`,
+        `SELECT ${teamColumns} FROM users WHERE organization_id = $1 AND id = $2 ORDER BY name`,
         [req.admin.organizationId, req.admin.sub]
       );
     res.json(result.rows);
@@ -1540,64 +1563,133 @@ adminRouter.post('/users/invite', requireRole('owner'), async (req, res, next) =
     const email = String(req.body.email || '').trim().toLowerCase();
     const name = String(req.body.name || email.split('@')[0] || 'Neuer User').trim();
     const role = req.body.role || 'support';
-    const allowedRoles = ['support', 'analyst', 'event_manager', 'admin', 'owner'];
     if (!email.includes('@')) throw httpError(400, 'Bitte gib eine gültige E-Mail-Adresse ein.');
-    if (!allowedRoles.includes(role)) throw httpError(400, 'Diese Rolle gibt es nicht. Wähle Support, Analyst, Event Manager, Admin oder Owner.');
+    if (!teamRoles.includes(role)) throw httpError(400, unknownRoleMessage);
     const token = randomToken(32);
     const passwordHash = await bcrypt.hash(randomToken(32), 12);
-    // A second invitation renews an open one of this organization. An account that is in
-    // use, or that belongs to another organization, stays exactly as it is.
+    // A new invitation renews one of this organization that nobody ever took up, an open one or
+    // a withdrawn one: it still carries its invitation and has never signed in. An account with
+    // a password of its own, a platform account and every account of another organization stay
+    // exactly as they are.
     const user = (await query(
       `INSERT INTO users (
         organization_id, name, email, password_hash, role, status, invite_token_hash, invite_expires_at, invited_at
       )
-      VALUES ($1,$2,$3,$4,$5,'invited',$6,now() + interval '7 days',now())
+      VALUES ($1,$2,$3,$4,$5,'invited',$6,now() + ($7 * interval '1 day'),now())
       ON CONFLICT (email)
       DO UPDATE SET
         name = EXCLUDED.name,
         role = EXCLUDED.role,
+        status = 'invited',
         invite_token_hash = EXCLUDED.invite_token_hash,
         invite_expires_at = EXCLUDED.invite_expires_at,
         invited_at = now(),
         updated_at = now()
-      WHERE users.organization_id = EXCLUDED.organization_id AND users.status = 'invited'
-      RETURNING id, name, email, role, status, invite_expires_at`,
-      [req.admin.organizationId, name, email, passwordHash, role, hashValue(token)]
+      WHERE users.organization_id = EXCLUDED.organization_id
+        AND users.status IN ('invited', 'disabled')
+        AND users.invite_token_hash IS NOT NULL
+        AND users.last_login_at IS NULL
+        AND users.platform_admin = false
+      RETURNING ${teamColumns}`,
+      [req.admin.organizationId, name, email, passwordHash, role, hashValue(token), env.inviteValidDays]
     )).rows[0];
     if (!user) {
       throw httpError(409, 'Zu dieser E-Mail-Adresse gibt es schon ein Konto. Gehört die Person zu deinem Team, findest du sie unter Einstellungen → Team. Sonst wende dich an einen Plattform-Admin.');
     }
+    await writeAudit({ query }, {
+      organizationId: req.admin.organizationId,
+      userId: req.admin.sub,
+      action: 'team.user_invited',
+      entityType: 'user',
+      entityId: user.id,
+      metadata: { role: user.role }
+    });
     const inviteUrl = `${env.adminAppUrl}/admin/accept-invite?token=${token}`;
+    const days = env.inviteValidDays === 1 ? 'einen Tag' : `${env.inviteValidDays} Tage`;
     const smtp = new SmtpService({ query });
     const mail = await smtp.sendMail(req.admin.organizationId, {
       to: email,
       subject: 'Einladung zu qrating',
-      text: `Du wurdest zu qrating eingeladen.\n\nEinladung abschließen:\n${inviteUrl}\n\nDer Link ist 7 Tage gültig.`
+      text: `Du wurdest zu qrating eingeladen.\n\nEinladung abschließen:\n${inviteUrl}\n\nDer Link ist ${days} gültig.`
     }).catch((error) => ({ skipped: true, reason: 'send_failed', error: smtpFailure(error).message }));
-    res.status(201).json({ user, inviteUrl, mail });
+    // The link only comes back when no mail carried it; then the owner passes it on by hand.
+    res.status(201).json({ user, mail, inviteUrl: mail?.skipped ? inviteUrl : null });
   } catch (error) {
     next(error);
   }
 });
 
+// Role and access of the people in the team. The rules keep the organization in hands that can
+// run it: nobody changes their own role or access, the last active owner stays, a platform
+// account answers only to the platform role, and "invited" is set by an invitation alone.
 adminRouter.patch('/users/:id', requireRole('owner'), async (req, res, next) => {
   try {
-    const allowedRoles = ['support', 'analyst', 'event_manager', 'admin', 'owner'];
-    if (req.body.role && !allowedRoles.includes(req.body.role)) throw httpError(400, 'Diese Rolle gibt es nicht. Wähle Support, Analyst, Event Manager, Admin oder Owner.');
-    const allowedStatuses = ['invited', 'active', 'disabled'];
-    if (req.body.status && !allowedStatuses.includes(req.body.status)) throw httpError(400, 'Diesen Status gibt es nicht. Wähle Eingeladen, Aktiv oder Deaktiviert.');
-    const result = await query(
-      `UPDATE users
-       SET name = COALESCE($3, name),
-           role = COALESCE($4, role),
-           status = COALESCE($5, status),
-           updated_at = now()
-       WHERE id = $1 AND organization_id = $2
-       RETURNING id, name, email, role, status, invited_at, invite_expires_at, last_login_at, created_at`,
-      [req.params.id, req.admin.organizationId, req.body.name, req.body.role, req.body.status]
-    );
-    if (!result.rows[0]) throw httpError(404, 'Dieses Benutzerkonto gibt es nicht mehr. Lade die Seite neu.');
-    res.json(result.rows[0]);
+    const { role, status } = req.body;
+    if (role !== undefined && role !== null && !teamRoles.includes(role)) throw httpError(400, unknownRoleMessage);
+    if (status !== undefined && status !== null && !['active', 'disabled'].includes(status)) {
+      throw httpError(400, status === 'invited'
+        ? 'Den Status „Eingeladen“ setzt nur eine Einladung. Wähle Aktiv oder Deaktiviert, oder lade die Person neu ein.'
+        : 'Diesen Status gibt es nicht. Wähle Aktiv oder Deaktiviert.');
+    }
+    const name = req.body.name === undefined || req.body.name === null ? null : String(req.body.name).trim();
+    if (name === '') throw httpError(400, 'Bitte gib einen Namen ein.');
+
+    const { before, after } = await withTransaction(async (client) => {
+      // The active owners are locked first, so two owners cannot demote each other at the same time.
+      const owners = (await client.query(
+        `SELECT id FROM users WHERE organization_id = $1 AND role = 'owner' AND status = 'active' ORDER BY id FOR UPDATE`,
+        [req.admin.organizationId]
+      )).rows.map((row) => row.id);
+      const target = (await client.query(
+        'SELECT * FROM users WHERE id = $1 AND organization_id = $2 FOR UPDATE',
+        [req.params.id, req.admin.organizationId]
+      )).rows[0];
+      if (!target) throw httpError(404, 'Dieses Benutzerkonto gibt es nicht mehr. Lade die Seite neu.');
+      if (target.platform_admin && !req.admin.platformAdmin) {
+        throw httpError(403, 'Dieses Konto gehört der Plattform-Verwaltung. Ändern kann es nur ein Plattform-Admin.');
+      }
+      const roleChanges = Boolean(role) && role !== target.role;
+      const statusChanges = Boolean(status) && status !== target.status;
+      if ((roleChanges || statusChanges) && target.id === req.admin.sub) {
+        throw httpError(409, 'Deine eigene Rolle und deinen Zugang ändert ein anderer Owner deiner Organisation.');
+      }
+      if (statusChanges && target.status === 'invited' && status === 'active') {
+        throw httpError(409, 'Ein eingeladenes Konto wird aktiv, sobald die Person die Einladung annimmt. Zurückziehen kannst du die Einladung mit „Deaktiviert“.');
+      }
+      const leavesOwners = target.role === 'owner' && target.status === 'active'
+        && ((roleChanges && role !== 'owner') || (statusChanges && status !== 'active'));
+      if (leavesOwners && !owners.some((id) => id !== target.id)) {
+        throw httpError(409, `${target.name} ist der letzte aktive Owner deiner Organisation. Mach zuerst eine andere Person zum Owner.`);
+      }
+      const updated = (await client.query(
+        `UPDATE users
+         SET name = COALESCE($3, name),
+             role = COALESCE($4, role),
+             status = COALESCE($5, status),
+             updated_at = now()
+         WHERE id = $1 AND organization_id = $2
+         RETURNING ${teamColumns}`,
+        [target.id, req.admin.organizationId, name, role ?? null, status ?? null]
+      )).rows[0];
+      return { before: target, after: updated };
+    });
+
+    const changes = [
+      ['role', 'team.role_changed'],
+      ['status', 'team.status_changed'],
+      ['name', 'team.user_renamed']
+    ].filter(([field]) => before[field] !== after[field]);
+    for (const [field, action] of changes) {
+      await writeAudit({ query }, {
+        organizationId: req.admin.organizationId,
+        userId: req.admin.sub,
+        action,
+        entityType: 'user',
+        entityId: after.id,
+        metadata: field === 'name' ? {} : { from: before[field], to: after[field] }
+      });
+    }
+    res.json(after);
   } catch (error) {
     next(error);
   }
@@ -1616,32 +1708,66 @@ adminRouter.get('/branding', async (req, res, next) => {
        FROM organizations WHERE id = $1`,
       [req.admin.organizationId]
     );
-    res.json({ ...result.rows[0], feedbackAppUrl: env.feedbackAppUrl });
+    const organization = result.rows[0];
+    res.json({
+      ...organization,
+      wallboard_settings: wallboardView(organization.wallboard_settings),
+      // The bounds of the settings, so the form offers what the server accepts.
+      retention_limits: { minDays: env.retentionMinDays, maxDays: env.retentionMaxDays, phoneDefaultDays: env.retentionPhoneDefaultDays },
+      wallboard_limits: { minSeconds: env.wallboardRefreshMinSeconds, maxSeconds: env.wallboardRefreshMaxSeconds },
+      feedbackAppUrl: env.feedbackAppUrl
+    });
   } catch (error) {
     next(error);
   }
 });
 
-// A deletion period counts whole days from 1 on; zero or less would let the next run of the
-// deletion job take everything. Where the field allows it, empty means keeping the data.
-// A request without the field gets null back, which leaves the stored period as it is.
-function retentionDays(body, key, refusal, { emptyKeeps = true } = {}) {
+// The wallboard of an organization as the page shows it: dark or light, and how often it reloads.
+function wallboardView(stored = {}) {
+  const refresh = Number(stored?.refresh_seconds);
+  return {
+    dark_mode: stored?.dark_mode !== false,
+    refresh_seconds: Number.isInteger(refresh) && refresh >= env.wallboardRefreshMinSeconds && refresh <= env.wallboardRefreshMaxSeconds
+      ? refresh
+      : env.wallboardRefreshDefaultSeconds
+  };
+}
+
+function wallboardInput(value) {
+  if (value === undefined || value === null) return null;
+  const refresh = Number(value.refresh_seconds ?? env.wallboardRefreshDefaultSeconds);
+  if (typeof value.refresh_seconds === 'boolean' || !Number.isInteger(refresh)
+    || refresh < env.wallboardRefreshMinSeconds || refresh > env.wallboardRefreshMaxSeconds) {
+    throw httpError(400, `Das Wallboard lädt alle ${env.wallboardRefreshMinSeconds} bis ${env.wallboardRefreshMaxSeconds} Sekunden neu. Trag eine ganze Zahl in diesem Bereich ein.`);
+  }
+  return { dark_mode: value.dark_mode !== false, refresh_seconds: refresh };
+}
+
+// A deletion period counts whole days inside the bounds of its settings. Zero or less would let
+// the next deletion run take everything, and a period beyond the calendar stops the run for the
+// whole organization. Where the field allows it, empty means keeping the data. A request
+// without the field gets null back, which leaves the stored period as it is.
+function retentionDays(body, key, subject, { emptyKeeps = true } = {}) {
   if (!Object.hasOwn(body, key)) return null;
   const raw = body[key];
   if ((raw === '' || raw === null) && emptyKeeps) return null;
   const days = Number(raw);
-  if (raw === '' || raw === null || typeof raw === 'boolean' || !Number.isInteger(days) || days < 1) throw httpError(400, refusal);
+  if (raw === '' || raw === null || typeof raw === 'boolean' || !Number.isInteger(days)
+    || days < env.retentionMinDays || days > env.retentionMaxDays) {
+    const range = `eine ganze Zahl von ${env.retentionMinDays} bis ${env.retentionMaxDays} Tagen`;
+    throw httpError(400, emptyKeeps
+      ? `Die Löschfrist für ${subject} muss ${range} sein. Lass das Feld leer, wenn die ${subject} bleiben sollen.`
+      : `Die Löschfrist für ${subject} muss ${range} sein, zum Beispiel ${env.retentionPhoneDefaultDays}.`);
+  }
   return days;
 }
 
 adminRouter.patch('/branding', requireRole('event_manager'), async (req, res, next) => {
   try {
-    const phoneDays = retentionDays(req.body, 'retentionLowRatingPhoneDays',
-      'Die Löschfrist für Rückrufnummern muss eine ganze Zahl ab 1 sein, zum Beispiel 90.', { emptyKeeps: false });
-    const feedbackDays = retentionDays(req.body, 'retentionFeedbackDays',
-      'Die Löschfrist für Bewertungen muss eine ganze Zahl ab 1 sein. Lass das Feld leer, wenn die Bewertungen bleiben sollen.');
-    const newsletterDays = retentionDays(req.body, 'retentionNewsletterDays',
-      'Die Löschfrist für Newsletter-Anmeldungen muss eine ganze Zahl ab 1 sein. Lass das Feld leer, wenn die Anmeldungen bleiben sollen.');
+    const phoneDays = retentionDays(req.body, 'retentionLowRatingPhoneDays', 'Rückrufnummern', { emptyKeeps: false });
+    const feedbackDays = retentionDays(req.body, 'retentionFeedbackDays', 'Bewertungen');
+    const newsletterDays = retentionDays(req.body, 'retentionNewsletterDays', 'Newsletter-Anmeldungen');
+    const wallboard = wallboardInput(req.body.wallboardSettings);
     const result = await query(
       `UPDATE organizations
        SET name = COALESCE($2, name),
@@ -1688,7 +1814,7 @@ adminRouter.patch('/branding', requireRole('event_manager'), async (req, res, ne
         phoneDays,
         feedbackDays,
         newsletterDays,
-        req.body.wallboardSettings ? JSON.stringify(req.body.wallboardSettings) : null,
+        wallboard ? JSON.stringify(wallboard) : null,
         req.body.qrMarkEnabled === undefined ? null : Boolean(req.body.qrMarkEnabled),
         req.body.productCreditEnabled === undefined ? null : Boolean(req.body.productCreditEnabled),
         req.body.legalName === undefined ? null : String(req.body.legalName).trim(),
@@ -1874,6 +2000,8 @@ adminRouter.get('/low-rating-cases', async (req, res, next) => {
           AND uea.organization_id = lrc.organization_id
       )`);
     }
+    params.push(env.callbacksListLimit);
+    const limit = `$${params.length}`;
     const result = await query(
       `SELECT lrc.*, e.name AS event_name, e.date_from, u.name AS assigned_user_name,
               fr.comment_positive, fr.comment_improvement, fr.general_comment, fr.submitted_at,
@@ -1892,7 +2020,7 @@ adminRouter.get('/low-rating-cases', async (req, res, next) => {
        JOIN feedback_responses fr ON fr.id = lrc.feedback_response_id
        WHERE ${clauses.join(' AND ')}
        ORDER BY CASE lrc.status WHEN 'open' THEN 0 WHEN 'contact_planned' THEN 1 ELSE 2 END, lrc.created_at DESC
-       LIMIT 200`,
+       LIMIT ${limit}`,
       params
     );
     res.json(result.rows.map((row) => ({
@@ -1921,6 +2049,11 @@ adminRouter.patch('/low-rating-cases/:id', async (req, res, next) => {
     const assignedUserId = hasRole(req.admin.role, 'event_manager')
       ? (req.body.assignedUserId ?? current.assigned_user_id)
       : current.assigned_user_id;
+    // A case goes to someone of this organization, never to an account elsewhere.
+    if (assignedUserId && assignedUserId !== current.assigned_user_id) {
+      const member = (await query('SELECT 1 FROM users WHERE id = $1 AND organization_id = $2', [assignedUserId, req.admin.organizationId])).rows[0];
+      if (!member) throw httpError(404, 'Diese Person gehört nicht zu deiner Organisation. Lade die Seite neu und wähle aus der Liste deines Teams.');
+    }
     const result = await query(
       `UPDATE low_rating_cases
        SET status = COALESCE($3, status),
@@ -2031,7 +2164,7 @@ adminRouter.get('/operations', requireRole('event_manager'), async (req, res, ne
 
 adminRouter.post('/operations/run-retention', requireRole('owner'), async (req, res, next) => {
   try {
-    const job = await enqueueJob({ query }, req.admin.organizationId, 'privacy.retention', {});
+    const job = await enqueueJob({ query }, req.admin.organizationId, 'privacy.retention', {}, { maxAttempts: env.retentionJobMaxAttempts });
     res.status(202).json({ ok: true, job });
   } catch (error) {
     next(error);
@@ -2226,7 +2359,7 @@ adminRouter.delete('/newsletter', requireRole('admin'), async (req, res, next) =
   }
 });
 
-adminRouter.get('/smtp-settings', async (req, res, next) => {
+adminRouter.get('/smtp-settings', requireRole('admin'), async (req, res, next) => {
   try {
     const smtp = new SmtpService({ query });
     res.json(await smtp.getSettings(req.admin.organizationId));
@@ -2235,7 +2368,7 @@ adminRouter.get('/smtp-settings', async (req, res, next) => {
   }
 });
 
-adminRouter.put('/smtp-settings', async (req, res, next) => {
+adminRouter.put('/smtp-settings', requireRole('admin'), async (req, res, next) => {
   try {
     const passwordProvided = typeof req.body.password === 'string' && req.body.password.length > 0;
     const passwordEncrypted = passwordProvided ? encryptSecret(req.body.password) : null;
@@ -2285,7 +2418,7 @@ adminRouter.put('/smtp-settings', async (req, res, next) => {
   }
 });
 
-adminRouter.post('/smtp-settings/test', async (req, res, next) => {
+adminRouter.post('/smtp-settings/test', requireRole('admin'), async (req, res, next) => {
   try {
     const smtp = new SmtpService({ query });
     res.json(await smtp.testSettings(req.admin.organizationId, req.body.to || null));
@@ -2294,7 +2427,7 @@ adminRouter.post('/smtp-settings/test', async (req, res, next) => {
   }
 });
 
-adminRouter.post('/pretix-connections', async (req, res, next) => {
+adminRouter.post('/pretix-connections', requireRole('event_manager'), async (req, res, next) => {
   try {
     const result = await query(
       `INSERT INTO pretix_connections (
@@ -2323,7 +2456,7 @@ adminRouter.post('/pretix-connections', async (req, res, next) => {
   }
 });
 
-adminRouter.get('/pretix-connections', async (req, res, next) => {
+adminRouter.get('/pretix-connections', requireRole('event_manager'), async (req, res, next) => {
   try {
     const result = await query(
       `SELECT id, organization_id, base_url, pretix_organizer_slug, sync_enabled, sync_interval_minutes,
@@ -2384,7 +2517,7 @@ adminRouter.patch('/pretix-connections/:id', requireRole('event_manager'), async
   }
 });
 
-adminRouter.post('/pretix-connections/:id/test', async (req, res, next) => {
+adminRouter.post('/pretix-connections/:id/test', requireRole('event_manager'), async (req, res, next) => {
   try {
     const connection = (await query('SELECT * FROM pretix_connections WHERE id = $1 AND organization_id = $2', [req.params.id, req.admin.organizationId])).rows[0];
     if (!connection) throw httpError(404, 'Diese Pretix-Verbindung gibt es nicht mehr. Lade die Seite neu.');
@@ -2395,14 +2528,18 @@ adminRouter.post('/pretix-connections/:id/test', async (req, res, next) => {
   }
 });
 
-adminRouter.post('/pretix-connections/:id/sync', async (req, res, next) => {
+adminRouter.post('/pretix-connections/:id/sync', requireRole('event_manager'), async (req, res, next) => {
   try {
     const connection = (await query('SELECT * FROM pretix_connections WHERE id = $1 AND organization_id = $2', [req.params.id, req.admin.organizationId])).rows[0];
     if (!connection) throw httpError(404, 'Diese Pretix-Verbindung gibt es nicht mehr. Lade die Seite neu.');
     const service = new PretixService({ query });
     res.json(await service.syncConnection(connection));
   } catch (error) {
-    await query('UPDATE pretix_connections SET last_sync_at = now(), last_sync_status = $1, last_sync_error = $2 WHERE id = $3', ['Fehler', error.message, req.params.id]).catch(() => {});
+    // The note lands on the connection of this organization only; another one stays untouched.
+    await query(
+      'UPDATE pretix_connections SET last_sync_at = now(), last_sync_status = $1, last_sync_error = $2 WHERE id = $3 AND organization_id = $4',
+      ['Fehler', error.message, req.params.id, req.admin.organizationId]
+    ).catch(() => {});
     next(error);
   }
 });

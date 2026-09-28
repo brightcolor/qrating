@@ -5,6 +5,7 @@ import { clearAdminCookie } from '../utils/security.js';
 import { sendError } from './errors.js';
 
 // Platform admins work in their own organization and can step into another one; `acting` marks that visit.
+// `sv` is the session version of the account: a new password raises it and ends older sessions.
 export function signAdmin(user, { organizationId = user.organization_id, role = user.role, acting = false } = {}) {
   return jwt.sign(
     {
@@ -13,10 +14,11 @@ export function signAdmin(user, { organizationId = user.organization_id, role = 
       role,
       platformAdmin: Boolean(user.platform_admin),
       homeOrganizationId: user.organization_id,
-      acting: Boolean(acting)
+      acting: Boolean(acting),
+      sv: Number(user.session_version) || 0
     },
     env.sessionSecret,
-    { expiresIn: '12h' }
+    { expiresIn: `${env.adminSessionHours}h` }
   );
 }
 
@@ -27,10 +29,12 @@ const closedAccountMessages = {
 };
 
 // A signed cookie proves who signed in, and the account decides what that is worth now:
-// every request reads status, role and platform role, so disabling an account ends its
-// sessions at once and a changed role applies from the next request on.
+// every request reads status, role, platform role and session version, so disabling an
+// account or setting a new password ends its sessions at once and a changed role applies
+// from the next request on. Several routers ask on the way through; the first answer counts.
 export async function requireAdmin(req, res, next) {
-  const token = req.cookies?.qrating_admin;
+  if (req.admin) return next();
+  const token = req.cookies?.[env.adminCookieName];
   if (!token) return sendError(req, res, 401, 'Du bist nicht angemeldet. Bitte melde dich an.');
 
   let session;
@@ -47,12 +51,21 @@ export async function requireAdmin(req, res, next) {
 
   try {
     const account = (await query(
-      'SELECT status, role, organization_id, platform_admin FROM users WHERE id = $1',
-      [session.sub]
+      `SELECT u.status, u.role, u.organization_id, u.platform_admin, u.session_version,
+              EXISTS (SELECT 1 FROM organizations o WHERE o.id = $2) AS organization_exists
+       FROM users u
+       WHERE u.id = $1`,
+      [session.sub, session.organizationId]
     )).rows[0];
     if (!account) return refuse('Dein Konto gibt es nicht mehr. Bitte melde dich mit einem anderen Konto an.');
     if (account.status !== 'active') {
       return refuse(closedAccountMessages[account.status] || 'Dein Konto ist gesperrt. Ein Admin deiner Organisation kann es wieder aktivieren.');
+    }
+    if ((Number(session.sv) || 0) !== Number(account.session_version)) {
+      return refuse('Deine Sitzung ist beendet, weil für dein Konto ein neues Passwort gesetzt wurde. Melde dich mit dem neuen Passwort an.');
+    }
+    if (!account.organization_exists) {
+      return refuse('Die Organisation dieser Sitzung gibt es nicht mehr. Bitte melde dich erneut an.');
     }
     const platformAdmin = Boolean(account.platform_admin);
     if (session.acting) {
@@ -82,11 +95,13 @@ export function hasRole(userRole, minimumRole) {
   return (roleRank[userRole] || 0) >= (roleRank[minimumRole] || 0);
 }
 
-export function requireRole(minimumRole) {
+export function requireRole(minimumRole, { orPlatform = false } = {}) {
   return (req, res, next) => {
     if (!req.admin) return sendError(req, res, 401, 'Du bist nicht angemeldet. Bitte melde dich an.');
+    // Some pages serve the platform role as well, whatever role the account has at home.
+    if (orPlatform && req.admin.platformAdmin) return next();
     if (!hasRole(req.admin.role, minimumRole)) {
-      return sendError(req, res, 403, 'Für diese Aktion fehlt dir die Berechtigung. Ein Admin deiner Organisation kann deine Rolle anpassen.');
+      return sendError(req, res, 403, 'Für diese Aktion fehlt dir die Berechtigung. Ein Owner deiner Organisation kann deine Rolle anpassen.');
     }
     next();
   };

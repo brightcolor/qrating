@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.58.4
+**Version:** 0.59.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -103,11 +103,24 @@ In production, the frontend proxies `/api/*` to the backend. Browsers should not
 
 ## First Admin
 
-qrating does not create a default admin account. The first visit to `/admin` shows a setup form while the `users` table is empty. The first account becomes `owner`.
+qrating ships without an admin account. While the installation has no account at all, every page leads to the first setup: `/admin` shows the setup form, and the website and the guest pages send their visitors there. Health, API and static paths stay reachable.
+
+The form asks for a setup code that only the operator can read, so nobody who reaches a freshly published instance first can take it over. While the setup is open, the backend writes a fresh code to its log at every start:
+
+```bash
+docker compose logs backend | grep Einrichtungscode
+```
+
+A new code replaces the one before:
+
+```bash
+docker compose exec backend node src/cli/setup-code.js
+```
+
+The first account becomes `owner` of the first organization and runs the platform above the organizations. Its password follows the normal rule (`PASSWORD_MIN_LENGTH`), it is signed in right away, and the setup lands in the audit log. From then on both setup routes answer HTTP 404, and the setup code is gone.
 
 After setup:
 
-- login with the email and password created in the setup form
 - invite further people under Einstellungen → Team
 - assign roles and event access per user
 - configure SMTP before using email invitations or password reset links
@@ -116,11 +129,29 @@ After setup:
 
 An installation carries as many organizations (tenants) as needed. Each one has its own events, forms, texts, QR codes, guests, and users; every query runs inside one organization. An event of another organization answers every role with HTTP 404, the owner included, and roles below Event Manager need an assignment to the event as well.
 
-An invitation renews only an open invitation of the same organization. For an address that already belongs to an account in use, or to any account of another organization, it answers HTTP 409 and leaves that account as it is.
+An invitation renews only an invitation of the same organization that nobody took up, an open or a withdrawn one. For an address that belongs to an account that has signed in, to a platform account, or to any account of another organization, it answers HTTP 409 and leaves that account as it is.
 
 The account that completes the first-admin setup also runs the platform. Under Plattform → Mandanten it sees every organization with its plan, events, feedback count, users, and Pretix connections, creates further tenants, and enters one to work inside it. While a platform admin works in another tenant, a banner names it and offers the way back, and entering and leaving are written to the audit log of that tenant.
 
 Accounts without the platform role only ever see their own organization; the platform routes answer them with HTTP 403.
+
+## Roles
+
+| Role | Works on |
+|---|---|
+| Owner | everything in the organization, including team, roles and access |
+| Admin | mail server, newsletter, webhooks, the plan of the organization |
+| Event Manager | all events, forms and questions, texts of the guest page, QR sources, Pretix, look of the guest page |
+| Analyst | the evaluation and the exports of the events assigned to them |
+| Support | the callbacks of the events assigned to them |
+
+Each role includes the ones below it. The rules for team changes keep an organization in hands that can run it:
+
+- nobody changes their own role or access; another owner does
+- the last active owner of an organization stays owner and active
+- "invited" comes from an invitation alone; withdrawing an invitation disables the account
+- a platform account answers to the platform role only
+- invitations and changes of role, access and name land in the audit log
 
 ## The Admin Area
 
@@ -205,6 +236,62 @@ BILLING_ADMIN_EMAILS=
 - All values above reach the backend container through `docker-compose.yml`.
 
 Plans and overrides belong to the platform role. `BILLING_ADMIN_EMAILS` stays as a fallback for installations that grant those rights by email address; it does not enable external provider flows.
+
+### All Settings
+
+Every value that shapes what qrating does is a setting with a default and bounds, kept in one place: `backend/src/config/env.js`. `docker-compose.yml` hands each one to the backend container with an empty default, so the default in `env.js` applies until `.env` names a value. A value outside what a setting allows stops the backend at the start with a message that names the setting, its bounds and what it does. `.env.example` lists them all, commented out with their defaults.
+
+| Setting | Default | Allowed | What it does |
+|---|---|---|---|
+| **Server and public pages** | | | |
+| `PORT` | `4000` | 1–65535 | Port the API listens on when it runs without Docker; the container always listens on 4000. |
+| `RATE_LIMIT_WINDOW_MS` | `60000` | 1000–86400000 | Window of the rate limit for ratings, in milliseconds. |
+| `RATE_LIMIT_MAX` | `30` | 1–100000 | Ratings accepted per address within that window. |
+| `IMAGE_CACHE_MAX_BYTES` | `5242880` | 1024–104857600 | Largest event image qrating caches, in bytes. |
+| `WORKER_INTERVAL_MS` | `5000` | 500–600000 | How often the background worker looks for jobs, in milliseconds. |
+| `PRETIX_SCHEDULER_INTERVAL_MS` | `60000` | 5000–86400000 | How often the planner schedules Pretix syncs and deletion runs, in milliseconds. |
+| `ORGANIZATION_NAME` | `Demo Events` | up to 120 characters | Name of the organization created on the first start. |
+| `ORGANIZATION_SLUG` | `demo-events` | lower-case letters, digits and hyphens | Short name of that organization, part of its QR link. |
+| **Sign-in and sessions** | | | |
+| `ADMIN_COOKIE_NAME` | `qrating_admin` | letters, digits, _ and -, up to 64 characters | Name of the cookie that carries the admin session. |
+| `ADMIN_SESSION_HOURS` | `12` | 1–720 | How long a sign-in to the admin area lasts, in hours. |
+| `TWO_FACTOR_CHALLENGE_MINUTES` | `10` | 1–60 | How long the sign-in waits for the code of the authenticator app, in minutes. |
+| `PASSWORD_MIN_LENGTH` | `10` | 8–128 | Minimum length of a password, in characters. |
+| `PASSWORD_RESET_VALID_HOURS` | `2` | 1–72 | Lifetime of a password reset link, in hours. |
+| `INVITE_VALID_DAYS` | `7` | 1–90 | Lifetime of a team invitation, in days. |
+| `AUTH_RATE_LIMIT_WINDOW_MINUTES` | `15` | 1–1440 | Window for sign-in attempts per address, in minutes. |
+| `AUTH_RATE_LIMIT_MAX` | `20` | 1–100000 | Sign-in attempts accepted per address within that window. |
+| `PASSWORD_RESET_RATE_LIMIT_WINDOW_MINUTES` | `60` | 1–1440 | Window for password reset requests per address, in minutes. |
+| `PASSWORD_RESET_RATE_LIMIT_MAX` | `5` | 1–100000 | Password reset requests accepted per address within that window. |
+| `SETUP_CODE_LENGTH` | `16` | 12–64 | Length of the setup code of the first setup, in characters. |
+| `SETUP_CODE_COMMAND` | `docker compose exec backend node src/cli/setup-code.js` | up to 300 characters | Command the setup page names for showing a fresh setup code. |
+| **Deletion periods and background jobs** | | | |
+| `RETENTION_MIN_DAYS` | `1` | 1–365 | Shortest deletion period an organization can enter, in days. |
+| `RETENTION_MAX_DAYS` | `3650` | 1–36500 | Longest deletion period an organization can enter, in days. |
+| `RETENTION_PHONE_DEFAULT_DAYS` | `90` | 1–36500 | Deletion period of callback numbers while an organization enters none, in days. |
+| `RETENTION_INTERVAL_HOURS` | `12` | 1–720 | Time between two deletion runs of an organization, in hours. |
+| `JOB_RETRY_MINUTES` | `2` | 1–1440 | Wait before a failed background job runs again, in minutes. |
+| `JOB_MAX_ATTEMPTS` | `5` | 1–50 | Attempts of a background job before it counts as failed. |
+| `PRETIX_SYNC_MAX_ATTEMPTS` | `3` | 1–50 | Attempts of a Pretix sync before it counts as failed. |
+| `RETENTION_JOB_MAX_ATTEMPTS` | `2` | 1–50 | Attempts of a deletion run before it counts as failed. |
+| `SCHEDULER_BATCH_SIZE` | `20` | 1–1000 | Syncs and deletion runs the planner schedules per round at most. |
+| `JOB_HISTORY_DAYS` | `30` | 1–3650 | How long finished background jobs stay in the list, in days. |
+| **Lists in the admin area and the report** | | | |
+| `ANALYTICS_VOICES_LIMIT` | `100` | 1–5000 | Votes the evaluation of an event lists. |
+| `ANALYTICS_COMMENTS_LIMIT` | `100` | 1–5000 | Comments the evaluation of an event returns. |
+| `ANALYTICS_ABANDONED_LIMIT` | `200` | 1–5000 | Abandoned visits the evaluation of an event lists. |
+| `CALLBACKS_LIST_LIMIT` | `200` | 1–5000 | Cases the list of callbacks shows. |
+| `REPORT_COMMENTS_LIMIT` | `50` | 1–1000 | Comments in the PDF report. |
+| **Events and the wallboard** | | | |
+| `UPCOMING_EVENTS_MAX` | `5` | 1–20 | Upcoming events that can be picked by hand for the page after a rating. |
+| `FEEDBACK_WINDOW_MAX_DAYS` | `365` | 1–3650 | Longest feedback round after the end of an event, days part. |
+| `FEEDBACK_WINDOW_MAX_HOURS` | `8760` | 1–87600 | Longest feedback round after the end of an event, hours part. |
+| `WALLBOARD_REFRESH_DEFAULT_SECONDS` | `15` | 1–86400 | How often the wallboard reloads while an organization enters nothing, in seconds. |
+| `WALLBOARD_REFRESH_MIN_SECONDS` | `5` | 1–86400 | Shortest reload interval of the wallboard, in seconds. |
+| `WALLBOARD_REFRESH_MAX_SECONDS` | `3600` | 1–86400 | Longest reload interval of the wallboard, in seconds. |
+| **New organizations** | | | |
+| `NEW_ORGANIZATION_COLOR` | `#2563eb` | a colour as #RRGGBB | Colour of a new organization. |
+| `NEW_ORGANIZATION_PRIVACY_TEXT` | `Feedback ist anonym möglich. E-Mail-Adressen werden nur für den gewählten Zweck gespeichert.` | up to 2000 characters | Privacy note of a new organization. |
 
 ## Docker
 
@@ -468,9 +555,9 @@ Handing personal data to a newsletter system belongs in the privacy statement of
 
 Feedback can be anonymous. Newsletter opt-ins are stored separately with consent text and timestamp. New newsletter emails are encrypted at rest and additionally stored as a normalized keyed hash/domain pair for deduplication and reporting without exposing the raw address. Low-rating callback phone numbers and contact notes are encrypted at rest and can be anonymized through retention jobs.
 
-Retention periods are whole days from 1 on; the API answers anything else with HTTP 400 and a reason. An empty period for feedback or newsletter entries keeps them; callback numbers always have a period, 90 days unless set otherwise, and the privacy page states the same.
+Retention periods are whole days between `RETENTION_MIN_DAYS` and `RETENTION_MAX_DAYS`; the API answers anything else with HTTP 400 and names the bounds. An empty period for feedback or newsletter entries keeps them. Callback numbers always have a period, `RETENTION_PHONE_DEFAULT_DAYS` unless the organization enters its own, and the privacy page states the same. The deletion run of an organization starts every `RETENTION_INTERVAL_HOURS`; each deletion in it runs for itself, so one that fails leaves the others their turn and the job names what failed.
 
-The wallboard hangs where guests read along. It shows numbers, and it quotes the words of a guest only when that guest agreed to be quoted (`testimonial_allowed`).
+The wallboard hangs where guests read along. It shows numbers and quotes nobody; what guests wrote stays in the evaluation.
 
 The public API returns only visitor-safe event and organization fields. Public status endpoints do not expose internal IDs, Pretix payloads, settings payloads, event tokens, synchronization metadata, or admin-only fields.
 
@@ -518,7 +605,7 @@ Admin areas include events, analytics, exports, forms, texts, QR sources, Pretix
 
 Admin authentication uses the `qrating_admin` HTTP-only cookie. The frontend does not store session tokens in `localStorage` or expose them to JavaScript.
 
-Every admin request reads the status, the role and the platform role of the account behind the cookie. Disabling an account, setting it back to invited or deleting it ends its sessions at once: the next request answers HTTP 401 with the reason and clears the cookie. A role an owner changes applies from the next request on. A platform admin visiting another tenant keeps full rights there while the platform role lasts; taking the role away ends the visit.
+Every admin request reads the status, the role, the platform role and the session version of the account behind the cookie (`ADMIN_COOKIE_NAME`, valid for `ADMIN_SESSION_HOURS`). Disabling or deleting an account ends its sessions at once: the next request answers HTTP 401 with the reason and clears the cookie, and the admin area opens the sign-in with that reason. A new password, set through a reset link or an invitation, ends every session signed before it. A role an owner changes applies from the next request on. A platform admin visiting another tenant keeps full rights there while the platform role lasts; taking the role away, or removing the visited organization, ends the visit.
 
 Two-factor authentication can be enabled under **Einstellungen → Sicherheit**. It uses standard TOTP apps and provides one-time recovery codes during setup. For an account with a second factor, a password opens no session on its own, wherever it was entered: at the sign-in, after a password reset and when an invitation is accepted, the code from the app completes the sign-in (`POST /admin/login/2fa`).
 
@@ -599,7 +686,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.58.4`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.59.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

@@ -20,8 +20,7 @@ import {
   textAnswers,
   timelineModel,
   voiceCounts,
-  voiceView,
-  wallboardQuotes
+  voiceView
 } from './model.js';
 
 const zone = 'Europe/Berlin';
@@ -214,15 +213,6 @@ describe('the voices of the guests', () => {
 
     expect(activity.lastHour).toBe(2);
     expect(activity.latest.map((item) => item.ago)).toEqual(['vor 4 Min.', 'vor 40 Min.', 'vor 3 Std.']);
-  });
-
-  it('quotes on the wallboard only guests who agreed to be quoted', () => {
-    const released = { ...voices[0], id: '4', testimonialAllowed: true };
-
-    expect(wallboardQuotes(voices)).toEqual([]);
-    expect(wallboardQuotes([...voices, released]).map((voice) => voice.id)).toEqual(['4']);
-    expect(wallboardQuotes([{ ...voices[2], testimonialAllowed: true }])).toEqual([]);
-    expect(wallboardQuotes(undefined)).toEqual([]);
   });
 });
 

@@ -11,24 +11,38 @@ import { SmtpService } from '../services/smtpService.js';
 import { clearAdminCookie, setAdminCookie } from '../utils/security.js';
 import { buildOtpAuthUrl, generateRecoveryCodes, generateTotpSecret, verifyTotp } from '../services/twoFactorService.js';
 import { writeAudit } from '../services/auditService.js';
+import { markSetupClosed, setupCodeMatches, setupOpen } from '../services/setupService.js';
 
 export const authRouter = express.Router();
 
+const authWindowMs = env.authRateLimitWindowMinutes * 60 * 1000;
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: env.nodeEnv === 'test' ? 1000 : 20,
+  windowMs: authWindowMs,
+  max: env.authRateLimitMax,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: `Zu viele Anmeldeversuche von diesem Anschluss. Bitte warte ${describeWait(15 * 60 * 1000)} und versuche es dann erneut.` }
+  message: { error: `Zu viele Anmeldeversuche von diesem Anschluss. Bitte warte ${describeWait(authWindowMs)} und versuche es dann erneut.` }
 });
 
+const resetWindowMs = env.passwordResetRateLimitWindowMinutes * 60 * 1000;
 const passwordResetLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  max: env.nodeEnv === 'test' ? 1000 : 5,
+  windowMs: resetWindowMs,
+  max: env.passwordResetRateLimitMax,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: `Zu viele Anfragen zum Zurücksetzen des Passworts. Bitte warte ${describeWait(60 * 60 * 1000)} und versuche es dann erneut.` }
+  message: { error: `Zu viele Anfragen zum Zurücksetzen des Passworts. Bitte warte ${describeWait(resetWindowMs)} und versuche es dann erneut.` }
 });
+
+const setupClosedMessage = 'Die Ersteinrichtung ist abgeschlossen. Melde dich mit deinem Konto an.';
+
+function passwordTooShort(password) {
+  return String(password || '').length < env.passwordMinLength;
+}
+
+const passwordLengthMessage = () => `Das Passwort muss mindestens ${env.passwordMinLength} Zeichen lang sein.`;
+
+// E-mail addresses arrive as typed, with a space at the end or in capitals.
+const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
 
 function publicUser(user) {
   return {
@@ -82,22 +96,30 @@ async function beginSession(res, user) {
   await query(
     `UPDATE users
      SET two_factor_challenge_hash = $2,
-         two_factor_challenge_expires_at = now() + interval '10 minutes',
+         two_factor_challenge_expires_at = now() + ($3 * interval '1 minute'),
          updated_at = now()
      WHERE id = $1`,
-    [user.id, hashValue(challengeToken)]
+    [user.id, hashValue(challengeToken), env.twoFactorChallengeMinutes]
   );
   return { twoFactorRequired: true, challengeToken, user: { email: user.email, name: user.name } };
 }
 
+// What a password needs, for the forms that set one: first setup, invitation and reset.
+authRouter.get('/password-policy', (req, res) => {
+  res.json({ minLength: env.passwordMinLength });
+});
+
+// Open only while the installation has no account. Afterwards the setup answers like a page
+// that does not exist, and what it would tell stays hidden.
 authRouter.get('/setup/status', async (req, res, next) => {
   try {
-    const userCount = Number((await query('SELECT count(*)::int AS count FROM users')).rows[0]?.count || 0);
+    if (!(await setupOpen({ query }))) throw httpError(404, setupClosedMessage);
     const organization = (await query('SELECT id, name, slug FROM organizations ORDER BY created_at ASC LIMIT 1')).rows[0] || null;
     res.json({
-      setupRequired: userCount === 0,
-      userCount,
-      organization: organization ? { name: organization.name, slug: organization.slug } : null
+      setupRequired: true,
+      organization: organization ? { name: organization.name, slug: organization.slug } : null,
+      passwordMinLength: env.passwordMinLength,
+      setupCodeCommand: env.setupCodeCommand
     });
   } catch (error) {
     next(error);
@@ -106,7 +128,12 @@ authRouter.get('/setup/status', async (req, res, next) => {
 
 authRouter.post('/setup/first-admin', authLimiter, async (req, res, next) => {
   try {
-    const email = String(req.body.email || '').trim().toLowerCase();
+    if (!(await setupOpen({ query }))) throw httpError(404, setupClosedMessage);
+    // The code comes first: without it nobody learns anything about the installation.
+    if (!(await setupCodeMatches({ query }, req.body.setupCode))) {
+      throw httpError(403, `Der Einrichtungscode stimmt nicht. Er steht im Log des Backends; einen neuen Code zeigt „${env.setupCodeCommand}“.`);
+    }
+    const email = normalizeEmail(req.body.email);
     const name = String(req.body.name || '').trim();
     const password = String(req.body.password || '');
     const organizationName = String(req.body.organizationName || env.organizationName).trim();
@@ -114,14 +141,14 @@ authRouter.post('/setup/first-admin', authLimiter, async (req, res, next) => {
 
     if (!name) throw httpError(400, 'Bitte gib deinen Namen ein.');
     if (!email || !email.includes('@')) throw httpError(400, 'Bitte gib eine gültige E-Mail-Adresse ein.');
-    if (password.length < 10) throw httpError(400, 'Das Passwort muss mindestens 10 Zeichen lang sein.');
+    if (passwordTooShort(password)) throw httpError(400, passwordLengthMessage());
     if (!organizationName) throw httpError(400, 'Bitte gib einen Organisationsnamen ein.');
 
     const passwordHash = await bcrypt.hash(password, 12);
     const created = await withTransaction(async (client) => {
       await client.query('LOCK TABLE users IN EXCLUSIVE MODE');
       const existingUsers = Number((await client.query('SELECT count(*)::int AS count FROM users')).rows[0]?.count || 0);
-      if (existingUsers > 0) throw httpError(409, 'Die Ersteinrichtung ist bereits abgeschlossen. Bitte melde dich an oder nutze eine Einladung.');
+      if (existingUsers > 0) throw httpError(404, setupClosedMessage);
 
       const existingOrganization = (await client.query('SELECT * FROM organizations ORDER BY created_at ASC LIMIT 1 FOR UPDATE')).rows[0];
       const organization = existingOrganization
@@ -133,10 +160,10 @@ authRouter.post('/setup/first-admin', authLimiter, async (req, res, next) => {
           [existingOrganization.id, organizationName, organizationSlug]
         )).rows[0]
         : (await client.query(
-          `INSERT INTO organizations (name, slug, primary_color, privacy_text, ticketshop_url, website_url, instagram_url)
-           VALUES ($1, $2, '#2563eb', 'Feedback ist anonym möglich. E-Mail-Adressen werden nur für den gewählten Zweck gespeichert.', 'https://tickets.example.com', 'https://example.com', 'https://instagram.com/example')
+          `INSERT INTO organizations (name, slug, primary_color, privacy_text)
+           VALUES ($1, $2, $3, $4)
            RETURNING *`,
-          [organizationName, organizationSlug]
+          [organizationName, organizationSlug, env.newOrganizationColor, env.newOrganizationPrivacyText]
         )).rows[0];
 
       // The account that sets the installation up also runs the platform above the organizations.
@@ -156,8 +183,11 @@ authRouter.post('/setup/first-admin', authLimiter, async (req, res, next) => {
         [organization.id, user.id]
       );
 
+      // The code has done its job; with the first account the setup closes for good.
+      await client.query('DELETE FROM setup_codes');
       return user;
     });
+    markSetupClosed();
 
     const user = await completeLogin(res, created);
     await writeAudit({ query }, {
@@ -175,8 +205,8 @@ authRouter.post('/setup/first-admin', authLimiter, async (req, res, next) => {
 
 authRouter.post('/login', authLimiter, async (req, res, next) => {
   try {
-    const { email, password } = req.body;
-    const result = await query('SELECT * FROM users WHERE email = $1', [String(email || '').toLowerCase()]);
+    const { password } = req.body;
+    const result = await query('SELECT * FROM users WHERE email = $1', [normalizeEmail(req.body.email)]);
     const user = result.rows[0];
     if (!user || !(await bcrypt.compare(password || '', user.password_hash))) {
       throw httpError(401, 'E-Mail oder Passwort ist falsch. Prüfe beides oder setze dein Passwort zurück.');
@@ -222,7 +252,7 @@ authRouter.post('/accept-invite', authLimiter, async (req, res, next) => {
     const token = String(req.body.token || '');
     const password = String(req.body.password || '');
     const name = String(req.body.name || '').trim();
-    if (password.length < 10) throw httpError(400, 'Das Passwort muss mindestens 10 Zeichen lang sein.');
+    if (passwordTooShort(password)) throw httpError(400, passwordLengthMessage());
     const tokenHash = hashValue(token);
     const user = (await query(
       `SELECT * FROM users
@@ -231,8 +261,9 @@ authRouter.post('/accept-invite', authLimiter, async (req, res, next) => {
          AND status = 'invited'`,
       [tokenHash]
     )).rows[0];
-    if (!user) throw httpError(400, 'Dieser Einladungslink ist ungültig oder abgelaufen. Bitte einen Admin deiner Organisation, dich erneut einzuladen.');
+    if (!user) throw httpError(400, 'Dieser Einladungslink ist ungültig oder abgelaufen. Bitte einen Owner deiner Organisation, dich erneut einzuladen.');
     const passwordHash = await bcrypt.hash(password, 12);
+    // A password of its own ends every session signed before it.
     const updated = (await query(
       `UPDATE users
        SET password_hash = $2,
@@ -240,6 +271,7 @@ authRouter.post('/accept-invite', authLimiter, async (req, res, next) => {
            status = 'active',
            invite_token_hash = null,
            invite_expires_at = null,
+           session_version = session_version + 1,
            updated_at = now()
        WHERE id = $1
        RETURNING *`,
@@ -253,7 +285,7 @@ authRouter.post('/accept-invite', authLimiter, async (req, res, next) => {
 
 authRouter.post('/password-reset/request', passwordResetLimiter, async (req, res, next) => {
   try {
-    const email = String(req.body.email || '').toLowerCase();
+    const email = normalizeEmail(req.body.email);
     const user = (await query('SELECT * FROM users WHERE email = $1', [email])).rows[0];
     let resetUrl = null;
     if (user && user.status !== 'disabled') {
@@ -262,17 +294,18 @@ authRouter.post('/password-reset/request', passwordResetLimiter, async (req, res
       await query(
         `UPDATE users
          SET password_reset_token_hash = $2,
-             password_reset_expires_at = now() + interval '2 hours',
+             password_reset_expires_at = now() + ($3 * interval '1 hour'),
              password_reset_requested_at = now(),
              updated_at = now()
          WHERE id = $1`,
-        [user.id, hashValue(token)]
+        [user.id, hashValue(token), env.passwordResetValidHours]
       );
+      const hours = env.passwordResetValidHours === 1 ? 'eine Stunde' : `${env.passwordResetValidHours} Stunden`;
       const smtp = new SmtpService({ query });
       await smtp.sendMail(user.organization_id, {
         to: user.email,
         subject: 'qrating Passwort zurücksetzen',
-        text: `Du kannst dein qrating Passwort hier zurücksetzen:\n\n${resetUrl}\n\nDer Link ist 2 Stunden gültig.`
+        text: `Du kannst dein qrating Passwort hier zurücksetzen:\n\n${resetUrl}\n\nDer Link ist ${hours} gültig.`
       }).catch(() => null);
     }
     res.json({ ok: true, resetUrl: env.nodeEnv === 'production' ? null : resetUrl });
@@ -284,7 +317,7 @@ authRouter.post('/password-reset/request', passwordResetLimiter, async (req, res
 authRouter.post('/password-reset/confirm', authLimiter, async (req, res, next) => {
   try {
     const password = String(req.body.password || '');
-    if (password.length < 10) throw httpError(400, 'Das Passwort muss mindestens 10 Zeichen lang sein.');
+    if (passwordTooShort(password)) throw httpError(400, passwordLengthMessage());
     const user = (await query(
       `SELECT * FROM users
        WHERE password_reset_token_hash = $1
@@ -294,12 +327,17 @@ authRouter.post('/password-reset/confirm', authLimiter, async (req, res, next) =
     )).rows[0];
     if (!user) throw httpError(400, 'Dieser Link zum Zurücksetzen ist ungültig oder abgelaufen. Fordere auf der Anmeldeseite einen neuen an.');
     const passwordHash = await bcrypt.hash(password, 12);
+    // The new password ends every session signed with the old one. An open invitation is
+    // settled as well: the person has chosen a password of their own.
     const updated = (await query(
       `UPDATE users
        SET password_hash = $2,
            status = 'active',
            password_reset_token_hash = null,
            password_reset_expires_at = null,
+           invite_token_hash = null,
+           invite_expires_at = null,
+           session_version = session_version + 1,
            updated_at = now()
        WHERE id = $1
        RETURNING *`,
@@ -330,6 +368,7 @@ authRouter.get('/me', requireAdmin, async (req, res, next) => {
       [req.admin.sub, req.admin.organizationId]
     );
     const user = result.rows[0];
+    if (!user) throw httpError(401, 'Dein Konto oder die Organisation dieser Sitzung gibt es nicht mehr. Bitte melde dich erneut an.');
     res.json({
       ...user,
       role: req.admin.role || user.home_role,
@@ -337,6 +376,8 @@ authRouter.get('/me', requireAdmin, async (req, res, next) => {
       acting: Boolean(req.admin.acting) && user.home_organization_id !== user.organization_id,
       twoFactorEnabled: Boolean(user.two_factor_enabled),
       adminTheme: user.admin_theme || null,
+      // Settings the pages of the admin area need to know.
+      settings: { upcomingEventsMax: env.upcomingEventsMax },
       two_factor_enabled: undefined,
       platform_admin: undefined,
       admin_theme: undefined
@@ -438,12 +479,13 @@ authRouter.post('/2fa/disable', requireAdmin, authLimiter, async (req, res, next
   try {
     const user = (await query('SELECT * FROM users WHERE id = $1', [req.admin.sub])).rows[0];
     if (!user) throw httpError(404, 'Dein Benutzerkonto wurde nicht gefunden. Bitte melde dich erneut an.');
+    // A typo here is an input error; a 401 would end the session of the person typing.
     if (!(await bcrypt.compare(String(req.body.password || ''), user.password_hash))) {
-      throw httpError(401, 'Das Passwort stimmt nicht.');
+      throw httpError(400, 'Das Passwort stimmt nicht. Gib das Passwort ein, mit dem du dich anmeldest.');
     }
     if (user.two_factor_enabled) {
       const secondFactor = verifyUserSecondFactor(user, req.body.code);
-      if (!secondFactor.ok) throw httpError(401, 'Der Code stimmt nicht. Gib den aktuellen Code aus deiner Authenticator-App oder einen Recovery-Code ein.');
+      if (!secondFactor.ok) throw httpError(400, 'Der Code stimmt nicht. Gib den aktuellen Code aus deiner Authenticator-App oder einen Recovery-Code ein.');
     }
     await query(
       `UPDATE users

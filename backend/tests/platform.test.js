@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { db, query } from '../src/db/pool.js';
 import { runMigrations, seedDefaultData } from '../src/db/bootstrap.js';
 import { app } from '../src/server.js';
+import { freshSetupCode } from './support/setupCode.js';
 
 vi.mock('../src/db/pool.js', async () => {
   const { createPglitePool } = await import('./support/pglitePool.js');
@@ -38,6 +39,7 @@ describe('platform administration', () => {
 
     const setup = await request('POST', '/admin/setup/first-admin', {
       body: {
+        setupCode: await freshSetupCode(),
         name: 'Platform Owner',
         email: 'platform@example.test',
         password: 'test-password-123',

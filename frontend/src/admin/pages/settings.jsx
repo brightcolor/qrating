@@ -44,7 +44,7 @@ function Organization() {
       websiteUrl: data.website_url || '',
       instagramUrl: data.instagram_url || '',
       facebookUrl: data.facebook_url || '',
-      retentionLowRatingPhoneDays: data.retention_low_rating_phone_days ?? 90,
+      retentionLowRatingPhoneDays: data.retention_low_rating_phone_days ?? data.retention_limits?.phoneDefaultDays ?? '',
       retentionFeedbackDays: data.retention_feedback_days ?? '',
       retentionNewsletterDays: data.retention_newsletter_days ?? '',
       minSeconds: data.anti_spam_settings?.min_seconds ?? 3,
@@ -73,6 +73,9 @@ function Organization() {
   }
 
   const set = (key) => (e) => setForm({ ...form, [key]: e.target.type === 'checkbox' ? e.target.checked : e.target.value });
+  // The bounds come from the settings of the installation, so the form offers what the server takes.
+  const limits = data?.retention_limits || {};
+  const daysRange = limits.minDays && limits.maxDays ? `Erlaubt sind ${limits.minDays} bis ${limits.maxDays} Tage.` : '';
 
   return <Page title="Organisation" subtitle="Wer hinter der Gästeseite steht: Name, Anschrift, Datenschutz und wie lange Daten bleiben.">
     {loading && <Loading />}
@@ -105,9 +108,9 @@ function Organization() {
         </Panel>
         <Panel title="Aufbewahrung und Spam-Schutz">
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Rückrufnummern löschen nach Tagen"><Input type="number" min="1" value={form.retentionLowRatingPhoneDays} onChange={set('retentionLowRatingPhoneDays')} /></Field>
-            <Field label="Feedback löschen nach Tagen" hint="Leer heißt behalten."><Input type="number" min="1" value={form.retentionFeedbackDays} onChange={set('retentionFeedbackDays')} /></Field>
-            <Field label="Newsletter-Anmeldungen löschen nach Tagen" hint="Leer heißt behalten."><Input type="number" min="1" value={form.retentionNewsletterDays} onChange={set('retentionNewsletterDays')} /></Field>
+            <Field label="Rückrufnummern löschen nach Tagen" hint={daysRange}><Input type="number" min={limits.minDays} max={limits.maxDays} value={form.retentionLowRatingPhoneDays} onChange={set('retentionLowRatingPhoneDays')} /></Field>
+            <Field label="Feedback löschen nach Tagen" hint={`Leer heißt behalten. ${daysRange}`.trim()}><Input type="number" min={limits.minDays} max={limits.maxDays} value={form.retentionFeedbackDays} onChange={set('retentionFeedbackDays')} /></Field>
+            <Field label="Newsletter-Anmeldungen löschen nach Tagen" hint={`Leer heißt behalten. ${daysRange}`.trim()}><Input type="number" min={limits.minDays} max={limits.maxDays} value={form.retentionNewsletterDays} onChange={set('retentionNewsletterDays')} /></Field>
             <Field label="Mindestzeit bis Absenden (Sek.)"><Input type="number" min="0" value={form.minSeconds} onChange={(e) => setForm({ ...form, minSeconds: Number(e.target.value) })} /></Field>
             <Check label="Unsichtbares Fangfeld gegen Bots (Honeypot)" checked={form.honeypotEnabled} onChange={set('honeypotEnabled')} className="sm:col-span-2" />
           </div>
@@ -126,7 +129,7 @@ function Organization() {
 const roleLabels = { support: 'Support', analyst: 'Analyst', event_manager: 'Event Manager', admin: 'Admin', owner: 'Owner' };
 
 function Team() {
-  const { events } = useAdmin();
+  const { events, me } = useAdmin();
   const [reload, setReload] = useState(0);
   const { data: users, loading, error } = useAsync(() => api('/admin/users'), [reload]);
   const [selectedEvent, setSelectedEvent] = useState('');
@@ -158,9 +161,11 @@ function Team() {
     try {
       const result = await api('/admin/users/invite', { method: 'POST', body: JSON.stringify(invite) });
       const mail = result.mail || {};
-      if (mail.error) setMessage(errorNotice({ message: `Einladung erstellt, die E-Mail ließ sich aber nicht senden. ${mail.error} Schicke der Person diesen Link: ${result.inviteUrl}` }));
-      else if (mail.skipped) setMessage(`Einladung erstellt. Der E-Mail-Versand ist ausgeschaltet, schicke der Person diesen Link: ${result.inviteUrl}`);
-      else setMessage(`Einladung an ${invite.email} verschickt. Der Link gilt 7 Tage: ${result.inviteUrl}`);
+      // How long the link holds comes with the invitation; the setting lives on the server.
+      const validity = result.user?.invite_expires_at ? ` Der Link gilt bis ${formatDate(result.user.invite_expires_at)}.` : '';
+      if (mail.error) setMessage(errorNotice({ message: `Einladung erstellt, die E-Mail ließ sich aber nicht senden. ${mail.error} Schicke der Person diesen Link: ${result.inviteUrl}${validity}` }));
+      else if (mail.skipped) setMessage(`Einladung erstellt. Der E-Mail-Versand ist ausgeschaltet, schicke der Person diesen Link: ${result.inviteUrl}${validity}`);
+      else setMessage(`Einladung an ${invite.email} verschickt.${validity}`);
       setInvite({ name: '', email: '', role: 'support' });
       setReload(reload + 1);
     } catch (err) {
@@ -224,19 +229,34 @@ function Team() {
         <Button variant="primary" className="mt-3" onClick={saveAssignments} disabled={loadedAssignments.eventId !== selectedEvent}>Zuständigkeiten speichern</Button>
       </Panel>
     </div>
-    <Panel title="Rollen und Zugang">
+    <Panel title="Rollen und Zugang" note="„Eingeladen“ setzt nur eine Einladung. Die eigene Rolle ändert ein anderer Owner.">
       <div className="grid gap-2">
-        {users?.map((user) => <div key={user.id} className="grid items-center gap-2 border-b border-q-line pb-2 last:border-0 md:grid-cols-[1fr_180px_160px]">
-          <div className="min-w-0"><strong>{user.name}</strong><p className="truncate text-q-muted">{user.email}, letzter Login: {user.last_login_at ? formatDate(user.last_login_at) : 'noch nie'}</p></div>
-          <Select value={user.role} onChange={(e) => update(user, { role: e.target.value }, 'Rolle gespeichert.')} aria-label={`Rolle von ${user.name}`}>
-            {Object.entries(roleLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </Select>
-          <Select value={user.status || 'active'} onChange={(e) => update(user, { status: e.target.value }, 'Zugang gespeichert.')} aria-label={`Zugang von ${user.name}`}>
-            <option value="invited">Eingeladen</option>
-            <option value="active">Aktiv</option>
-            <option value="disabled">Deaktiviert</option>
-          </Select>
-        </div>)}
+        {users?.map((user) => {
+          // The server keeps these rules as well; the page offers only what it would accept.
+          const own = user.id === me?.id;
+          const platformOnly = user.platform_admin && !me?.platformAdmin;
+          const locked = own || platformOnly;
+          const lockNote = own ? 'Dein eigenes Konto ändert ein anderer Owner deiner Organisation.' : platformOnly ? 'Plattform-Konto: Ändern kann es nur ein Plattform-Admin.' : null;
+          return <div key={user.id} className="grid items-center gap-2 border-b border-q-line pb-2 last:border-0 md:grid-cols-[1fr_180px_180px]">
+            <div className="min-w-0">
+              <strong>{user.name}</strong>
+              <p className="truncate text-q-muted">{user.email}, letzter Login: {user.last_login_at ? formatDate(user.last_login_at) : 'noch nie'}</p>
+              {lockNote && <p className="q-hint">{lockNote}</p>}
+            </div>
+            <Select value={user.role} disabled={locked} onChange={(e) => update(user, { role: e.target.value }, 'Rolle gespeichert.')} aria-label={`Rolle von ${user.name}`}>
+              {Object.entries(roleLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </Select>
+            {user.status === 'invited'
+              ? <Select value="invited" disabled={locked} onChange={(e) => update(user, { status: e.target.value }, 'Einladung zurückgezogen.')} aria-label={`Einladung von ${user.name}`}>
+                <option value="invited" disabled>Eingeladen</option>
+                <option value="disabled">Einladung zurückziehen</option>
+              </Select>
+              : <Select value={user.status || 'active'} disabled={locked} onChange={(e) => update(user, { status: e.target.value }, 'Zugang gespeichert.')} aria-label={`Zugang von ${user.name}`}>
+                <option value="active">Aktiv</option>
+                <option value="disabled">Deaktiviert</option>
+              </Select>}
+          </div>;
+        })}
       </div>
     </Panel>
   </Page>;
@@ -686,12 +706,14 @@ const thumbnailFor = (id) => thumbnails[`../designs/${id}.webp`] || null;
 function Design() {
   const { theme, chooseTheme, flash: message, setFlash: setMessage } = useAdmin();
 
+  // Only the newest click speaks; an earlier one that settles later says nothing about the look on screen.
   async function choose(id) {
     setMessage('');
     try {
-      await chooseTheme(id);
-      setMessage(`Design „${themes.find((item) => item.id === id).name}“ gespeichert. Es gilt für dein Konto, auf jedem Gerät.`);
+      const result = await chooseTheme(id);
+      if (result.newest) setMessage(`Design „${themeFor(result.saved).name}“ gespeichert. Es gilt für dein Konto, auf jedem Gerät.`);
     } catch (err) {
+      if (err.newest === false) return;
       setMessage(errorNotice({ message: `Das Design wurde nicht gespeichert, es bleibt bei „${themeFor(err.keptTheme).name}“. ${err.message}` }));
     }
   }

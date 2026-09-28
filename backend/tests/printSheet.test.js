@@ -5,6 +5,7 @@ import { runMigrations, seedDefaultData } from '../src/db/bootstrap.js';
 import { app } from '../src/server.js';
 import { env } from '../src/config/env.js';
 import { formatEventPeriod, renderQrPrintSheet, safeAccent } from '../src/utils/printSheet.js';
+import { freshSetupCode } from './support/setupCode.js';
 
 vi.mock('../src/db/pool.js', async () => {
   const { createPglitePool } = await import('./support/pglitePool.js');
@@ -43,6 +44,7 @@ describe('print sheet of an event', () => {
     baseUrl = `http://127.0.0.1:${server.address().port}`;
     const setup = await request('POST', '/admin/setup/first-admin', {
       body: {
+        setupCode: await freshSetupCode(),
         name: 'Owner',
         email: 'owner@example.test',
         password: 'test-password-123',

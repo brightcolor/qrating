@@ -4,6 +4,7 @@ import { db, query } from '../src/db/pool.js';
 import { runMigrations, seedDefaultData } from '../src/db/bootstrap.js';
 import { app } from '../src/server.js';
 import { abandonedEntries, formatDraftValue } from '../src/services/guestSessionService.js';
+import { freshSetupCode } from './support/setupCode.js';
 
 vi.mock('../src/db/pool.js', async () => {
   const { createPglitePool } = await import('./support/pglitePool.js');
@@ -46,7 +47,7 @@ describe('what guests gave on the way', () => {
     await once(server, 'listening');
     baseUrl = `http://127.0.0.1:${server.address().port}`;
     const setup = await request('POST', '/admin/setup/first-admin', {
-      body: { name: 'Owner', email: 'owner@example.test', password: 'test-password-123', organizationName: 'HSP-Events' }
+      body: { setupCode: await freshSetupCode(), name: 'Owner', email: 'owner@example.test', password: 'test-password-123', organizationName: 'HSP-Events' }
     });
     expect(setup.status).toBe(201);
     ownerCookie = setup.cookie;
