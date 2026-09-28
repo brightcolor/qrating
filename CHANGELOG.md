@@ -4,6 +4,17 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.59.1] - 2026-09-29
+
+### Fixed
+
+- The end-to-end smoke test fetches the setup code from the backend before the first setup. It also checks that the public pages lead to the open setup, that a wrong code is refused, and that the setup closes with the first account.
+
+### Changed
+
+- A test keeps sessions from before 0.59.0 working: they carry no session version and count as version 0 until they expire.
+- Version bumped to `0.59.1`.
+
 ## [0.59.0] - 2026-09-29
 
 ### Security

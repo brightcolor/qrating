@@ -1,5 +1,6 @@
 import { once } from 'node:events';
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { db, query } from '../src/db/pool.js';
 import { runMigrations, seedDefaultData } from '../src/db/bootstrap.js';
@@ -282,6 +283,15 @@ describe('a session', () => {
     const fresh = await request('GET', '/admin/events', { cookie: confirmed.cookie });
     expect([old.status, signed.status, fresh.status]).toEqual([401, 401, 200]);
     expect(old.body.error).toContain('neues Passwort gesetzt');
+  });
+
+  it('keeps a session signed before sessions carried a version', async () => {
+    // Cookies from before the release carry no version; they count as version 0 until they expire.
+    const token = jwt.sign({ sub: home.owner.user.id, organizationId: home.id, role: 'owner', acting: false }, env.sessionSecret, { expiresIn: '5m' });
+
+    const me = await request('GET', '/admin/me', { cookie: `${env.adminCookieName}=${token}` });
+
+    expect(me.status).toBe(200);
   });
 
   it('works with the visit role while the platform role lasts, and with the home role at home', async () => {

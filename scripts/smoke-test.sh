@@ -38,13 +38,24 @@ echo "Guest page for the dynamic QR code"
 curl -fsS -o "$WORK_DIR/guest.json" "$API_URL/public/f/demo-events" || fail "guest page request failed"
 grep -q '"status":"ok"' "$WORK_DIR/guest.json" || fail "guest page did not resolve the demo event"
 
-echo "First admin setup with an own organization"
+echo "Public pages lead to the first setup while it is open"
+curl -fsS -o /dev/null -D "$WORK_DIR/site.headers" "$API_URL/public/site" || fail "website request failed"
+grep -qi '^x-qrating-setup: open' "$WORK_DIR/site.headers" || fail "the website does not lead to the open setup"
+
+echo "First admin setup with the code from the backend"
+# The backend writes a code to its log at the start; the command in the container shows a fresh one.
+setup_code="$(compose exec -T backend node src/cli/setup-code.js </dev/null | sed -nE 's/.*Einrichtungscode: ([A-Z0-9-]+).*/\1/p' | head -n1)"
+[ -n "$setup_code" ] || fail "the backend showed no setup code"
+[ "$(curl -sS -o /dev/null -w '%{http_code}' -H 'content-type: application/json' \
+  -d '{"setupCode":"AAAA-BBBB-CCCC-DDDD","name":"Smoke Owner","email":"owner@example.test","password":"smoke-password-123","organizationName":"Smoke Events"}' \
+  "$API_URL/admin/setup/first-admin")" = "403" ] || fail "the setup took a wrong code"
 curl -fsS -o /dev/null -D "$WORK_DIR/setup.headers" \
   -H 'content-type: application/json' \
-  -d '{"name":"Smoke Owner","email":"owner@example.test","password":"smoke-password-123","organizationName":"Smoke Events"}' \
+  -d "{\"setupCode\":\"$setup_code\",\"name\":\"Smoke Owner\",\"email\":\"owner@example.test\",\"password\":\"smoke-password-123\",\"organizationName\":\"Smoke Events\"}" \
   "$API_URL/admin/setup/first-admin" || fail "first admin setup failed"
 cookie="$(grep -i '^set-cookie: qrating_admin=' "$WORK_DIR/setup.headers" | head -n1 | sed -E 's/^[^:]+: ([^;]+).*/\1/')"
 [ -n "$cookie" ] || fail "setup returned no session cookie"
+[ "$(curl -sS -o /dev/null -w '%{http_code}' "$API_URL/admin/setup/status")" = "404" ] || fail "the setup is still open after the first account"
 
 echo "Manual event next to the demo event"
 curl -fsS -o /dev/null \
