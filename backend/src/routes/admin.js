@@ -1507,15 +1507,21 @@ adminRouter.patch('/qr-sources/:id', requireRole('event_manager'), async (req, r
 
 adminRouter.delete('/qr-sources/:id', requireRole('event_manager'), async (req, res, next) => {
   try {
-    // The counted days stay. They take the current name along first, so a source renamed
-    // after its last scan is still called what the admin called it.
-    await query(
-      `UPDATE qr_source_daily_stats SET source_label = qs.label
-       FROM qr_sources qs
-       WHERE qs.id = $1 AND qs.organization_id = $2 AND qr_source_daily_stats.qr_source_id = qs.id`,
-      [req.params.id, req.admin.organizationId]
-    );
-    await query('DELETE FROM qr_sources WHERE id = $1 AND organization_id = $2', [req.params.id, req.admin.organizationId]);
+    await withTransaction(async (client) => {
+      // Locked first: a vote that references the source waits until the name is copied, so no
+      // vote slips in between the copy and the delete.
+      const source = (await client.query(
+        'SELECT id, label FROM qr_sources WHERE id = $1 AND organization_id = $2 FOR UPDATE',
+        [req.params.id, req.admin.organizationId]
+      )).rows[0];
+      // Gone already, or never part of this organization: nothing to delete.
+      if (!source) return;
+      // The counted days and the votes stay. They take the current name along first, so a
+      // source renamed after its last scan is still called what the admin called it.
+      await client.query('UPDATE qr_source_daily_stats SET source_label = $2 WHERE qr_source_id = $1', [source.id, source.label]);
+      await client.query('UPDATE feedback_responses SET source_label = $2 WHERE qr_source_id = $1', [source.id, source.label]);
+      await client.query('DELETE FROM qr_sources WHERE id = $1', [source.id]);
+    });
     res.json({ ok: true });
   } catch (error) {
     next(error);

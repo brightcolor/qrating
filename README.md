@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.59.1
+**Version:** 0.59.2
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -539,7 +539,7 @@ Every opt-in is handed over by the background worker, so a guest never waits for
 
 - `EMAIL`: the address of the guest
 - the configured event tag, by default `VERANSTALTUNG`: the name of the event as Pretix wrote it; events created by hand use their own name
-- the configured source tag, by default `QUELLE`: the way the entry came in. It names the QR source the guest scanned, for example `Bändchen` or `Bar`. Without a QR source, or with that behaviour switched off at the connection, it carries the free fallback value, by default `qrating`. An empty value leaves the field out.
+- the configured source tag, by default `QUELLE`: the way the entry came in. It names the QR source the guest scanned, for example `Bändchen` or `Bar`, also when that source was deleted before the handover. Without a QR source, or with that behaviour switched off at the connection, it carries the free fallback value, by default `qrating`. An empty value leaves the field out.
 
 Both tags must exist as custom fields of that list in MailWizz, otherwise MailWizz stores the address without them. A known address is updated instead of created, so a second handover stays harmless.
 

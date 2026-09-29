@@ -270,15 +270,16 @@ export function textAnswers(voices = []) {
   return [...byLabel.entries()].map(([label, answers]) => ({ label, answers }));
 }
 
-const placeNames = { dynamic: 'QR-Code', dynamic_organization: 'QR-Code', event_specific: 'Eventlink', preview: 'Vorschau' };
+const placeNames = { dynamic: 'QR-Code', dynamic_organization: 'QR-Code', event_specific: 'Eventlink', event: 'Direkt', preview: 'Vorschau' };
 
-// One voice as a list shows it.
+// One voice as a list shows it. A guest who scanned a spot that has no QR source, or lost it
+// before the name was kept, still came through that spot: its short name says which one.
 export function voiceView(voice, zone) {
   const first = voice.texts?.[0] || null;
   return {
     ...voice,
     when: formatWhen(voice.submittedAt, zone),
-    place: voice.source || placeNames[voice.sourceType] || 'Direkt',
+    place: voice.source || placeNames[voice.sourceType] || voice.sourceType || 'Direkt',
     kind: first ? first.label : 'nur Sterne',
     text: first ? first.value : null,
     more: (voice.texts || []).slice(1)

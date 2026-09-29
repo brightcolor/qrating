@@ -204,6 +204,14 @@ describe('the voices of the guests', () => {
     expect(voiceView(voices[2], zone)).toMatchObject({ place: 'QR-Code', kind: 'nur Sterne', text: null });
   });
 
+  it('names the spot of a code that has no QR source by its short name', () => {
+    const scanned = { id: '4', rating: 3, texts: [], submittedAt: '2026-09-21T10:00:00Z', source: null };
+
+    expect(voiceView({ ...scanned, sourceType: 'tresen' }, zone).place).toBe('tresen');
+    expect(voiceView({ ...scanned, sourceType: 'event' }, zone).place).toBe('Direkt');
+    expect(voiceView({ ...scanned, sourceType: null }, zone).place).toBe('Direkt');
+  });
+
   it('puts the open calls on top', () => {
     expect(callbacksFirst(voices).map((voice) => voice.id)).toEqual(['2', '1', '3']);
   });

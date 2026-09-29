@@ -4,6 +4,17 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.59.2] - 2026-09-29
+
+### Fixed
+
+- A vote keeps the name of the QR spot it came through when that QR source is deleted. The evaluation read the name through the link to the source, which the database empties on deletion, so such votes were listed as "Direkt". Deleting a source now writes its current name onto its votes first, the way the counted days of the spot already keep theirs (migration `037`). The handover to the newsletter system names the spot the same way.
+- A vote through a code whose short name belongs to no QR source shows that short name as its place in the evaluation.
+
+### Changed
+
+- Version bumped to `0.59.2`.
+
 ## [0.59.1] - 2026-09-29
 
 ### Fixed

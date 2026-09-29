@@ -21,12 +21,13 @@ function answerText(value) {
 
 // The newest votes of an event with everything written along the way: the free-text fields
 // and the answers to text questions of the form, in the order of the form. The QR source says
-// where the guest scanned, the case says whether the organizer still owes a call.
+// where the guest scanned, the case says whether the organizer still owes a call. A deleted
+// source left its name on the vote.
 export async function eventVoices(db, eventId, limit = env.analyticsVoicesLimit) {
   const votes = (await db.query(
     `SELECT fr.id, fr.rating, fr.submitted_at, fr.completed_at, fr.source_type,
             fr.comment_positive, fr.comment_improvement, fr.general_comment, fr.testimonial_allowed,
-            qs.label AS source_label,
+            COALESCE(qs.label, fr.source_label) AS source_label,
             lrc.id AS case_id, lrc.status AS case_status,
             (lrc.contact_phone_encrypted IS NOT NULL) AS case_has_phone
      FROM feedback_responses fr
