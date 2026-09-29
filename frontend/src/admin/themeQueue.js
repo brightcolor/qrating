@@ -12,9 +12,11 @@ export function createThemeQueue(save, initial = null) {
     get saved() {
       return saved;
     },
-    // Taken before the account is read; `accepts` then says whether the reading still counts.
-    mark: () => latest,
-    accepts: (mark) => pending === 0 && mark === latest,
+    // Taken before the account is read; `accepts` then says whether the reading still counts. A
+    // reading that starts while a choice is on its way may carry the look from before it, so it
+    // never counts, even when it answers after the choice has settled.
+    mark: () => (pending ? -1 : latest),
+    accepts: (mark) => mark === latest,
     confirm(value) {
       saved = value;
     },

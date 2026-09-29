@@ -387,7 +387,7 @@ mark { background: linear-gradient(104deg, rgba(255, 228, 92, 0) .9%, rgb(var(--
 .kpi-poster .l { margin-top: 4px; font-weight: 600; }
 .kpi-poster .s { color: rgb(var(--q-muted)); font-size: 12.5px; }
 .kpi-poster .hot .v { color: rgb(var(--q-accent-2)); }
-@media (max-width: 1023px) { .poster { margin: -14px -16px 0; } }
+@media not all and screen(lg) { .poster { margin: -14px -16px 0; } }
 
 /* ------------------------------------------------------------------ 9 Schwarzlicht */
 
@@ -474,7 +474,7 @@ mark { background: linear-gradient(104deg, rgba(255, 228, 92, 0) .9%, rgb(var(--
 .event-row .figures { display: flex; flex-wrap: wrap; gap: 14px; color: rgb(var(--q-muted)); font-size: 13px; }
 .event-row .figures b { color: rgb(var(--q-ink)); margin-right: 3px; }
 .event-row .figures .text-q-danger b { color: inherit; }
-@media (max-width: 1023px) { .event-row { grid-template-columns: 48px minmax(0, 1fr); } .event-row .figures, .event-row > div:last-child { grid-column: 2; } }
+@media not all and screen(lg) { .event-row { grid-template-columns: 48px minmax(0, 1fr); } .event-row .figures, .event-row > div:last-child { grid-column: 2; } }
 
 .question-card { border: 1px solid rgb(var(--q-line)); border-radius: var(--q-radius); background: rgb(var(--q-surface)); }
 .question-card.open { border-color: rgb(var(--q-accent)); box-shadow: 0 0 0 1px rgb(var(--q-accent) / .25); }
@@ -514,7 +514,7 @@ mark { background: linear-gradient(104deg, rgba(255, 228, 92, 0) .9%, rgb(var(--
   .poster .big span.long { font-size: 60px; }
   .poster .date { display: none; }
 }
-@media (max-width: 1023px) {
+@media not all and screen(lg) {
   .sheet-body { grid-template-columns: 1fr; }
   .sheet-body .col + .col { border-left: 0; border-top: 1px solid rgb(var(--q-line)); }
 }

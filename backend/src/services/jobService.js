@@ -195,10 +195,16 @@ export class JobWorker {
       await enqueueJob(this.db, organization.id, 'privacy.retention', {}, { maxAttempts: env.retentionJobMaxAttempts });
     }
 
-    // Finished jobs leave the list after a while; failed ones stay for the look at what went wrong.
+    // Finished jobs leave the list after JOB_HISTORY_DAYS, failed ones after FAILED_JOB_HISTORY_DAYS,
+    // which leaves time to look at what went wrong. A deletion run stays until its interval has
+    // passed as well: the planner above counts it, and without it the next round would start a
+    // new run before the interval is over.
     await this.db.query(
-      `DELETE FROM background_jobs WHERE status = 'done' AND updated_at < now() - ($1 * interval '1 day')`,
-      [env.jobHistoryDays]
+      `DELETE FROM background_jobs
+       WHERE ((status = 'done' AND updated_at < now() - ($1 * interval '1 day'))
+           OR (status = 'failed' AND updated_at < now() - ($2 * interval '1 day')))
+         AND NOT (job_type = 'privacy.retention' AND created_at > now() - ($3 * interval '1 hour'))`,
+      [env.jobHistoryDays, env.failedJobHistoryDays, env.retentionIntervalHours]
     );
   }
 

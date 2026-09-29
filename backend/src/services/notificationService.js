@@ -67,7 +67,7 @@ function moment(value, zone) {
   if (!value) return null;
   const parsed = DateTime.fromJSDate(value instanceof Date ? value : new Date(value), { zone: 'utc' });
   if (!parsed.isValid) return null;
-  return parsed.setZone(zone || 'Europe/Berlin').setLocale('de').toFormat("ccc, d. LLLL yyyy 'um' HH:mm");
+  return parsed.setZone(zone || env.defaultTimezone).setLocale('de').toFormat("ccc, d. LLLL yyyy 'um' HH:mm");
 }
 
 function block(label, value) {
@@ -79,7 +79,7 @@ export function lowRatingDetailMessage(event, feedback) {
   const item = feedback.low_rating_case || {};
   const phone = openStored(item.contact_phone_encrypted, 'Die Rückrufnummer');
   const note = openStored(item.contact_note_encrypted, 'Das Anliegen');
-  const zone = event.event_timezone || 'Europe/Berlin';
+  const zone = event.event_timezone || env.defaultTimezone;
   const when = [moment(event.date_from, zone), plainText(event.location)].filter(Boolean).join(' · ');
   return [
     `Ein Gast hat ${stars(feedback.rating)} gegeben.`,

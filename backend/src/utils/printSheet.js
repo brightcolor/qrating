@@ -1,6 +1,7 @@
 // The sheets that stand at the event: guests see the code, what it is for,
 // and nothing they would have to type. Four designs, one of them for the organizer.
 import { DateTime } from 'luxon';
+import { env } from '../config/env.js';
 import { escapeHtml } from './html.js';
 import { plainText } from './localized.js';
 
@@ -21,7 +22,7 @@ function eventDateTime(value, zone) {
 
 // Guests read a date, so the day stands in words and a run of days keeps one year at the end.
 export function formatEventPeriod(event) {
-  const zone = event?.event_timezone || 'Europe/Berlin';
+  const zone = event?.event_timezone || env.defaultTimezone;
   const start = eventDateTime(event?.date_from, zone);
   if (!start) return '';
   const end = eventDateTime(event?.date_to, zone);

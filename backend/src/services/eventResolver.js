@@ -91,19 +91,12 @@ export class EventResolver {
     this.db = db;
   }
 
-  async resolveCurrentEvent(organizationSlug, sourceSlug, now = DateTime.utc()) {
+  // The event a code of the organization leads to. Which QR place a scan counts for follows from
+  // that event, so scan and vote find the same place; the route looks it up once the event is known.
+  async resolveCurrentEvent(organizationSlug, now = DateTime.utc()) {
     const orgResult = await this.db.query('SELECT * FROM organizations WHERE slug = $1', [organizationSlug]);
     const organization = orgResult.rows[0];
     if (!organization) return { status: 'organization_not_found', organization: null, event: null };
-
-    let qrSource = null;
-    if (sourceSlug) {
-      const sourceResult = await this.db.query(
-        'SELECT * FROM qr_sources WHERE organization_id = $1 AND source_slug = $2 AND active = true',
-        [organization.id, sourceSlug]
-      );
-      qrSource = sourceResult.rows[0] || null;
-    }
 
     const eventResult = await this.db.query(
       `SELECT * FROM events
@@ -120,8 +113,7 @@ export class EventResolver {
       organization,
       event: ranked[0] || null,
       candidates: ranked,
-      upcoming,
-      qrSource
+      upcoming
     };
   }
 

@@ -75,7 +75,7 @@ function Organization() {
       retentionLowRatingPhoneDays: data.retention_low_rating_phone_days ?? data.retention_limits?.phoneDefaultDays ?? '',
       retentionFeedbackDays: data.retention_feedback_days ?? '',
       retentionNewsletterDays: data.retention_newsletter_days ?? '',
-      minSeconds: data.anti_spam_settings?.min_seconds ?? 3,
+      minSeconds: data.anti_spam_settings?.min_seconds ?? data.anti_spam_limits?.defaultSeconds ?? '',
       honeypotEnabled: data.anti_spam_settings?.honeypot_enabled !== false
     });
   }, [data]);
@@ -120,6 +120,8 @@ function Organization() {
   // The bounds come from the settings of the installation, so the form offers what the server takes.
   const limits = data?.retention_limits || {};
   const daysRange = limits.minDays && limits.maxDays ? `Erlaubt sind ${limits.minDays} bis ${limits.maxDays} Tage.` : '';
+  const spamLimits = data?.anti_spam_limits || {};
+  const spamHint = spamLimits.maxSeconds ? `Erlaubt sind 0 bis ${spamLimits.maxSeconds} Sekunden; leer gilt die Vorgabe von ${spamLimits.defaultSeconds}.` : null;
 
   return <Page title="Organisation" subtitle="Wer hinter der Gästeseite steht: Name, Anschrift, Datenschutz und wie lange Daten bleiben.">
     {loading && <Loading />}
@@ -160,7 +162,7 @@ function Organization() {
               {!canPrivacy && <p className="q-hint sm:col-span-2">Löschfristen ändert ein Admin oder Owner deiner Organisation.</p>}
             </fieldset>
             <fieldset disabled={!canEdit} className="m-0 grid min-w-0 gap-3 border-0 p-0 sm:grid-cols-2">
-              <Field label="Mindestzeit bis Absenden (Sek.)"><Input type="number" min="0" value={form.minSeconds} onChange={(e) => setForm({ ...form, minSeconds: Number(e.target.value) })} /></Field>
+              <Field label="Mindestzeit bis Absenden (Sek.)" hint={spamHint}><Input type="number" min="0" max={spamLimits.maxSeconds} value={form.minSeconds} onChange={set('minSeconds')} /></Field>
               <Check label="Unsichtbares Fangfeld gegen Bots (Honeypot)" checked={form.honeypotEnabled} onChange={set('honeypotEnabled')} className="sm:col-span-2" />
             </fieldset>
           </div>
@@ -201,7 +203,8 @@ function Team() {
   const [loadedAssignments, setLoadedAssignments] = useState({ eventId: null, rows: [] });
   const assignments = loadedAssignments.eventId === selectedEvent ? loadedAssignments.rows : [];
   const setAssignments = (rows) => setLoadedAssignments({ eventId: selectedEvent, rows });
-  const [invite, setInvite] = useState({ name: '', email: '', role: 'support' });
+  // The role of a new person is chosen on purpose, so the form starts without one.
+  const [invite, setInvite] = useState({ name: '', email: '', role: '' });
   const [message, setMessage] = useState('');
   const owners = activeOwners(users || []);
 
@@ -240,7 +243,7 @@ function Team() {
 
   async function inviteUser(e) {
     e.preventDefault();
-    if (await sendInvite(invite)) setInvite({ name: '', email: '', role: 'support' });
+    if (await sendInvite(invite)) setInvite({ name: '', email: '', role: '' });
   }
 
   async function update(user, patch, text) {
@@ -280,9 +283,10 @@ function Team() {
     {(canTeam || canAssign) && <div className="grid gap-4 xl:grid-cols-2">
       {canTeam && <Panel title="Person einladen">
         {teamsInPlan ? <form onSubmit={inviteUser} className="grid gap-3 sm:grid-cols-2">
-          <Field label="Name"><Input value={invite.name} onChange={(e) => setInvite({ ...invite, name: e.target.value })} /></Field>
+          <Field label="Name" hint="Leer nennt qrating die Person nach dem Anfang ihrer Adresse, bis sie ihren Namen einträgt."><Input value={invite.name} onChange={(e) => setInvite({ ...invite, name: e.target.value })} /></Field>
           <Field label="E-Mail"><Input type="email" value={invite.email} onChange={(e) => setInvite({ ...invite, email: e.target.value })} required /></Field>
-          <Field label="Rolle"><Select value={invite.role} onChange={(e) => setInvite({ ...invite, role: e.target.value })}>
+          <Field label="Rolle"><Select value={invite.role} onChange={(e) => setInvite({ ...invite, role: e.target.value })} required>
+            <option value="" disabled>Rolle wählen …</option>
             {Object.entries(roleLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </Select></Field>
           <div className="flex items-end"><Button type="submit" variant="primary" icon="send">Einladung senden</Button></div>

@@ -1,6 +1,5 @@
 // The privacy page of an organization, written from what this installation really does.
 // Every sentence follows a setting or a table, so the page and the software stay in step.
-import { env } from '../config/env.js';
 import { effectivePhoneDays } from '../utils/retention.js';
 
 export const processorLine = 'qrating, ein Produkt von bright color (siehe qrating.de/impressum)';

@@ -23,6 +23,19 @@ describe('deleting a QR place', () => {
     expect(placeAddress('', source)).toBe('…/bar');
   });
 
+  it('hangs a place for a single event on the link of that event', () => {
+    const single = { label: 'Bühne', source_slug: 'buehne', type: 'event_specific', event_id: 'abend' };
+    const event = { id: 'abend', url: 'https://qrat.ing/e/token-des-abends' };
+
+    expect(placeAddress('https://qrat.ing/f/beispiel', single, event)).toBe('https://qrat.ing/e/token-des-abends?source=buehne');
+    expect(placeAddress('https://qrat.ing/f/beispiel', single, { id: 'anderer-abend', url: 'https://qrat.ing/e/anders' })).toBe(null);
+    expect(placeAddress('https://qrat.ing/f/beispiel', single)).toBe(null);
+  });
+
+  it('speaks of the printed codes without an address where the page knows none', () => {
+    expect(placeDeleteNotice(source, null)).toMatch(/Gedruckte Codes des Platzes führen weiter zur Gästeseite/);
+  });
+
   it('says what stays, where printed codes lead and who takes them up', () => {
     const notice = placeDeleteNotice(source, 'https://qrat.ing/f/beispiel/bar');
 

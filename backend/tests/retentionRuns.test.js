@@ -85,7 +85,7 @@ describe('the deletion runs of an organization', () => {
     }
   });
 
-  it('clear finished jobs after the days of their setting and keep failed ones', async () => {
+  it('clear finished jobs after the days of their setting and keep failed ones longer', async () => {
     const insert = (status, days) => query(
       `INSERT INTO background_jobs (organization_id, job_type, payload, status, updated_at)
        VALUES ($1, 'newsletter.sync', '{}'::jsonb, $2, now() - ($3 * interval '1 day')) RETURNING id`,
@@ -99,13 +99,39 @@ describe('the deletion runs of an organization', () => {
     const kept = (await query('SELECT id FROM background_jobs WHERE id = ANY($1::uuid[])', [[old, failed, recent]])).rows.map((row) => row.id);
     expect(kept.sort()).toEqual([failed, recent].sort());
 
-    const before = env.jobHistoryDays;
+    const before = { done: env.jobHistoryDays, failed: env.failedJobHistoryDays };
     env.jobHistoryDays = 3;
+    env.failedJobHistoryDays = 30;
     try {
       await plan();
-      expect((await query('SELECT id FROM background_jobs WHERE id = $1', [recent])).rows).toHaveLength(0);
+      expect((await query('SELECT id FROM background_jobs WHERE id = ANY($1::uuid[])', [[failed, recent]])).rows).toHaveLength(0);
     } finally {
-      env.jobHistoryDays = before;
+      env.jobHistoryDays = before.done;
+      env.failedJobHistoryDays = before.failed;
+    }
+  });
+
+  it('keep the last run until its interval has passed, however short the history is', async () => {
+    const before = { interval: env.retentionIntervalHours, history: env.jobHistoryDays };
+    env.retentionIntervalHours = 72;
+    env.jobHistoryDays = 1;
+    try {
+      await query("DELETE FROM background_jobs WHERE job_type = 'privacy.retention'");
+      await query(
+        `INSERT INTO background_jobs (organization_id, job_type, payload, status, created_at, updated_at)
+         VALUES ($1, 'privacy.retention', '{}'::jsonb, 'done', now() - interval '30 hours', now() - interval '30 hours')`,
+        [organizationId]
+      );
+
+      await plan();
+      await plan();
+
+      const runs = await retentionJobs();
+      expect(runs).toHaveLength(1);
+      expect(runs[0].status).toBe('done');
+    } finally {
+      env.retentionIntervalHours = before.interval;
+      env.jobHistoryDays = before.history;
     }
   });
 

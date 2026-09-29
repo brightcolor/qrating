@@ -57,7 +57,7 @@ export function Overview() {
         {openCases.length ? <div className="grid gap-2">
           {openCases.slice(0, 4).map((item) => <button key={item.id} type="button" className="grid gap-0.5 rounded-lg bg-q-danger-soft p-2 text-left" onClick={() => go({ page: 'callbacks' })}>
             <span className="flex items-center gap-2 text-q-danger"><Stars rating={item.rating} size={11} offClassName="opacity-30" /><span className="text-q-muted">{item.event_name}</span></span>
-            <span className="truncate">{caseTexts(item)[0]?.value || 'Der Gast hat nichts geschrieben.'}</span>
+            <span className="truncate">{caseTexts(item)[0]?.value || (item.contactNoteAvailable ? 'Anliegen hinterlegt, verschlüsselt' : 'Der Gast hat nichts geschrieben.')}</span>
           </button>)}
         </div> : <p className="text-q-muted">Kein offener Rückruf.</p>}
       </Panel>

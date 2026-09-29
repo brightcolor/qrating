@@ -7,6 +7,16 @@ const nodeEnv = process.env.NODE_ENV || 'development';
 const defaultAdminAppUrl = nodeEnv === 'production' ? 'https://app.qrating.de' : 'http://localhost:8080';
 const defaultFeedbackAppUrl = nodeEnv === 'production' ? 'https://qrat.ing' : 'http://localhost:8080';
 
+// A time zone the runtime knows by its name, such as "Europe/Berlin".
+export function knownTimezone(value) {
+  try {
+    new Intl.DateTimeFormat('de-DE', { timeZone: value });
+    return /^[A-Za-z_]+(\/[A-Za-z0-9_+-]+)*$/.test(value);
+  } catch {
+    return false;
+  }
+}
+
 // Express "trust proxy": a hop count (the frontend nginx is one hop), true/false, or an address list.
 export function parseTrustProxy(value) {
   const raw = String(value ?? '').trim();
@@ -25,6 +35,7 @@ export const numberSettings = [
   { key: 'port', name: 'PORT', fallback: 4000, min: 1, max: 65535, hint: 'Port, auf dem die API lauscht.' },
   { key: 'rateLimitWindowMs', name: 'RATE_LIMIT_WINDOW_MS', fallback: 60000, min: 1000, max: 86400000, hint: 'Zeitfenster der Ratenbegrenzung für Bewertungen, in Millisekunden.' },
   { key: 'rateLimitMax', name: 'RATE_LIMIT_MAX', fallback: 30, min: 1, max: 100000, hint: 'So viele Bewertungen nimmt qrating je Anschluss im Zeitfenster an.' },
+  { key: 'progressRateLimitMax', name: 'PROGRESS_RATE_LIMIT_MAX', fallback: 600, min: 1, max: 1000000, hint: 'So viele Schrittmeldungen der Gästeseite nimmt qrating je Anschluss im Zeitfenster von RATE_LIMIT_WINDOW_MS an; jeder Gast meldet jeden Schritt.' },
   { key: 'imageCacheMaxBytes', name: 'IMAGE_CACHE_MAX_BYTES', fallback: 5242880, min: 1024, max: 104857600, hint: 'Größtes Eventbild, das qrating zwischenspeichert, in Byte.' },
   { key: 'workerIntervalMs', name: 'WORKER_INTERVAL_MS', fallback: 5000, min: 500, max: 600000, hint: 'Takt, in dem der Hintergrunddienst nach Aufgaben sieht, in Millisekunden.' },
   { key: 'pretixSchedulerIntervalMs', name: 'PRETIX_SCHEDULER_INTERVAL_MS', fallback: 60000, min: 5000, max: 86400000, hint: 'Takt, in dem der Planer Pretix-Abgleiche und Löschläufe ansetzt, in Millisekunden.' },
@@ -34,7 +45,9 @@ export const numberSettings = [
   { key: 'twoFactorChallengeMinutes', name: 'TWO_FACTOR_CHALLENGE_MINUTES', fallback: 10, min: 1, max: 60, hint: 'So lange wartet die Anmeldung auf den Code aus der Authenticator-App, in Minuten.' },
   { key: 'passwordResetValidHours', name: 'PASSWORD_RESET_VALID_HOURS', fallback: 2, min: 1, max: 72, hint: 'So lange gilt ein Link zum Zurücksetzen des Passworts, in Stunden.' },
   { key: 'inviteValidDays', name: 'INVITE_VALID_DAYS', fallback: 7, min: 1, max: 90, hint: 'So lange gilt eine Einladung ins Team, in Tagen.' },
-  { key: 'passwordMinLength', name: 'PASSWORD_MIN_LENGTH', fallback: 10, min: 8, max: 128, hint: 'Mindestlänge eines Passworts, in Zeichen.' },
+  // bcrypt reads the first 72 bytes of a password, so a longer minimum would promise more than it keeps.
+  { key: 'passwordMinLength', name: 'PASSWORD_MIN_LENGTH', fallback: 10, min: 8, max: 72, hint: 'Mindestlänge eines Passworts, in Zeichen.' },
+  { key: 'passwordHashCost', name: 'PASSWORD_HASH_COST', fallback: 12, min: 10, max: 14, hint: 'Aufwand beim Speichern und Prüfen eines Passworts (bcrypt-Kostenfaktor); jede Stufe verdoppelt die Rechenarbeit.' },
   { key: 'authRateLimitWindowMinutes', name: 'AUTH_RATE_LIMIT_WINDOW_MINUTES', fallback: 15, min: 1, max: 1440, hint: 'Zeitfenster für Anmeldeversuche je Anschluss, in Minuten.' },
   { key: 'authRateLimitMax', name: 'AUTH_RATE_LIMIT_MAX', fallback: 20, min: 1, max: 100000, hint: 'So viele Anmeldeversuche nimmt qrating je Anschluss im Zeitfenster an.' },
   { key: 'passwordResetRateLimitWindowMinutes', name: 'PASSWORD_RESET_RATE_LIMIT_WINDOW_MINUTES', fallback: 60, min: 1, max: 1440, hint: 'Zeitfenster für Anfragen zum Zurücksetzen des Passworts je Anschluss, in Minuten.' },
@@ -57,7 +70,16 @@ export const numberSettings = [
   { key: 'retentionJobMaxAttempts', name: 'RETENTION_JOB_MAX_ATTEMPTS', fallback: 2, min: 1, max: 50, hint: 'Versuche eines Löschlaufs, bevor er als gescheitert gilt.' },
   { key: 'schedulerBatchSize', name: 'SCHEDULER_BATCH_SIZE', fallback: 20, min: 1, max: 1000, hint: 'So viele Abgleiche und Löschläufe setzt der Planer je Takt höchstens an.' },
   { key: 'jobHistoryDays', name: 'JOB_HISTORY_DAYS', fallback: 30, min: 1, max: 3650, hint: 'So lange bleiben erledigte Hintergrundaufgaben in der Liste, in Tagen.' },
+  { key: 'failedJobHistoryDays', name: 'FAILED_JOB_HISTORY_DAYS', fallback: 90, min: 1, max: 3650, hint: 'So lange bleiben gescheiterte Hintergrundaufgaben zur Durchsicht in der Liste, in Tagen.' },
   { key: 'lowRatingGraceMinutes', name: 'LOW_RATING_GRACE_MINUTES', fallback: 30, min: 0, max: 1440, hint: 'So lange wartet die Meldung nach einem Tipp auf wenige Sterne auf den Rest des Formulars, in Minuten; bei 0 geht sie sofort hinaus.' },
+
+  // Spam on the guest page. A form sent faster than the organization allows, or one that fills the
+  // hidden field, collects points; from the threshold on it counts as suspicious.
+  { key: 'antiSpamMinSecondsDefault', name: 'ANTI_SPAM_MIN_SECONDS_DEFAULT', fallback: 3, min: 0, max: 3600, hint: 'Mindestzeit vom Öffnen bis zum Absenden des Formulars, solange eine Organisation keine eigene einträgt, in Sekunden.' },
+  { key: 'antiSpamMinSecondsMax', name: 'ANTI_SPAM_MIN_SECONDS_MAX', fallback: 60, min: 1, max: 3600, hint: 'Längste Mindestzeit bis zum Absenden, die eine Organisation eintragen kann, in Sekunden.' },
+  { key: 'spamScoreHoneypot', name: 'SPAM_SCORE_HONEYPOT', fallback: 80, min: 0, max: 1000, hint: 'Spam-Punkte für ein Formular, das das versteckte Fangfeld ausfüllt.' },
+  { key: 'spamScoreTooFast', name: 'SPAM_SCORE_TOO_FAST', fallback: 20, min: 0, max: 1000, hint: 'Spam-Punkte für ein Formular, das schneller kommt als die Mindestzeit der Organisation.' },
+  { key: 'spamSuspiciousScore', name: 'SPAM_SUSPICIOUS_SCORE', fallback: 20, min: 1, max: 2000, hint: 'Ab so vielen Spam-Punkten gilt eine Bewertung als verdächtig.' },
 
   // Lists in the admin area and the report
   { key: 'analyticsVoicesLimit', name: 'ANALYTICS_VOICES_LIMIT', fallback: 100, min: 1, max: 5000, hint: 'So viele Stimmen zeigt die Auswertung eines Events.' },
@@ -92,14 +114,17 @@ export const textSettings = [
   { key: 'systemSmtpSecure', name: 'SYSTEM_SMTP_SECURE', fallback: 'false', rule: 'true oder false sein', test: (value) => /^(true|false)$/.test(value), hint: 'true verschlüsselt die Verbindung von Anfang an (meist Port 465); false nutzt STARTTLS, sobald der Server es anbietet.' },
   { key: 'systemSmtpUser', name: 'SYSTEM_SMTP_USER', fallback: '', optional: true, rule: 'höchstens 200 Zeichen lang sein', test: (value) => value.length <= 200, hint: 'Benutzername am Mailserver der Installation; leer meldet sich nicht an.' },
   { key: 'systemMailFrom', name: 'SYSTEM_MAIL_FROM', fallback: '', optional: true, rule: 'eine E-Mail-Adresse sein, gern mit Namen wie „qrating <noreply@example.com>“', test: (value) => /^([^<>@]{1,100}<[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+>|[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+)$/.test(value), hint: 'Absender der Mails über den Mailserver der Installation.' },
+  { key: 'defaultTimezone', name: 'DEFAULT_TIMEZONE', fallback: 'Europe/Berlin', rule: 'eine Zeitzone wie „Europe/Berlin“ sein', test: knownTimezone, hint: 'Zeitzone eines neuen Events ohne eigene Angabe und aller Zeitangaben, die zu keinem Event gehören.' },
   { key: 'newOrganizationColor', name: 'NEW_ORGANIZATION_COLOR', fallback: '#2563eb', rule: 'eine Farbe im Format #RRGGBB sein', test: (value) => /^#[0-9a-fA-F]{6}$/.test(value), hint: 'Farbe einer neu angelegten Organisation.' },
   { key: 'newOrganizationPrivacyText', name: 'NEW_ORGANIZATION_PRIVACY_TEXT', fallback: 'Feedback ist anonym möglich. E-Mail-Adressen werden nur für den gewählten Zweck gespeichert.', rule: 'höchstens 2000 Zeichen lang sein', test: (value) => value.length <= 2000, hint: 'Datenschutzhinweis einer neu angelegten Organisation.' }
 ];
 
-// Settings that only make sense together: a default inside its own bounds, a lower bound below the upper one.
+// Settings that only make sense together: a lower bound below the upper one, and a default inside
+// both where there is one.
 const settingPairs = [
   ['retentionMinDays', 'retentionMaxDays', 'retentionPhoneDefaultDays'],
-  ['wallboardRefreshMinSeconds', 'wallboardRefreshMaxSeconds', 'wallboardRefreshDefaultSeconds']
+  ['wallboardRefreshMinSeconds', 'wallboardRefreshMaxSeconds', 'wallboardRefreshDefaultSeconds'],
+  ['antiSpamMinSecondsDefault', 'antiSpamMinSecondsMax']
 ];
 
 const settingName = (key) => numberSettings.find((setting) => setting.key === key).name;
@@ -132,8 +157,8 @@ export function readSettings(source = process.env) {
   }
   for (const [low, high, fallback] of settingPairs) {
     if (values[low] > values[high]) {
-      errors.push(`${settingName(low)} (${values[low]}) liegt über ${settingName(high)} (${values[high]}). Die Untergrenze muss unter der Obergrenze liegen.`);
-    } else if (values[fallback] < values[low] || values[fallback] > values[high]) {
+      errors.push(`${settingName(low)} (${values[low]}) liegt über ${settingName(high)} (${values[high]}). ${fallback ? 'Die Untergrenze muss unter der Obergrenze liegen.' : 'Die Vorgabe muss innerhalb der Obergrenze liegen.'}`);
+    } else if (fallback && (values[fallback] < values[low] || values[fallback] > values[high])) {
       errors.push(`${settingName(fallback)} (${values[fallback]}) muss zwischen ${settingName(low)} (${values[low]}) und ${settingName(high)} (${values[high]}) liegen.`);
     }
   }

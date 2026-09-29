@@ -2,6 +2,7 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 're
 import { BrightColorSign, brightColorUrl } from '../lib/credit.jsx';
 import { encode } from 'uqr';
 import { ArrowRight, Check, Copy, Mail } from 'lucide-react';
+import { adminBase } from '../lib/paths.js';
 
 export const DEFAULT_CONTACT = 'kontakt@qrating.de';
 
@@ -52,7 +53,7 @@ export function siteLinks({ content, adminAppUrl, feedbackAppUrl, onLanding }) {
     email,
     section,
     home: '/',
-    admin: adminAppUrl ? joinUrl(adminAppUrl, '/admin') : '/admin',
+    admin: adminAppUrl ? joinUrl(adminAppUrl, adminBase) : adminBase,
     guest: guestPageUrl(content.secondaryCtaUrl, feedbackAppUrl),
     primary: primary.startsWith('#') ? section(primary.slice(1)) : primary,
     access: mailtoUrl(

@@ -30,7 +30,7 @@ describe('the settings of an installation', () => {
 
     expect(errors).toHaveLength(4);
     expect(errors[0]).toBe('PORT muss eine ganze Zahl von 1 bis 65535 sein, eingetragen ist „abc“. Port, auf dem die API lauscht.');
-    expect(errors.join(' ')).toContain('PASSWORD_MIN_LENGTH muss eine ganze Zahl von 8 bis 128 sein, eingetragen ist „4“.');
+    expect(errors.join(' ')).toContain('PASSWORD_MIN_LENGTH muss eine ganze Zahl von 8 bis 72 sein, eingetragen ist „4“.');
     expect(errors.join(' ')).toContain('WORKER_INTERVAL_MS muss eine ganze Zahl');
     expect(errors.join(' ')).toContain('ADMIN_COOKIE_NAME muss aus Buchstaben, Ziffern, _ und - bestehen');
     // A wrong value never turns into NaN on the way.
@@ -44,6 +44,21 @@ describe('the settings of an installation', () => {
       .toBe('RETENTION_PHONE_DEFAULT_DAYS (90) muss zwischen RETENTION_MIN_DAYS (1) und RETENTION_MAX_DAYS (60) liegen.');
     expect(readSettings({ WALLBOARD_REFRESH_DEFAULT_SECONDS: '2' }).errors[0])
       .toContain('WALLBOARD_REFRESH_DEFAULT_SECONDS (2) muss zwischen WALLBOARD_REFRESH_MIN_SECONDS (5)');
+    expect(readSettings({ ANTI_SPAM_MIN_SECONDS_DEFAULT: '90' }).errors[0])
+      .toBe('ANTI_SPAM_MIN_SECONDS_DEFAULT (90) liegt über ANTI_SPAM_MIN_SECONDS_MAX (60). Die Vorgabe muss innerhalb der Obergrenze liegen.');
+    expect(readSettings({ ANTI_SPAM_MIN_SECONDS_DEFAULT: '90', ANTI_SPAM_MIN_SECONDS_MAX: '120' }).errors).toEqual([]);
+  });
+
+  it('takes a time zone the runtime knows by its name', () => {
+    expect(readSettings({ DEFAULT_TIMEZONE: 'America/New_York' }).values.defaultTimezone).toBe('America/New_York');
+    for (const zone of ['Mars/Olympus', '+01:00', 'Europe/Berlin; rm']) {
+      expect(readSettings({ DEFAULT_TIMEZONE: zone }).errors.join(' '), zone).toContain('DEFAULT_TIMEZONE muss eine Zeitzone wie „Europe/Berlin“ sein');
+    }
+  });
+
+  it('keeps the least password length within what bcrypt reads', () => {
+    expect(readSettings({ PASSWORD_MIN_LENGTH: '72' }).errors).toEqual([]);
+    expect(readSettings({ PASSWORD_MIN_LENGTH: '73' }).errors.join(' ')).toContain('PASSWORD_MIN_LENGTH muss eine ganze Zahl von 8 bis 72 sein');
   });
 
   it('says in one message why the start stops', () => {

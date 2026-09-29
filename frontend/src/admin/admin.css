@@ -320,7 +320,8 @@
 
 .q-field { display: grid; gap: 4px; min-width: 0; align-content: start; }
 .q-label { font-size: 12.5px; font-weight: 600; color: rgb(var(--q-muted)); }
-.q-hint { font-size: 12px; color: rgb(var(--q-muted)); line-height: 1.4; }
+/* Notices and hints carry links and addresses; long ones break at any character, so the page keeps its width. */
+.q-hint { font-size: 12px; color: rgb(var(--q-muted)); line-height: 1.4; overflow-wrap: anywhere; }
 .q-input {
   width: 100%;
   min-height: 36px;
@@ -378,7 +379,7 @@ kbd.q-kbd {
 
 /* ------------------------------------------------------------------ messages */
 
-.q-notice { margin: 0; padding: 9px 12px; border-radius: var(--q-radius-sm); font-size: 13.5px; line-height: 1.45; }
+.q-notice { margin: 0; padding: 9px 12px; border-radius: var(--q-radius-sm); font-size: 13.5px; line-height: 1.45; overflow-wrap: anywhere; }
 .q-notice-info { background: rgb(var(--q-accent-soft)); color: rgb(var(--q-ink)); }
 .q-notice-error { background: rgb(var(--q-danger-soft)); color: rgb(var(--q-danger)); }
 .q-notice-ok { background: rgb(var(--q-ok-soft)); color: rgb(var(--q-ok)); }
@@ -420,7 +421,7 @@ kbd.q-kbd {
 
 .q-app { min-height: 100vh; }
 .q-main { min-width: 0; padding: 18px 26px 32px; }
-@media (max-width: 1023px) { .q-main { padding: 14px 16px 28px; } }
+@media not all and screen(lg) { .q-main { padding: 14px 16px 28px; } }
 
 .q-nav-item {
   position: relative; display: flex; align-items: center; gap: 10px; width: 100%;
@@ -440,7 +441,7 @@ kbd.q-kbd {
   background: var(--q-nav-bg); color: var(--q-nav-ink); border-right: 1px solid var(--q-nav-line);
 }
 .q-with-sidebar .q-main { margin-left: 236px; }
-@media (max-width: 1023px) {
+@media not all and screen(lg) {
   .q-sidebar { display: none; }
   .q-with-sidebar .q-main { margin-left: 0; }
 }
@@ -516,7 +517,7 @@ kbd.q-kbd {
 :root[data-admin-theme='tabellenwerk'] .q-topbar-org { padding: 3px 9px; border-radius: 5px; background: #fff; font-weight: 500; }
 :root[data-admin-theme='tabellenwerk'] .q-avatar { display: none; }
 .q-topbar .q-menu { top: calc(100% + 1px); }
-@media (max-width: 1023px) { .q-topbar { display: none; } }
+@media not all and screen(lg) { .q-topbar { display: none; } }
 
 /* The rail of look 3. */
 .q-rail {
@@ -537,7 +538,7 @@ kbd.q-kbd {
 .q-rail-item[aria-current='page'] { background: var(--q-nav-active-bg); color: var(--q-nav-active-ink); }
 .q-rail-item .q-badge { position: absolute; top: 3px; right: 10px; min-width: 16px; padding: 0 4px; line-height: 16px; font-size: 10.5px; }
 .q-rail hr { width: 36px; border: 0; border-top: 1px solid var(--q-nav-line); margin: 6px 0; }
-@media (max-width: 1023px) {
+@media not all and screen(lg) {
   .q-rail { display: none; }
   .q-with-rail .q-main { margin-left: 0; }
 }
@@ -567,7 +568,7 @@ kbd.q-kbd {
 .q-ev-state { font-size: 12px; color: rgb(var(--q-muted)); }
 .q-ev-state.live { color: rgb(var(--q-accent)); font-weight: 600; }
 .q-eventlist-foot { border-top: 1px solid var(--q-nav-line); padding: 8px 10px; }
-@media (max-width: 1023px) {
+@media not all and screen(lg) {
   .q-eventlist { display: none; }
   .q-with-eventlist .q-main { margin-left: 0; }
 }
@@ -591,7 +592,7 @@ kbd.q-kbd {
 .q-cmdbar-right { display: flex; justify-content: flex-end; align-items: center; gap: 6px; color: rgb(var(--q-muted)); }
 .q-cmdbar-right .q-btn-icon { position: relative; }
 .q-cmdbar-right .q-badge { position: absolute; top: -2px; right: -4px; min-width: 16px; padding: 0 4px; line-height: 16px; font-size: 10.5px; }
-@media (max-width: 1023px) { .q-cmdbar { display: none; } }
+@media not all and screen(lg) { .q-cmdbar { display: none; } }
 
 .q-palette-scrim { position: fixed; inset: 0; z-index: 60; background: rgba(23, 32, 51, .18); }
 .q-palette {
@@ -630,7 +631,7 @@ kbd.q-kbd {
 .q-mobilebar .title strong { display: block; font-weight: 700; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .q-mobilebar .title small { display: block; font-size: 12px; opacity: .7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .q-mobilebar button { color: inherit; }
-@media (max-width: 1023px) { .q-mobilebar { display: flex; } }
+@media not all and screen(lg) { .q-mobilebar { display: flex; } }
 
 .q-drawer {
   position: absolute; inset: 0 auto 0 0; width: 300px; max-width: 86%;

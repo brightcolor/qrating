@@ -13,6 +13,7 @@ import { buildOtpAuthUrl, generateRecoveryCodes, generateTotpSecret, verifyTotp 
 import { writeAudit } from '../services/auditService.js';
 import { markSetupClosed, setupCodeMatches, setupOpen } from '../services/setupService.js';
 import { issueResetLink, resetValidity } from '../services/passwordResetService.js';
+import { hashPassword, passwordMaxBytes, passwordProblem } from '../utils/passwords.js';
 
 export const authRouter = express.Router();
 
@@ -36,11 +37,11 @@ const passwordResetLimiter = rateLimit({
 
 const setupClosedMessage = 'Die Ersteinrichtung ist abgeschlossen. Melde dich mit deinem Konto an.';
 
-function passwordTooShort(password) {
-  return String(password || '').length < env.passwordMinLength;
+// A new password that cannot be used stops the request with the reason.
+function checkNewPassword(password) {
+  const problem = passwordProblem(password);
+  if (problem) throw httpError(400, problem);
 }
-
-const passwordLengthMessage = () => `Das Passwort muss mindestens ${env.passwordMinLength} Zeichen lang sein.`;
 
 // E-mail addresses arrive as typed, with a space at the end or in capitals.
 const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
@@ -107,7 +108,7 @@ async function beginSession(res, user) {
 
 // What a password needs, for the forms that set one: first setup, invitation and reset.
 authRouter.get('/password-policy', (req, res) => {
-  res.json({ minLength: env.passwordMinLength });
+  res.json({ minLength: env.passwordMinLength, maxBytes: passwordMaxBytes });
 });
 
 // Open only while the installation has no account. Afterwards the setup answers like a page
@@ -120,6 +121,7 @@ authRouter.get('/setup/status', async (req, res, next) => {
       setupRequired: true,
       organization: organization ? { name: organization.name, slug: organization.slug } : null,
       passwordMinLength: env.passwordMinLength,
+      passwordMaxBytes,
       setupCodeCommand: env.setupCodeCommand
     });
   } catch (error) {
@@ -142,10 +144,10 @@ authRouter.post('/setup/first-admin', authLimiter, async (req, res, next) => {
 
     if (!name) throw httpError(400, 'Bitte gib deinen Namen ein.');
     if (!email || !email.includes('@')) throw httpError(400, 'Bitte gib eine gültige E-Mail-Adresse ein.');
-    if (passwordTooShort(password)) throw httpError(400, passwordLengthMessage());
+    checkNewPassword(password);
     if (!organizationName) throw httpError(400, 'Bitte gib einen Organisationsnamen ein.');
 
-    const passwordHash = await bcrypt.hash(password, 12);
+    const passwordHash = await hashPassword(password);
     const created = await withTransaction(async (client) => {
       await client.query('LOCK TABLE users IN EXCLUSIVE MODE');
       const existingUsers = Number((await client.query('SELECT count(*)::int AS count FROM users')).rows[0]?.count || 0);
@@ -248,22 +250,48 @@ authRouter.post('/login/2fa', authLimiter, async (req, res, next) => {
   }
 });
 
+const invalidInviteMessage = 'Dieser Einladungslink ist ungültig oder abgelaufen. Bitte einen Owner deiner Organisation, dich erneut einzuladen.';
+
+// An invitation that can still be taken up, found by the token of its link.
+async function openInvitation(token) {
+  return (await query(
+    `SELECT u.*, o.name AS organization_name
+     FROM users u
+     JOIN organizations o ON o.id = u.organization_id
+     WHERE u.invite_token_hash = $1
+       AND u.invite_expires_at > now()
+       AND u.status = 'invited'`,
+    [hashValue(String(token || ''))]
+  )).rows[0] || null;
+}
+
+// What the invitation holds, so the page can say where it leads and fill in the name. The token
+// is the key, as it is for taking the invitation up.
+authRouter.post('/accept-invite/preview', authLimiter, async (req, res, next) => {
+  try {
+    const invitation = await openInvitation(req.body.token);
+    if (!invitation) throw httpError(400, invalidInviteMessage);
+    res.json({
+      name: invitation.name,
+      email: invitation.email,
+      role: invitation.role,
+      organization: invitation.organization_name,
+      expiresAt: invitation.invite_expires_at
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 authRouter.post('/accept-invite', authLimiter, async (req, res, next) => {
   try {
     const token = String(req.body.token || '');
     const password = String(req.body.password || '');
     const name = String(req.body.name || '').trim();
-    if (passwordTooShort(password)) throw httpError(400, passwordLengthMessage());
-    const tokenHash = hashValue(token);
-    const user = (await query(
-      `SELECT * FROM users
-       WHERE invite_token_hash = $1
-         AND invite_expires_at > now()
-         AND status = 'invited'`,
-      [tokenHash]
-    )).rows[0];
-    if (!user) throw httpError(400, 'Dieser Einladungslink ist ungültig oder abgelaufen. Bitte einen Owner deiner Organisation, dich erneut einzuladen.');
-    const passwordHash = await bcrypt.hash(password, 12);
+    checkNewPassword(password);
+    const user = await openInvitation(token);
+    if (!user) throw httpError(400, invalidInviteMessage);
+    const passwordHash = await hashPassword(password);
     // A password of its own ends every session signed before it.
     const updated = (await query(
       `UPDATE users
@@ -310,7 +338,7 @@ authRouter.post('/password-reset/request', passwordResetLimiter, async (req, res
 authRouter.post('/password-reset/confirm', authLimiter, async (req, res, next) => {
   try {
     const password = String(req.body.password || '');
-    if (passwordTooShort(password)) throw httpError(400, passwordLengthMessage());
+    checkNewPassword(password);
     const user = (await query(
       `SELECT * FROM users
        WHERE password_reset_token_hash = $1
@@ -319,7 +347,7 @@ authRouter.post('/password-reset/confirm', authLimiter, async (req, res, next) =
       [hashValue(String(req.body.token || ''))]
     )).rows[0];
     if (!user) throw httpError(400, 'Dieser Link zum Zurücksetzen ist ungültig oder abgelaufen. Fordere auf der Anmeldeseite einen neuen an.');
-    const passwordHash = await bcrypt.hash(password, 12);
+    const passwordHash = await hashPassword(password);
     // The new password ends every session signed with the old one. An open invitation is
     // settled as well: the person has chosen a password of their own.
     const updated = (await query(
@@ -373,7 +401,8 @@ authRouter.get('/me', requireAdmin, async (req, res, next) => {
       settings: {
         upcomingEventsMax: env.upcomingEventsMax,
         qrSourceLabelMaxLength: env.qrSourceLabelMaxLength,
-        qrSourceSlugMaxLength: env.qrSourceSlugMaxLength
+        qrSourceSlugMaxLength: env.qrSourceSlugMaxLength,
+        defaultTimezone: env.defaultTimezone
       },
       two_factor_enabled: undefined,
       platform_admin: undefined,

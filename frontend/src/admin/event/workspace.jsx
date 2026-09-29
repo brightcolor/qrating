@@ -6,7 +6,7 @@ import { can, unassignedNote } from '../permissions.js';
 import { Button, ErrorBox, EventsUnavailable, Icon, Loading, Notice, Page, Stars, Tabs, useAsync } from '../ui.jsx';
 import { EventSwitcher, PreviewButton, ReportMenu } from './actions.jsx';
 import { Analytics, InboxStream, KpiInline } from './analytics.jsx';
-import { dateBlock, formatDateLine, formatLongDate, formatWhen, kpis, recentActivity, roundInfo, timelineModel } from './model.js';
+import { dateBlock, formatDateLine, formatLongDate, formatWhen, kpis, recentActivity, roundInfo, timelineModel, zoneFor } from './model.js';
 import { EventSettingsTab, QrTab, QuestionsTab } from './tabs.jsx';
 import { EventsTable } from '../pages/events.jsx';
 
@@ -206,8 +206,8 @@ function PlanFrame({ event, tab, tabs, setTab, analytics, onMessage, children })
 function TicketFrame({ event, tab, tabs, setTab, analytics, onMessage, children }) {
   const { round } = useRound(event);
   const block = dateBlock(event.date_from, event.event_timezone);
-  const longMonth = new Date(event.date_from).toLocaleDateString('de-DE', { month: 'long', timeZone: event.event_timezone || 'Europe/Berlin' });
-  const weekday = new Date(event.date_from).toLocaleDateString('de-DE', { weekday: 'long', timeZone: event.event_timezone || 'Europe/Berlin' });
+  const longMonth = new Date(event.date_from).toLocaleDateString('de-DE', { month: 'long', timeZone: zoneFor(event.event_timezone) });
+  const weekday = new Date(event.date_from).toLocaleDateString('de-DE', { weekday: 'long', timeZone: zoneFor(event.event_timezone) });
   return <>
     <section className="ticket">
       <div className="stub"><b>{block.day}</b><span>{longMonth}</span><small>{weekday}, {formatWhen(event.date_from, event.event_timezone).split(' ')[1]}</small></div>
@@ -309,7 +309,7 @@ function InboxFrame({ event, tab, tabs, setTab, analytics, onMessage, onChanged,
 function PosterFrame({ event, tab, tabs, setTab, onMessage, children }) {
   const { round } = useRound(event);
   const [head, ...rest] = event.name.split(/\s[–-]\s/);
-  const date = new Date(event.date_from).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', timeZone: event.event_timezone || 'Europe/Berlin' });
+  const date = new Date(event.date_from).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', timeZone: zoneFor(event.event_timezone) });
   const image = event.image_url ? assetUrl(event.image_url) : null;
   return <>
     <section className={`poster ${image ? 'with-image' : ''}`} style={image ? { '--poster-image': `url("${image}")` } : undefined}>

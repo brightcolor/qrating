@@ -2,11 +2,19 @@
 // round, the numbers on top, the stars, the hours, the way from the scan to the form, and the
 // voices of the guests. Everything here is plain data, so it can be tested without a browser.
 
-const defaultZone = 'Europe/Berlin';
+// The zone for times that name none. The admin area sets it from the settings of the server once
+// the account is read; until then the browser uses its own.
+let defaultZone;
+
+export function setDefaultZone(zone) {
+  defaultZone = zone || undefined;
+}
+
+export const zoneFor = (zone) => zone || defaultZone;
 
 function parts(date, zone, options) {
   const out = {};
-  for (const part of new Intl.DateTimeFormat('de-DE', { timeZone: zone || defaultZone, ...options }).formatToParts(date)) {
+  for (const part of new Intl.DateTimeFormat('de-DE', { timeZone: zoneFor(zone), ...options }).formatToParts(date)) {
     out[part.type] = part.value;
   }
   return out;
@@ -89,7 +97,7 @@ const statusWords = { draft: 'Entwurf', closed: 'Beendet', archived: 'Archiviert
 
 // Where the round of an event stands: before, open, over, or switched off.
 export function roundInfo(event, now = new Date()) {
-  const zone = event?.event_timezone || defaultZone;
+  const zone = zoneFor(event?.event_timezone);
   const start = event?.feedbackWindow?.feedbackStart ? new Date(event.feedbackWindow.feedbackStart) : null;
   const end = event?.feedbackWindow?.feedbackEnd ? new Date(event.feedbackWindow.feedbackEnd) : null;
   if (!event) return { state: 'unknown', label: '', short: '', left: '', start, end };
@@ -335,7 +343,7 @@ export function timelineModel(event, timeline = [], now = new Date()) {
   const round = roundInfo(event, now);
   if (!round.start || !round.end) return null;
   const hour = 3_600_000;
-  const zone = event.event_timezone || defaultZone;
+  const zone = zoneFor(event.event_timezone);
   const eventStart = event.date_from ? new Date(event.date_from) : round.start;
   const from = Math.floor((Math.min(round.start, eventStart) - 6 * hour) / hour) * hour;
   const until = Math.ceil((round.end.getTime() + 4 * hour) / hour) * hour;

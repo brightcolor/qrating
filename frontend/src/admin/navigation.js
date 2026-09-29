@@ -6,8 +6,6 @@
 // back. Addresses the admin area had before the reorganisation still lead to their page.
 import { adminBase } from '../lib/paths.js';
 
-export { adminBase };
-
 // Addresses under /admin that carry a flow of their own and never name a page.
 // An invite and a password reset arrive with a token and have to stay untouched.
 export const reservedPaths = ['accept-invite', 'reset-password'];

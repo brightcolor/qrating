@@ -1,3 +1,4 @@
+import { env } from '../config/env.js';
 import { PretixImageResolver, normalizeSettings, extractImageCandidates, chooseBestImage } from './pretixImageResolver.js';
 import { randomToken, slugify } from '../utils/crypto.js';
 import { plainText } from '../utils/localized.js';
@@ -130,7 +131,7 @@ export class PretixService {
         pretixEvent.date_from,
         pretixEvent.date_to || null,
         pretixEvent.date_admission || null,
-        pretixEvent.timezone || 'Europe/Berlin',
+        pretixEvent.timezone || env.defaultTimezone,
         plainText(pretixEvent.location) || null,
         3,
         pretixEvent

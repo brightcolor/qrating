@@ -48,9 +48,9 @@ export async function seedDefaultData() {
         location, status, feedback_enabled, feedback_window_days, resolver_priority
       )
       VALUES ($1, 'manual', 'Demo Nacht', 'demo-nacht', $2, now() - interval '2 hours', now() + interval '2 hours',
-        'Europe/Berlin', 'Hauptsaal', 'active', true, 3, 10)
+        $3, 'Hauptsaal', 'active', true, 3, 10)
       RETURNING *`,
-      [organization.id, randomToken()]
+      [organization.id, randomToken(), env.defaultTimezone]
     )).rows[0];
 
     const form = (await client.query(
@@ -104,6 +104,9 @@ export function eventToPublic(event, organization, questions = []) {
   };
 }
 
+// A new event as the request describes it, with lengths the route has checked already. What the
+// request leaves empty comes from the organization (length and start of the round) or from the
+// settings (time zone).
 export function normalizeEventInput(body, organization) {
   const name = body.name?.trim();
   return {
@@ -112,10 +115,10 @@ export function normalizeEventInput(body, organization) {
     date_from: body.dateFrom || body.date_from,
     date_to: body.dateTo || body.date_to || null,
     location: plainText(body.location) || null,
-    event_timezone: body.eventTimezone || body.event_timezone || 'Europe/Berlin',
-    feedback_window_days: Number(body.feedbackWindowDays ?? organization.default_feedback_window_days ?? 3),
-    feedback_window_hours: body.feedbackWindowHours ? Number(body.feedbackWindowHours) : null,
-    feedback_starts_mode: body.feedbackStartsMode || organization.default_feedback_start_mode || 'event_start',
+    event_timezone: body.eventTimezone || body.event_timezone || env.defaultTimezone,
+    feedback_window_days: body.feedbackWindowDays ?? organization.default_feedback_window_days,
+    feedback_window_hours: body.feedbackWindowHours ?? organization.default_feedback_window_hours ?? null,
+    feedback_starts_mode: body.feedbackStartsMode || organization.default_feedback_start_mode,
     image_url: body.imageUrl || null,
     image_alt: body.imageAlt || null
   };

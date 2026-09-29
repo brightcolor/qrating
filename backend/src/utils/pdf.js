@@ -1,6 +1,7 @@
 // The event report as a PDF, written by hand: a coloured header, key figures,
 // a rating chart, the course of the evening, own questions and sample comments.
 import { DateTime } from 'luxon';
+import { env } from '../config/env.js';
 import { safeAccent } from './printSheet.js';
 import { plainText } from './localized.js';
 
@@ -375,7 +376,7 @@ function assemble(pages) {
 }
 
 export function buildEventReportPdf({ event, organization, summary, distribution, timeline, questionStats, comments, now = new Date() }) {
-  const zone = event?.event_timezone || 'Europe/Berlin';
+  const zone = event?.event_timezone || env.defaultTimezone;
   const doc = new ReportDocument(safeAccent(organization?.primary_color));
   header(doc, event, organization, zone);
   figures(doc, summary);
@@ -394,6 +395,6 @@ export function simplePdf(title, lines) {
   doc.text(title, margin, doc.y, { size: 18, bold: true });
   doc.y -= 10;
   for (const line of lines || []) doc.paragraph(String(line), { size: 10 });
-  footers(doc, { name: title }, new Date(), 'Europe/Berlin');
+  footers(doc, { name: title }, new Date(), env.defaultTimezone);
   return assemble(doc.pages);
 }

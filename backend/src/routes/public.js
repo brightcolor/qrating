@@ -21,6 +21,7 @@ import { verifyPreviewToken } from '../utils/previewLink.js';
 import { privacyPage } from '../services/privacyService.js';
 import { setupOpen } from '../services/setupService.js';
 import { effectivePhoneDays } from '../utils/retention.js';
+import { withoutGonePlace } from '../utils/gonePlace.js';
 
 export const publicRouter = express.Router();
 
@@ -132,6 +133,9 @@ async function activeQuestions(eventId) {
   return result.rows;
 }
 
+// The QR place a scan or a vote counts for. A place for a single event goes before the place for
+// all events with the same short name while that event runs; every other place of the
+// organization with this short name belongs to another event.
 async function findQrSource(event, sourceSlug) {
   if (!sourceSlug) return null;
   const result = await query(
@@ -280,7 +284,7 @@ async function publicPayload(resolveResult, questions = [], language = null) {
 publicRouter.get('/f/:organizationSlug/:sourceSlug?', async (req, res, next) => {
   try {
     const resolver = new EventResolver({ query });
-    const resolved = await resolver.resolveCurrentEvent(req.params.organizationSlug, req.params.sourceSlug);
+    const resolved = await resolver.resolveCurrentEvent(req.params.organizationSlug);
     if (resolved.status === 'not_yet') {
       const texts = await loadResolvedTexts(
         { query },
@@ -290,7 +294,7 @@ publicRouter.get('/f/:organizationSlug/:sourceSlug?', async (req, res, next) => 
         {}
       );
       // Somebody scanned before the round. It belongs to the event they are waiting for.
-      await trackQrScan(resolved.upcoming?.[0], req.params.sourceSlug, resolved.qrSource, 'dynamic', 'before');
+      await trackQrScan(resolved.upcoming?.[0], req.params.sourceSlug, null, 'dynamic', 'before');
       return res.json({
         status: 'waiting',
         texts,
@@ -305,7 +309,7 @@ publicRouter.get('/f/:organizationSlug/:sourceSlug?', async (req, res, next) => 
         organization: publicOrganization(resolved.organization)
       });
     }
-    await trackQrScan(resolved.event, req.params.sourceSlug, resolved.qrSource, 'dynamic');
+    await trackQrScan(resolved.event, req.params.sourceSlug, null, 'dynamic');
     res.json({ status: 'ok', ...(await publicPayload(resolved, await activeQuestions(resolved.event.id), req.query.lang)) });
   } catch (error) {
     next(error);
@@ -364,7 +368,7 @@ publicRouter.get('/events/:eventToken/status', async (req, res, next) => {
 
 const progressLimiter = rateLimit({
   windowMs: env.rateLimitWindowMs,
-  max: Math.max(env.rateLimitMax * 20, 200),
+  max: env.progressRateLimitMax,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Von diesem Anschluss kamen gerade sehr viele Anfragen. Bitte lade die Seite in einem Moment neu.' }
@@ -422,13 +426,13 @@ publicRouter.post('/events/:eventToken/progress', progressLimiter, async (req, r
     // A closed event has no flow to follow, and the answer stays the same either way.
     if (resolved.status === 'ok' || resolved.status === 'not_yet') {
       const qrSource = await findQrSource(resolved.event, value.sourceType);
-      await recordProgress({ query }, {
+      await withoutGonePlace(qrSource, (source) => recordProgress({ query }, {
         event: resolved.event,
-        qrSource,
+        qrSource: source,
         progress: value,
         userAgent: req.headers['user-agent'],
         ip: req.ip
-      });
+      }));
     }
     res.json({ ok: true });
   } catch (error) {
@@ -454,16 +458,15 @@ publicRouter.post('/events/:eventToken/rating', feedbackLimiter, async (req, res
       return res.status(410).json({ error: 'Die Bewertung für dieses Event ist gerade geschlossen. Deine Sterne konnten deshalb nicht gespeichert werden.' });
     }
     const event = resolved.event;
-    const qrSource = await findQrSource(event, value.sourceType);
-    const vote = await recordRating({
+    const { qrSource, result: vote } = await withoutGonePlace(await findQrSource(event, value.sourceType), (source) => recordRating({
       event,
       rating: value.rating,
       sessionKey: value.sessionKey,
       sourceType: value.sourceType,
-      qrSourceId: qrSource?.id || null,
+      qrSourceId: source?.id || null,
       userAgent: req.headers['user-agent'],
       ip: req.ip
-    });
+    }));
     if (vote.created) {
       await trackQrFeedback(event, { rating: vote.rating, newsletter_optin: false }, value.sourceType, qrSource, value.sourceType);
     } else if (!vote.completed && vote.previousRating !== vote.rating) {
@@ -507,14 +510,13 @@ publicRouter.post('/events/:eventToken/feedback', feedbackLimiter, async (req, r
     const antiSpam = event.anti_spam_settings || {};
     const secondsSinceStart = value.startedAt ? (Date.now() - new Date(value.startedAt).getTime()) / 1000 : null;
     const honeypotHit = antiSpam.honeypot_enabled !== false && Boolean(value.honeypot);
-    const tooFast = secondsSinceStart !== null && secondsSinceStart < Number(antiSpam.min_seconds ?? 3);
-    const spamScore = (honeypotHit ? 80 : 0) + (tooFast ? 20 : 0);
-    const qrSource = await findQrSource(event, value.sourceType);
+    const tooFast = secondsSinceStart !== null && secondsSinceStart < Number(antiSpam.min_seconds ?? env.antiSpamMinSecondsDefault);
+    const spamScore = (honeypotHit ? env.spamScoreHoneypot : 0) + (tooFast ? env.spamScoreTooFast : 0);
     const contactRequested = value.rating <= 2 && Boolean(value.contactRequested || value.contactPhone);
     // A tap on a star already stored the vote. The form completes that very row, so one
     // guest stays one rating; only a visit without a tap -- an older page, a lost request --
     // writes a new one as before.
-    const { feedback, tapped } = await withTransaction(async (client) => {
+    const { qrSource, result: { feedback, tapped } } = await withoutGonePlace(await findQrSource(event, value.sourceType), (source) => withTransaction(async (client) => {
       const vote = await openVoteFor(client, event, value.sessionKey);
       if (vote) {
         const updated = (await client.query(
@@ -526,7 +528,7 @@ publicRouter.post('/events/:eventToken/feedback', feedbackLimiter, async (req, r
           [
             vote.id, value.rating, value.npsScore, value.commentPositive, value.commentImprovement,
             value.generalComment, value.newsletterOptin, contactRequested, value.testimonialAllowed,
-            spamScore, spamScore >= 20, qrSource?.id || null
+            spamScore, spamScore >= env.spamSuspiciousScore, source?.id || null
           ]
         )).rows[0];
         return { feedback: updated, tapped: vote };
@@ -540,7 +542,7 @@ publicRouter.post('/events/:eventToken/feedback', feedbackLimiter, async (req, r
         [
           event.organization_id,
           event.id,
-          qrSource?.id || null,
+          source?.id || null,
           value.sourceType,
           value.rating,
           value.npsScore,
@@ -555,11 +557,11 @@ publicRouter.post('/events/:eventToken/feedback', feedbackLimiter, async (req, r
           hashValue(req.headers['user-agent']),
           hashValue(req.ip),
           spamScore,
-          spamScore >= 20
+          spamScore >= env.spamSuspiciousScore
         ]
       )).rows[0];
       return { feedback: inserted, tapped: null };
-    });
+    }));
     if (tapped) {
       // The tap counted this vote in the numbers of its QR source already.
       await adjustQrFeedback(event, {

@@ -1,10 +1,10 @@
 import express from 'express';
 import { productCredit, renderQrSvg } from '../utils/qrCode.js';
-import bcrypt from 'bcryptjs';
+import { hashPassword } from '../utils/passwords.js';
 import { query, withTransaction } from '../db/pool.js';
 import { canAccessEvent, hasRole, requireAdmin, requirePlatformAdmin, requireRole } from '../middleware/auth.js';
 import { httpError } from '../middleware/errors.js';
-import { env } from '../config/env.js';
+import { env, knownTimezone } from '../config/env.js';
 import { decryptSecret, encryptSecret, hashValue } from '../utils/crypto.js';
 import { randomToken, slugify } from '../utils/crypto.js';
 import { openSecret, smtpFailure } from '../utils/serviceErrors.js';
@@ -265,10 +265,16 @@ adminRouter.get('/events', async (req, res, next) => {
 adminRouter.post('/events', requireRole('event_manager'), async (req, res, next) => {
   try {
     await ensureActiveEventLimit(req);
-    roundLength(req.body.feedbackWindowDays, env.feedbackWindowMaxDays, 'Tage');
-    roundLength(req.body.feedbackWindowHours, env.feedbackWindowMaxHours, 'Stunden');
+    const feedbackWindowDays = roundLength(req.body.feedbackWindowDays, env.feedbackWindowMaxDays, 'Tage');
+    const feedbackWindowHours = roundLength(req.body.feedbackWindowHours, env.feedbackWindowMaxHours, 'Stunden');
+    if (req.body.eventTimezone && !knownTimezone(String(req.body.eventTimezone))) {
+      throw httpError(400, `Die Zeitzone „${String(req.body.eventTimezone).slice(0, 60)}“ kennt qrating nicht. Nutze einen Namen wie „${env.defaultTimezone}“, oder lass das Feld leer.`);
+    }
+    if (req.body.feedbackStartsMode && !feedbackStartModes.includes(req.body.feedbackStartsMode)) {
+      throw httpError(400, 'Die Bewertungsrunde beginnt mit dem Event („event_start“), mit seinem Ende („event_end“) oder zu einer eigenen Zeit („custom“).');
+    }
     const organization = (await query('SELECT * FROM organizations WHERE id = $1', [req.admin.organizationId])).rows[0];
-    const input = normalizeEventInput(req.body, organization);
+    const input = normalizeEventInput({ ...req.body, feedbackWindowDays, feedbackWindowHours }, organization);
     if (!input.name || !input.date_from) throw httpError(400, 'Bitte gib einen Eventnamen und ein Datum an.');
     let event = null;
     // Recurring events reuse their name, so a taken slug gets a random suffix.
@@ -393,6 +399,8 @@ const eventStatuses = ['draft', 'active', 'closed', 'archived'];
 
 // Days and hours of a feedback round count from the end of the event and add up. A value that
 // is not given stays as it is; a given one is a whole number up to the bound of its setting.
+const feedbackStartModes = ['event_start', 'event_end', 'custom'];
+
 function roundLength(value, max, unit) {
   if (value === undefined || value === null || value === '') return value === '' ? null : value;
   const number = Number(value);
@@ -1511,7 +1519,16 @@ adminRouter.post('/qr-sources', requireRole('event_manager'), async (req, res, n
     if (type === 'event_specific' && !req.body.eventId) {
       throw httpError(400, 'Ein QR-Platz für ein einzelnes Event braucht dieses Event. Gib die Event-ID mit.');
     }
+    if (req.body.active !== undefined && typeof req.body.active !== 'boolean') {
+      throw httpError(400, 'Ob ein QR-Platz zählt, steht im Feld „active“ als true oder false.');
+    }
+    // An event of another organization answers like one that does not exist, before anything else.
     if (req.body.eventId) await ensureEventAccess(req, req.body.eventId);
+    // A place for all events belongs to none; one bound to an event would be a third kind that the
+    // guest page could not tell apart from a place for a single event.
+    if (type === 'dynamic_organization' && req.body.eventId) {
+      throw httpError(400, 'Ein QR-Platz für alle Events gehört zu keinem Event. Lass die Event-ID weg, oder lege mit Typ „event_specific“ einen Platz für dieses eine Event an.');
+    }
     const result = await query(
       `INSERT INTO qr_sources (organization_id, event_id, source_slug, label, type, active)
        VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
@@ -1618,12 +1635,16 @@ adminRouter.post('/users/invite', requireRole('owner'), async (req, res, next) =
   try {
     await ensurePlanFeature(req, 'teams', 'Weitere Benutzer einladen gehört zum Tarif Business. Ein Plattform-Admin schaltet ihn unter Plattform → Tarife frei.');
     const email = String(req.body.email || '').trim().toLowerCase();
-    const name = String(req.body.name || email.split('@')[0] || 'Neuer User').trim();
-    const role = req.body.role || 'support';
     if (!email.includes('@')) throw httpError(400, 'Bitte gib eine gültige E-Mail-Adresse ein.');
+    // Without a name the person is called by the start of the address until they give their own.
+    const name = String(req.body.name || '').trim() || email.split('@')[0];
+    // The role is chosen on purpose: an invitation opens the organization to someone.
+    const role = req.body.role;
+    if (!role) throw httpError(400, 'Wähle eine Rolle für die Person: Support, Analyst, Event Manager, Admin oder Owner.');
     if (!teamRoles.includes(role)) throw httpError(400, unknownRoleMessage);
     const token = randomToken(32);
-    const passwordHash = await bcrypt.hash(randomToken(32), 12);
+    // A password nobody knows holds the place until the person chooses their own.
+    const passwordHash = await hashPassword(randomToken(32));
     // A new invitation renews one of this organization that nobody ever took up, an open one or
     // a withdrawn one: it still carries its invitation and has never signed in. An account with
     // a password of its own, a platform account and every account of another organization stay
@@ -1787,6 +1808,7 @@ adminRouter.get('/branding', async (req, res, next) => {
       // The bounds of the settings, so the form offers what the server accepts.
       retention_limits: { minDays: env.retentionMinDays, maxDays: env.retentionMaxDays, phoneDefaultDays: env.retentionPhoneDefaultDays },
       wallboard_limits: { minSeconds: env.wallboardRefreshMinSeconds, maxSeconds: env.wallboardRefreshMaxSeconds },
+      anti_spam_limits: { defaultSeconds: env.antiSpamMinSecondsDefault, maxSeconds: env.antiSpamMinSecondsMax },
       feedbackAppUrl: env.feedbackAppUrl
     });
   } catch (error) {
@@ -1937,8 +1959,16 @@ adminRouter.patch('/branding', requireRole('event_manager'), async (req, res, ne
 
 adminRouter.patch('/anti-spam-settings', requireRole('event_manager'), async (req, res, next) => {
   try {
+    const given = req.body.minSeconds;
+    const seconds = given === undefined || given === null || given === '' ? env.antiSpamMinSecondsDefault : Number(given);
+    if (typeof given === 'boolean' || !Number.isInteger(seconds) || seconds < 0 || seconds > env.antiSpamMinSecondsMax) {
+      throw httpError(400, `Die Mindestzeit bis zum Absenden muss eine ganze Zahl von 0 bis ${env.antiSpamMinSecondsMax} Sekunden sein, zum Beispiel ${env.antiSpamMinSecondsDefault}.`);
+    }
+    if (req.body.honeypotEnabled !== undefined && typeof req.body.honeypotEnabled !== 'boolean') {
+      throw httpError(400, 'Ob das Fangfeld gegen Bots mitläuft, steht im Feld „honeypotEnabled“ als true oder false.');
+    }
     const settings = {
-      min_seconds: Number(req.body.minSeconds ?? 3),
+      min_seconds: seconds,
       honeypot_enabled: req.body.honeypotEnabled !== false
     };
     const result = await query(

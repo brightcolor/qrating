@@ -9,11 +9,11 @@ import { AcceptInvite, AuthGate, ResetPassword } from './admin/auth.jsx';
 import { navGroups, navKeyFor, pathForRoute, routeFromLocation, routeTitle, sameRoute } from './admin/navigation.js';
 import { ActingBanner, Shell } from './admin/shells.jsx';
 import { Notice, errorNotice } from './admin/ui.jsx';
-import { rememberSessionEnd } from './admin/sessionEnd.js';
+import { createSessionEndHandler } from './admin/sessionEnd.js';
 import { createThemeQueue } from './admin/themeQueue.js';
 import { readCachedTheme, themeFor, writeCachedTheme } from './admin/themes.js';
 import { loadThemeFonts } from './admin/themeFonts.js';
-import { pickCurrentEvent } from './admin/event/model.js';
+import { pickCurrentEvent, setDefaultZone } from './admin/event/model.js';
 import { Overview } from './admin/pages/overview.jsx';
 import { EventsPage } from './admin/pages/events.jsx';
 import { EventWorkspace } from './admin/event/workspace.jsx';
@@ -61,6 +61,8 @@ function AdminApp() {
   const loadMe = useCallback(async () => {
     const mark = themes.current.mark();
     const data = await api('/admin/me');
+    // Times that belong to no event show in the zone of the server's settings.
+    setDefaultZone(data?.settings?.defaultTimezone);
     setMe(data);
     // A choice made while the account was read wins over what the reading brought back.
     if (data?.adminTheme !== undefined && themes.current.accepts(mark)) {
@@ -72,14 +74,18 @@ function AdminApp() {
   }, []);
 
   // A session that ends in the middle of work, because the account was disabled or got a new
-  // password, leads to a fresh sign-in page that names the reason. Registered before the first
-  // reading of the account, so that reading is covered as well.
+  // password, leads to a fresh sign-in page that names the reason (sessionEnd.js). Registered
+  // before the first reading of the account, so that reading is covered as well.
+  const sessionWatch = useRef(null);
+  if (!sessionWatch.current) {
+    sessionWatch.current = createSessionEndHandler({
+      reload: () => window.location.assign(adminBase),
+      notify: (text) => setSessionNotice(errorNotice({ message: text }))
+    });
+  }
   useEffect(() => {
     if (!authenticated) return undefined;
-    return onSessionEnded((message) => {
-      rememberSessionEnd(message);
-      window.location.assign(adminBase);
-    });
+    return onSessionEnded((message) => sessionWatch.current.handle(message));
   }, [authenticated]);
 
   const reloadEvents = useCallback(async () => {
@@ -160,9 +166,11 @@ function AdminApp() {
 
   const logout = useCallback(async () => {
     setSessionNotice('');
+    sessionWatch.current.leave();
     try {
       await api('/admin/logout', { method: 'POST', body: JSON.stringify({}) });
     } catch (error) {
+      sessionWatch.current.stay();
       setSessionNotice(errorNotice({ message: `Das Abmelden hat nicht geklappt, du bist noch angemeldet. ${error?.message || ''} Versuch es gleich noch einmal.`.replace(/\s+/g, ' ').trim() }));
       return;
     }
@@ -177,9 +185,10 @@ function AdminApp() {
   const routeEvent = route.page === 'event' ? events.find((event) => event.id === route.eventId) : null;
   const title = routeTitle(route, { eventName: routeEvent?.name });
 
+  // Signed out, the sign-in pages name themselves (auth.jsx).
   useEffect(() => {
-    document.title = `${title} · qrating`;
-  }, [title]);
+    if (authenticated) document.title = `${title} · qrating`;
+  }, [authenticated, title]);
 
   const path = window.location.pathname;
   const query = new URLSearchParams(window.location.search);

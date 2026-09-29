@@ -17,6 +17,7 @@ import {
   recentActivity,
   relativeTime,
   roundInfo,
+  setDefaultZone,
   textAnswers,
   timelineModel,
   voiceCounts,
@@ -34,6 +35,16 @@ const event = {
 };
 
 describe('dates as the admin area writes them', () => {
+  it('writes times that name no zone in the zone of the server settings', () => {
+    setDefaultZone('America/New_York');
+    try {
+      expect(formatDayTime('2026-09-22T20:00:00Z')).toBe('Di 22.09., 16:00');
+      expect(formatDayTime('2026-09-22T20:00:00Z', zone)).toBe('Di 22.09., 22:00');
+    } finally {
+      setDefaultZone(null);
+    }
+  });
+
   it('writes weekday, date and time the German way, in the zone of the event', () => {
     expect(formatDayTime('2026-09-22T20:00:00Z', zone)).toBe('Di 22.09., 22:00');
     expect(formatWhen('2026-09-19T22:41:00Z', zone)).toBe('So 00:41');

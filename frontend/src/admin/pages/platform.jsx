@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../../lib/api.js';
+import { adminBase } from '../../lib/paths.js';
 import { useAdmin } from '../context.js';
 import { platformSections } from '../navigation.js';
 import { shellListsSections } from '../themes.js';
@@ -47,7 +48,7 @@ function Tenants() {
     try {
       await api(`/admin/platform/organizations/${organization.id}/enter`, { method: 'POST', body: '{}' });
       // Every page holds data of the previous tenant, so the admin area starts fresh.
-      window.location.assign('/admin');
+      window.location.assign(adminBase);
     } catch (err) {
       setMessage(errorNotice(err));
     }

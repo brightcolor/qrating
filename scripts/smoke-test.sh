@@ -34,8 +34,17 @@ wait_for_backend() {
 
 wait_for_backend
 
+# The slug of the organization and the name of the session cookie are settings; the backend says
+# which values it reads, defaults included.
+setting() {
+  compose exec -T backend node --input-type=module -e "const { env } = await import('./src/config/env.js'); console.log(env['$1']);" </dev/null | tr -d '\r'
+}
+organization_slug="$(setting organizationSlug)"
+cookie_name="$(setting adminCookieName)"
+[ -n "$organization_slug" ] && [ -n "$cookie_name" ] || fail "the backend named no organization slug or cookie name"
+
 echo "Guest page for the dynamic QR code"
-curl -fsS -o "$WORK_DIR/guest.json" "$API_URL/public/f/demo-events" || fail "guest page request failed"
+curl -fsS -o "$WORK_DIR/guest.json" "$API_URL/public/f/$organization_slug" || fail "guest page request failed"
 grep -q '"status":"ok"' "$WORK_DIR/guest.json" || fail "guest page did not resolve the demo event"
 
 echo "Public pages lead to the first setup while it is open"
@@ -53,7 +62,7 @@ curl -fsS -o /dev/null -D "$WORK_DIR/setup.headers" \
   -H 'content-type: application/json' \
   -d "{\"setupCode\":\"$setup_code\",\"name\":\"Smoke Owner\",\"email\":\"owner@example.test\",\"password\":\"smoke-password-123\",\"organizationName\":\"Smoke Events\"}" \
   "$API_URL/admin/setup/first-admin" || fail "first admin setup failed"
-cookie="$(grep -i '^set-cookie: qrating_admin=' "$WORK_DIR/setup.headers" | head -n1 | sed -E 's/^[^:]+: ([^;]+).*/\1/')"
+cookie="$(grep -i "^set-cookie: $cookie_name=" "$WORK_DIR/setup.headers" | head -n1 | sed -E 's/^[^:]+: ([^;]+).*/\1/')"
 [ -n "$cookie" ] || fail "setup returned no session cookie"
 [ "$(curl -sS -o /dev/null -w '%{http_code}' "$API_URL/admin/setup/status")" = "404" ] || fail "the setup is still open after the first account"
 
@@ -80,6 +89,6 @@ web_status() {
   || fail "qrat.ing/ leads somewhere else than the website"
 [ "$(web_status qrat.ing '/?utm_source=flyer')" = "200" ] || fail "a tracking link on qrat.ing/ was redirected"
 [ "$(web_status qrating.de /)" = "200" ] || fail "the website domain was redirected"
-[ "$(web_status qrat.ing /f/demo-events)" = "200" ] || fail "the guest page on qrat.ing was redirected"
+[ "$(web_status qrat.ing "/f/$organization_slug")" = "200" ] || fail "the guest page on qrat.ing was redirected"
 
 echo "Smoke test passed"

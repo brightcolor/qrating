@@ -78,7 +78,7 @@ export function Callbacks() {
               <strong style={{ fontSize: 15 }}>{item.event_name}</strong>
               <span className="text-q-muted">{formatDayTime(item.submitted_at)}</span>
             </div>
-            {texts.length ? <div className="mt-2 grid gap-1">{texts.map((text, index) => <p key={index} style={{ fontSize: index ? 13.5 : 15 }}>{index ? <span className="text-q-muted">{text.label}: </span> : null}{index ? text.value : `„${text.value}“`}</p>)}</div> : <p className="mt-2 text-q-muted">Der Gast hat nichts geschrieben.</p>}
+            {texts.length ? <div className="mt-2 grid gap-1">{texts.map((text, index) => <p key={index} style={{ fontSize: index ? 13.5 : 15 }}>{index ? <span className="text-q-muted">{text.label}: </span> : null}{index ? text.value : `„${text.value}“`}</p>)}</div> : <p className="mt-2 text-q-muted">{item.contactNoteAvailable ? 'Im Formular hat der Gast nichts geschrieben. Das Anliegen steht unten und bleibt verschlüsselt, bis jemand es anzeigt.' : 'Der Gast hat nichts geschrieben.'}</p>}
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               <div className="rounded-lg bg-q-sunken p-2"><p className="q-label">Rückrufnummer</p><p className="font-semibold">{revealed[item.id]?.contactPhone || (item.contactPhoneAvailable ? 'hinterlegt' : 'keine')}</p></div>
               <div className="rounded-lg bg-q-sunken p-2"><p className="q-label">Anliegen</p><p className="font-semibold">{revealed[item.id]?.contactNote || (item.contactNoteAvailable ? 'hinterlegt' : 'keines')}</p></div>

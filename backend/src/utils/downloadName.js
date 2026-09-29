@@ -1,6 +1,7 @@
 // File names of downloads carry the event, its date and the moment of the download,
 // so several exports of one event stay apart in the download folder.
 import { DateTime } from 'luxon';
+import { env } from '../config/env.js';
 
 const germanLetters = new Map([['ä', 'ae'], ['ö', 'oe'], ['ü', 'ue'], ['Ä', 'Ae'], ['Ö', 'Oe'], ['Ü', 'Ue'], ['ß', 'ss']]);
 
@@ -25,7 +26,7 @@ export function asciiName(value) {
 }
 
 function zoneOf(event) {
-  return event?.event_timezone || 'Europe/Berlin';
+  return event?.event_timezone || env.defaultTimezone;
 }
 
 function stamp(value, zone, format) {

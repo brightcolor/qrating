@@ -278,9 +278,10 @@ export async function getBillingOverview(db, organizationId, userId) {
 }
 
 export async function applyBillingOverride(db, organizationId, userId, { plan, expiresAt = null, reason = '' }) {
-  if (!['free', 'pro', 'business'].includes(plan)) throw httpError(400, 'Diesen Tarif gibt es nicht. Wähle Free, Pro oder Business.');
+  // The role comes first: whoever may not unlock a plan learns nothing about the request.
   const user = (await db.query('SELECT id, email, platform_admin, status FROM users WHERE id = $1', [userId])).rows[0] || {};
   if (!canOverrideBilling(user)) throw httpError(403, 'Tarife schalten nur Plattform-Admins frei. Frag einen Plattform-Admin, wenn deine Organisation einen anderen Tarif braucht.');
+  if (!['free', 'pro', 'business'].includes(plan)) throw httpError(400, 'Diesen Tarif gibt es nicht. Wähle Free, Pro oder Business.');
   const result = await db.query(
     `UPDATE organizations
      SET billing_override_plan = $2,

@@ -169,6 +169,20 @@ describe('taking over an account of the own organization', () => {
     expect(await userRow(id)).toMatchObject({ status: 'active', role: 'analyst' });
   });
 
+  it('renews no invitation of an account that signed in once', async () => {
+    const used = (await query(
+      `INSERT INTO users (organization_id, name, email, password_hash, role, status, invite_token_hash, invited_at, last_login_at)
+       VALUES ($1, 'Einmal da', 'einmal@beispiel.test', 'kein-passwort', 'analyst', 'disabled', 'offen', now() - interval '9 days', now() - interval '8 days')
+       RETURNING *`,
+      [home.id]
+    )).rows[0];
+
+    const renewed = await request('POST', '/admin/users/invite', { cookie: home.owner.cookie, body: { email: 'einmal@beispiel.test', role: 'owner' } });
+
+    expect(renewed.status).toBe(409);
+    expect(await userRow(used.id)).toMatchObject({ role: 'analyst', status: 'disabled', invite_token_hash: 'offen' });
+  });
+
   it('keeps a withdrawn invitation withdrawn', async () => {
     const invited = await request('POST', '/admin/users/invite', { cookie: home.owner.cookie, body: { email: 'zurueck@beispiel.test', role: 'analyst' } });
     const withdrawn = await request('PATCH', `/admin/users/${invited.body.user.id}`, { cookie: home.owner.cookie, body: { status: 'disabled' } });
@@ -190,7 +204,7 @@ describe('taking over an account of the own organization', () => {
     const before = env.inviteValidDays;
     env.inviteValidDays = 3;
     try {
-      const invited = await request('POST', '/admin/users/invite', { cookie: home.owner.cookie, body: { email: 'drei-tage@beispiel.test' } });
+      const invited = await request('POST', '/admin/users/invite', { cookie: home.owner.cookie, body: { email: 'drei-tage@beispiel.test', role: 'support' } });
       const days = (new Date(invited.body.user.invite_expires_at) - Date.now()) / 86_400_000;
 
       expect(days).toBeGreaterThan(2.9);
@@ -203,7 +217,7 @@ describe('taking over an account of the own organization', () => {
   it('hands the link back only when no mail carried it', async () => {
     const sent = vi.spyOn(SmtpService.prototype, 'sendSystemMail').mockResolvedValue({ messageId: 'probe' });
     try {
-      const invited = await request('POST', '/admin/users/invite', { cookie: home.owner.cookie, body: { email: 'post@beispiel.test' } });
+      const invited = await request('POST', '/admin/users/invite', { cookie: home.owner.cookie, body: { email: 'post@beispiel.test', role: 'support' } });
 
       expect(invited.status).toBe(201);
       expect(invited.body.inviteUrl).toBe(null);

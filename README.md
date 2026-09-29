@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.62.0
+**Version:** 0.63.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -141,6 +141,8 @@ The answer to a reset request is the same for every address, and the link never 
 
 An installation carries as many organizations (tenants) as needed. Each one has its own events, forms, texts, QR codes, guests, and users; every query runs inside one organization. An event of another organization answers every role with HTTP 404, the owner included, and roles below Event Manager need an assignment to the event as well.
 
+An invitation names the role of the person; the owner chooses it on purpose, and a request without one answers HTTP 400. Without a name the person is called by the start of the address until they enter their own. Before choosing a password, the invited person sees the organization, the role and the address the invitation is for.
+
 An invitation renews only an invitation of the same organization that nobody took up, an open or a withdrawn one. For an address that belongs to an account that has signed in, to a platform account, or to any account of another organization, it answers HTTP 409 and leaves that account as it is.
 
 The account that completes the first-admin setup also runs the platform. Under Plattform → Mandanten it sees every organization with its plan, events, feedback count, users, and Pretix connections, creates further tenants, and enters one to work inside it. While a platform admin works in another tenant, a banner names it and offers the way back, and entering and leaving are written to the audit log of that tenant.
@@ -175,7 +177,9 @@ The admin area is built around the event. Everything that belongs to one evening
 - **Einstellungen**: Organisation, Team, Meldungen, Verbindungen (Pretix, Newsletter, E-Mail, Webhooks), Sicherheit, Tarif, Darstellung
 - **Plattform**, for the platform role only: Mandanten, Website, Tarife
 
-**QR & Aushang** also holds the QR places of the organization: each place has a code of its own, such as `/f/<organization>/bar`, and counts scans and votes for its spot in every event. Event managers and above create, rename and delete places there. A new name keeps the address of printed codes. A deleted place leaves its name on the votes and counted scans it brought in, and its printed codes still lead to the guest page, counting without a place.
+**QR & Aushang** also holds the QR places of the organization: each place has a code of its own, such as `/f/<organization>/bar`, and counts scans and votes for its spot in every event. Event managers and above create, rename and delete places there. A new name keeps the address of printed codes. A deleted place leaves its name on the votes and counted scans it brought in; its printed codes still lead to the guest page, and what comes through them afterwards stands under the short name, until a new place with that short name takes them up. A vote that arrives while its place is being deleted is stored under the short name as well.
+
+A place for a single event (type `event_specific`, created through the API) rides on the link of that event, `/e/<token>?source=<short name>`, and goes before a place for all events with the same short name while that event runs. A place for all events belongs to no event; the API refuses an event for it.
 
 Every page has its own address, such as `/admin/events/<id>/fragen`, `/admin/einstellungen/team` or `/admin/plattform/mandanten`. Addresses from before this structure (`/admin/auswertung?event=…`, `/admin/fragen`, `/admin/benutzer`, `/admin/smtp` and the others) lead to the page that took over their content.
 
@@ -260,6 +264,7 @@ Every value that shapes what qrating does is a setting with a default and bounds
 | `PORT` | `4000` | 1–65535 | Port the API listens on when it runs without Docker; the container always listens on 4000. |
 | `RATE_LIMIT_WINDOW_MS` | `60000` | 1000–86400000 | Window of the rate limit for ratings, in milliseconds. |
 | `RATE_LIMIT_MAX` | `30` | 1–100000 | Ratings accepted per address within that window. |
+| `PROGRESS_RATE_LIMIT_MAX` | `600` | 1–1000000 | Step reports of the guest page accepted per address within that window; every guest reports each step. |
 | `IMAGE_CACHE_MAX_BYTES` | `5242880` | 1024–104857600 | Largest event image qrating caches, in bytes. |
 | `WORKER_INTERVAL_MS` | `5000` | 500–600000 | How often the background worker looks for jobs, in milliseconds. |
 | `PRETIX_SCHEDULER_INTERVAL_MS` | `60000` | 5000–86400000 | How often the planner schedules Pretix syncs and deletion runs, in milliseconds. |
@@ -269,7 +274,8 @@ Every value that shapes what qrating does is a setting with a default and bounds
 | `ADMIN_COOKIE_NAME` | `qrating_admin` | letters, digits, _ and -, up to 64 characters | Name of the cookie that carries the admin session. |
 | `ADMIN_SESSION_HOURS` | `12` | 1–720 | How long a sign-in to the admin area lasts, in hours. |
 | `TWO_FACTOR_CHALLENGE_MINUTES` | `10` | 1–60 | How long the sign-in waits for the code of the authenticator app, in minutes. |
-| `PASSWORD_MIN_LENGTH` | `10` | 8–128 | Minimum length of a password, in characters. |
+| `PASSWORD_MIN_LENGTH` | `10` | 8–72 | Minimum length of a password, in characters. bcrypt reads the first 72 bytes of a password, so longer passwords are turned away with a message. |
+| `PASSWORD_HASH_COST` | `12` | 10–14 | Work factor of bcrypt for storing and checking passwords; each step doubles the work. |
 | `PASSWORD_RESET_VALID_HOURS` | `2` | 1–72 | Lifetime of a password reset link, in hours. |
 | `INVITE_VALID_DAYS` | `7` | 1–90 | Lifetime of a team invitation, in days. |
 | `AUTH_RATE_LIMIT_WINDOW_MINUTES` | `15` | 1–1440 | Window for sign-in attempts per address, in minutes. |
@@ -295,8 +301,15 @@ Every value that shapes what qrating does is a setting with a default and bounds
 | `PRETIX_SYNC_MAX_ATTEMPTS` | `3` | 1–50 | Attempts of a Pretix sync before it counts as failed. |
 | `RETENTION_JOB_MAX_ATTEMPTS` | `2` | 1–50 | Attempts of a deletion run before it counts as failed. |
 | `SCHEDULER_BATCH_SIZE` | `20` | 1–1000 | Syncs and deletion runs the planner schedules per round at most. |
-| `JOB_HISTORY_DAYS` | `30` | 1–3650 | How long finished background jobs stay in the list, in days. |
+| `JOB_HISTORY_DAYS` | `30` | 1–3650 | How long finished background jobs stay in the list, in days. The last deletion run of an organization stays until `RETENTION_INTERVAL_HOURS` have passed. |
+| `FAILED_JOB_HISTORY_DAYS` | `90` | 1–3650 | How long failed background jobs stay in the list for a look at what went wrong, in days. |
 | `LOW_RATING_GRACE_MINUTES` | `30` | 0–1440 | How long the alert after a tap on one or two stars waits for the rest of the form, in minutes; 0 sends it at once. |
+| **Spam on the guest page** | | | |
+| `ANTI_SPAM_MIN_SECONDS_DEFAULT` | `3` | 0–3600 | Minimum time from opening the form to sending it while an organization enters none, in seconds. |
+| `ANTI_SPAM_MIN_SECONDS_MAX` | `60` | 1–3600 | Longest minimum time an organization can enter, in seconds. |
+| `SPAM_SCORE_HONEYPOT` | `80` | 0–1000 | Spam points for a form that fills the hidden trap field. |
+| `SPAM_SCORE_TOO_FAST` | `20` | 0–1000 | Spam points for a form sent faster than the minimum time of its organization. |
+| `SPAM_SUSPICIOUS_SCORE` | `20` | 1–2000 | From this many spam points on a rating counts as suspicious. |
 | **Lists in the admin area and the report** | | | |
 | `ANALYTICS_VOICES_LIMIT` | `100` | 1–5000 | Votes the evaluation of an event lists. |
 | `ANALYTICS_COMMENTS_LIMIT` | `100` | 1–5000 | Comments the evaluation of an event returns. |
@@ -307,6 +320,7 @@ Every value that shapes what qrating does is a setting with a default and bounds
 | `QR_SOURCE_LABEL_MAX_LENGTH` | `60` | 10–200 | Longest name of a QR place, in characters. |
 | `QR_SOURCE_SLUG_MAX_LENGTH` | `40` | 3–80 | Longest short name of a QR place in the address, in characters. The guest page reports it back in a field of at most 80 characters. |
 | **Events and the wallboard** | | | |
+| `DEFAULT_TIMEZONE` | `Europe/Berlin` | a time zone name such as `Europe/Berlin` | Time zone of a new event that names none, and of every time that belongs to no event. |
 | `UPCOMING_EVENTS_MAX` | `5` | 1–20 | Upcoming events that can be picked by hand for the page after a rating; the page then shows that many. |
 | `UPCOMING_EVENTS_AUTO_COUNT` | `3` | 1–20 | Upcoming events the page after a rating shows while none are picked by hand. |
 | `ORGANIZATION_PAGE_UPCOMING_COUNT` | `5` | 1–50 | Upcoming events the page of an organization lists while no round runs. |
@@ -502,7 +516,7 @@ The dynamic QR endpoint is:
 /f/{organizationSlug}/{sourceSlug}
 ```
 
-The resolver chooses the currently feedback-enabled event for the organization. It uses the event timezone, start mode, feedback window, status, source availability, and resolver priority.
+The resolver chooses the currently feedback-enabled event for the organization. It uses the event timezone, start mode, feedback window, status, source availability, and resolver priority. A short name after the organization counts the scan for the QR place of that name within the chosen event, the same place the vote of the guest counts for.
 
 Event-specific URLs use:
 
@@ -626,10 +640,12 @@ Admin authentication:
 - `GET /admin/me`
 - `POST /admin/password-reset/request`
 - `POST /admin/password-reset/confirm`
+- `POST /admin/accept-invite/preview` (what an invitation holds, by the token of its link)
+- `POST /admin/accept-invite`
 
 Admin areas include events, analytics, exports, forms, texts, QR sources, Pretix connections, SMTP, the newsletter connection (`GET|PUT|DELETE /admin/newsletter`, `POST /admin/newsletter/test`, `POST /admin/newsletter/sync-pending`), notifications, webhooks, users, retention, branding, website content, and internal plan administration.
 
-Admin authentication uses the `qrating_admin` HTTP-only cookie. The frontend does not store session tokens in `localStorage` or expose them to JavaScript.
+Admin authentication uses an HTTP-only cookie named by `ADMIN_COOKIE_NAME` (default `qrating_admin`). The frontend does not store session tokens in `localStorage` or expose them to JavaScript.
 
 Every admin request reads the status, the role, the platform role and the session version of the account behind the cookie (`ADMIN_COOKIE_NAME`, valid for `ADMIN_SESSION_HOURS`). Disabling or deleting an account ends its sessions at once: the next request answers HTTP 401 with the reason and clears the cookie, and the admin area opens the sign-in with that reason. A new password, set through a reset link or an invitation, ends every session signed before it. A role an owner changes applies from the next request on. A platform admin visiting another tenant keeps full rights there while the platform role lasts; taking the role away, or removing the visited organization, ends the visit.
 
@@ -648,7 +664,9 @@ bash -n scripts/quickstart.sh
 
 `npm test` includes database tests that run the migrations, the demo seed, and the main admin and guest flows in an in-process PostgreSQL (PGlite) inside the test run.
 
-`scripts/smoke-test.sh` checks a freshly started Compose stack end to end: guest page, first-admin setup, event creation, and a backend restart.
+`scripts/smoke-test.sh` checks a freshly started Compose stack end to end: guest page, first-admin setup, event creation, and a backend restart. It asks the backend for the organization slug and the cookie name it reads, so other values in `.env` work as well.
+
+`backend/tests/roleGuards.test.js` sends a support account to every admin route that writes. Each one answers HTTP 403, except the routes that serve every account (sign-in, the own account and second factor, the own alert channels, the callbacks and reports of assigned events), which the test lists with their reason. A new route that writes either refuses support or joins that list.
 
 GitHub Actions runs Docker CI on `main`:
 
@@ -712,7 +730,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.62.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.63.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

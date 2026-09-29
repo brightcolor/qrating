@@ -4,6 +4,46 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.63.0] - 2026-09-29
+
+### Added
+
+- Settings for values that were fixed in the code: `PASSWORD_HASH_COST` (work factor of bcrypt, default 12); `SPAM_SCORE_HONEYPOT`, `SPAM_SCORE_TOO_FAST` and `SPAM_SUSPICIOUS_SCORE` (80, 20 and 20 points); `ANTI_SPAM_MIN_SECONDS_DEFAULT` and `ANTI_SPAM_MIN_SECONDS_MAX` for the minimum time from opening a form to sending it (3 and 60 seconds); `PROGRESS_RATE_LIMIT_MAX` for the step reports of the guest page (600 per address and window; before, the limit was `RATE_LIMIT_MAX` times 20, at least 200); `DEFAULT_TIMEZONE` for new events without a time zone and for times that belong to no event (`Europe/Berlin`); `FAILED_JOB_HISTORY_DAYS`, after which failed background jobs leave the list (90 days).
+- The invitation page shows the organization, the role and the address before the person chooses a password, and fills in the name the owner gave (`POST /admin/accept-invite/preview`).
+
+### Changed
+
+- An invitation needs a role chosen on purpose: the form starts without one, and the API answers HTTP 400 without it. Without a name the person is called by the start of the address.
+- `PASSWORD_MIN_LENGTH` allows up to 72, and a new password has at most 72 bytes, as many as bcrypt reads. A longer one is refused with a message; the forms check it before sending.
+- A place for a single event shows its real address, the link of the event with `?source=`.
+- The admin area takes its breakpoint for phones from the Tailwind screens and the address of the admin area from one constant.
+
+### Fixed
+
+- A scan over `/f/<organization>/<short name>` counts for the same QR place as the vote of that guest. With a place for all events and a place for the running event under one short name, the scan went to either of them.
+- A place for all events belongs to no event: the API refuses an event for it, and `active` of a new place takes true or false only.
+- A vote that arrives while its QR place is being deleted is stored under the short name. Before, the guest saw an error.
+- Deleting a QR place finds its votes, visits and counted days by an index (migration 038).
+- A new event with an empty round length takes the length of its organization; before, it got zero days. A time zone or a start of the round that qrating does not know is refused with a message.
+- Deletion runs keep their interval when `JOB_HISTORY_DAYS` is shorter than `RETENTION_INTERVAL_HOURS`, and failed background jobs leave the list after `FAILED_JOB_HISTORY_DAYS`.
+- The minimum time before sending a form stays within its bounds, and the trap field switches with true or false only.
+- A reading of the account that started while a look was being saved leaves the new look in place.
+- The sign-in announces why a session ended to screen readers. A request that a layer in front of qrating refuses while the session is valid leads to a message on the page; before, the page reloaded in a loop. Signing out on purpose shows no reason on the sign-in.
+- The first setup shows a wrong setup code at its field and leads to the sign-in when somebody else finished the setup meanwhile. Forms whose password rules fail to load say so.
+- Picking coming events stops at `UPCOMING_EVENTS_MAX` and says so.
+- Long links in notices and hints break on phones.
+- Pages before the sign-in carry their own title in the browser tab.
+- A callback whose guest left a concern and no comment says where the concern is.
+- The smoke test reads the organization slug and the cookie name from the settings of the backend.
+
+### Security
+
+- Unlocking a plan checks the platform role before it reads the request.
+
+### Tests
+
+- A completeness test sends a support account to every admin route that writes; each one refuses it, except the routes that serve every account, listed with their reason.
+
 ## [0.62.0] - 2026-09-29
 
 ### Changed

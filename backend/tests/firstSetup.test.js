@@ -140,6 +140,6 @@ describe('the first setup of an installation', () => {
     const policy = await request('GET', '/admin/password-policy');
 
     expect(policy.status).toBe(200);
-    expect(policy.body).toEqual({ minLength: env.passwordMinLength });
+    expect(policy.body).toEqual({ minLength: env.passwordMinLength, maxBytes: 72 });
   });
 });

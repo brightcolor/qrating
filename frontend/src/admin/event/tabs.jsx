@@ -8,6 +8,7 @@ import { SourcesTable } from './analytics.jsx';
 import { openPreview } from './actions.jsx';
 import { formatDayTime, roundInfo } from './model.js';
 import { placeAddress, placeDeleteNotice, placeLabelProblem, placeSlugProblem } from './qrPlaces.js';
+import { toggleUpcoming, upcomingFull } from './upcomingChoice.js';
 import { hasRole } from '../roles.js';
 
 export function QuestionsTab({ event, onChanged }) {
@@ -80,14 +81,15 @@ export function QrTab({ event }) {
       <Panel title="QR-Plätze bei diesem Event" note="Scans und Stimmen je Platz">
         <SourcesTable rows={qr?.bySource} error={qrError} />
       </Panel>
-      <QrPlacesPanel sources={sources} sourcesError={sourcesError} orgUrl={orgUrl} me={me} onChanged={() => setReload((count) => count + 1)} onReload={() => setReload((count) => count + 1)} />
+      <QrPlacesPanel sources={sources} sourcesError={sourcesError} orgUrl={orgUrl} event={{ id: event.id, url: eventUrl }} me={me} onChanged={() => setReload((count) => count + 1)} onReload={() => setReload((count) => count + 1)} />
     </div>
   </div>;
 }
 
 // The places of the organization: each one has a code of its own that counts scans and votes for
-// its spot. A place belongs to every event, so a new name or a deletion counts for all of them.
-function QrPlacesPanel({ sources, sourcesError, orgUrl, me, onChanged, onReload }) {
+// its spot. Most belong to every event, so a new name or a deletion counts for all of them; a
+// place for a single event says so in its row.
+function QrPlacesPanel({ sources, sourcesError, orgUrl, event, me, onChanged, onReload }) {
   const labelMax = me?.settings?.qrSourceLabelMaxLength || undefined;
   const slugMax = me?.settings?.qrSourceSlugMaxLength || undefined;
   const canManage = hasRole(me?.role, 'event_manager');
@@ -100,7 +102,7 @@ function QrPlacesPanel({ sources, sourcesError, orgUrl, me, onChanged, onReload 
     if (focus) setTimeout(() => messageRef.current?.focus(), 0);
   }
 
-  return <Panel title="QR-Plätze verwalten" note="gelten für alle Events">
+  return <Panel title="QR-Plätze verwalten" note="eigene Codes für einzelne Stellen, etwa die Bar">
     <div className="grid gap-3">
       <div ref={messageRef} tabIndex={-1} className="outline-none"><Notice message={message} /></div>
       {sourcesError && <div className="grid gap-2">
@@ -108,7 +110,7 @@ function QrPlacesPanel({ sources, sourcesError, orgUrl, me, onChanged, onReload 
         <div><Button size="sm" icon="refresh" onClick={onReload}>Erneut laden</Button></div>
       </div>}
       {sources && (sources.length ? <ul className="grid gap-2">
-        {sources.map((source) => <PlaceRow key={source.id} source={source} orgUrl={orgUrl} labelMax={labelMax} canManage={canManage} onChanged={onChanged} announce={announce} />)}
+        {sources.map((source) => <PlaceRow key={source.id} source={source} orgUrl={orgUrl} event={event} labelMax={labelMax} canManage={canManage} onChanged={onChanged} announce={announce} />)}
       </ul> : <p className="text-q-muted">Noch keine QR-Plätze. Ein Platz bekommt einen eigenen Code und zählt Scans und Stimmen für seine Stelle, etwa an der Bar.</p>)}
       {canManage
         ? <PlaceCreate orgUrl={orgUrl} labelMax={labelMax} slugMax={slugMax} onChanged={onChanged} />
@@ -119,7 +121,7 @@ function QrPlacesPanel({ sources, sourcesError, orgUrl, me, onChanged, onReload 
 
 // One place. Renaming and deleting open inline; the focus goes into them and back to the button
 // that opened them, so keyboard and screen reader users keep their place in the list.
-function PlaceRow({ source, orgUrl, labelMax, canManage, onChanged, announce }) {
+function PlaceRow({ source, orgUrl, event, labelMax, canManage, onChanged, announce }) {
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [problem, setProblem] = useState('');
@@ -128,7 +130,7 @@ function PlaceRow({ source, orgUrl, labelMax, canManage, onChanged, announce }) 
   const deleteRef = useRef(null);
   const keepRef = useRef(null);
   const giveBack = useRef(null);
-  const address = placeAddress(orgUrl, source);
+  const address = placeAddress(orgUrl, source, event);
   const problemId = `qr-place-problem-${source.id}`;
   const askId = `qr-place-ask-${source.id}`;
 
@@ -196,8 +198,8 @@ function PlaceRow({ source, orgUrl, labelMax, canManage, onChanged, announce }) 
     <div className="flex flex-wrap items-start justify-between gap-2">
       <div className="min-w-0">
         <p className="font-semibold">{source.label}{source.active === false && <span className="q-pill q-pill-warn ml-1.5">pausiert</span>}</p>
-        <p className="break-all text-q-muted">{address}</p>
-        {source.type === 'event_specific' && <p className="q-hint">nur für {source.event_name || 'ein einzelnes Event'}</p>}
+        {address && <p className="break-all text-q-muted">{address}</p>}
+        {source.type === 'event_specific' && <p className="q-hint">nur für {source.event_name || 'ein einzelnes Event'}{address ? '' : '; die Adresse steht im QR-Tab dieses Events'}</p>}
       </div>
       {canManage && editing === null && !deleting && <div className="flex flex-wrap gap-1.5">
         <Button ref={renameRef} size="sm" icon="pencil" aria-label={`„${source.label}“ umbenennen`} onClick={() => { setProblem(''); setEditing(source.label); }}>Umbenennen</Button>
@@ -205,7 +207,7 @@ function PlaceRow({ source, orgUrl, labelMax, canManage, onChanged, announce }) 
       </div>}
     </div>
     {editing !== null && <form onSubmit={saveName} onKeyDown={(e) => { if (e.key === 'Escape' && !busy) closeRename(); }} className="grid gap-2">
-      <Field label="Neuer Name" hint={`Die Adresse ${address} bleibt, gedruckte Codes gelten weiter.`}>
+      <Field label="Neuer Name" hint={address ? `Die Adresse ${address} bleibt, gedruckte Codes gelten weiter.` : 'Die Adresse bleibt, gedruckte Codes gelten weiter.'}>
         <Input
           value={editing}
           onChange={(e) => { setEditing(e.target.value); setProblem(''); }}
@@ -355,10 +357,9 @@ export function EventSettingsTab({ event, onChanged }) {
     }
   }
 
-  const toggleUpcoming = (id) => setUpcoming((current) => ({
-    ...current,
-    ids: current.ids.includes(id) ? current.ids.filter((item) => item !== id) : [...current.ids, id].slice(0, upcomingMax ?? undefined)
-  }));
+  const pick = (id) => setUpcoming((current) => ({ ...current, ids: toggleUpcoming(current.ids, id, upcomingMax) }));
+  const full = upcomingFull(upcoming.ids, upcomingMax);
+  const fullNotice = upcoming.enabled && full ? `${upcoming.ids.length} Events sind gewählt, mehr zeigt die Gästeseite nicht. Nimm eines heraus, um ein anderes zu wählen.` : '';
 
   return <div className="grid gap-4">
     <Notice message={message} />
@@ -401,8 +402,12 @@ export function EventSettingsTab({ event, onChanged }) {
         <p className="q-hint">Ohne Auswahl zeigt qrating die nächsten Events nach Datum. Wähle {upcomingMax ? `bis zu ${upcomingMax}` : 'einige'}, wenn es bestimmte sein sollen. Der Ticketlink erscheint nur, wenn Pretix den Verkauf offen meldet.</p>
       </div>
       <div className="mt-3 grid gap-1.5 md:grid-cols-2">
-        {events.filter((item) => item.id !== event.id).map((item) => <Check key={item.id} label={eventLabel(item)} checked={upcoming.ids.includes(item.id)} onChange={() => toggleUpcoming(item.id)} disabled={!upcoming.enabled} className="rounded-lg bg-q-sunken p-2" />)}
+        {events.filter((item) => item.id !== event.id).map((item) => {
+          const checked = upcoming.ids.includes(item.id);
+          return <Check key={item.id} label={eventLabel(item)} checked={checked} onChange={() => pick(item.id)} disabled={!upcoming.enabled || (full && !checked)} className="rounded-lg bg-q-sunken p-2" />;
+        })}
       </div>
+      <p className={fullNotice ? 'q-hint mt-2' : 'q-hint'} role="status">{fullNotice}</p>
       <div className="mt-3 flex flex-wrap gap-2">
         <Button variant="primary" onClick={() => patch({ upcomingEnabled: upcoming.enabled, upcomingEventIds: upcoming.ids, ticketLinkEnabled: upcoming.tickets }, upcoming.enabled ? (upcoming.ids.length ? `Gäste sehen nach dem Feedback ${upcoming.ids.length} ausgewählte Events.` : 'Gäste sehen nach dem Feedback die nächsten Events.') : 'Der Hinweis auf kommende Events ist aus.')}>Auswahl speichern</Button>
         <Button onClick={() => setUpcoming({ ...upcoming, ids: [] })}>Automatisch wählen</Button>

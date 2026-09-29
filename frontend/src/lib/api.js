@@ -5,7 +5,7 @@ const API_BASE = configuredApiBase === undefined ? '/api' : configuredApiBase.re
 
 // Requests whose 401 belongs to the form that sent them: signing in, the first setup, an
 // invitation, a reset. Any other 401 means the session has ended.
-const sessionForms = ['/admin/login', '/admin/logout', '/admin/setup/', '/admin/password-reset/', '/admin/accept-invite', '/admin/password-policy'];
+const sessionForms = ['/admin/login', '/admin/setup/', '/admin/password-reset/', '/admin/accept-invite', '/admin/password-policy'];
 let sessionEnded = null;
 
 // The admin area listens here while someone is signed in, so a session that ends in the middle

@@ -48,6 +48,34 @@ describe('the choices of a look', () => {
     expect(queue.accepts(queue.mark())).toBe(true);
   });
 
+  it('let a reading that started during a choice count never, even once the choice has settled', async () => {
+    const { save, calls } = manualSave();
+    const queue = createThemeQueue(save, 'baendchen');
+
+    const choice = queue.choose('plakat');
+    const during = queue.mark();
+    await settle();
+    expect(queue.accepts(during)).toBe(false);
+    calls[0].resolve({ adminTheme: 'plakat' });
+    await choice;
+
+    expect(queue.accepts(during)).toBe(false);
+    expect(queue.accepts(queue.mark())).toBe(true);
+  });
+
+  it('let a reading that started during a failed choice count never as well', async () => {
+    const { save, calls } = manualSave();
+    const queue = createThemeQueue(save, 'baendchen');
+
+    const choice = queue.choose('plakat');
+    const during = queue.mark();
+    await settle();
+    calls[0].reject(new Error('Der Server ist gerade nicht erreichbar.'));
+    await expect(choice).rejects.toMatchObject({ newest: true });
+
+    expect(queue.accepts(during)).toBe(false);
+  });
+
   it('name the look the account keeps when the newest choice fails', async () => {
     const { save, calls } = manualSave();
     const queue = createThemeQueue(save, 'baendchen');
