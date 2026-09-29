@@ -33,11 +33,11 @@ export async function seedDefaultData() {
     // Ticket shop, website and social links stay empty: the first setup turns this organization
     // into a real one, and guests would otherwise follow example addresses.
     const organization = (await client.query(
-      `INSERT INTO organizations (name, slug, primary_color, privacy_text)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO organizations (name, slug, primary_color, privacy_text, retention_low_rating_phone_days)
+       VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (slug) DO NOTHING
        RETURNING *`,
-      [env.organizationName, env.organizationSlug, env.newOrganizationColor, env.newOrganizationPrivacyText]
+      [env.organizationName, env.organizationSlug, env.newOrganizationColor, env.newOrganizationPrivacyText, env.retentionPhoneDefaultDays]
     )).rows[0];
     // A second backend instance seeded concurrently.
     if (!organization) return;

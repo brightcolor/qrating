@@ -1469,8 +1469,41 @@ adminRouter.get('/qr-sources', async (req, res, next) => {
   }
 });
 
+const qrSourceTypes = ['dynamic_organization', 'event_specific'];
+
+// The name of a QR place is what votes, numbers and the newsletter show.
+function qrSourceLabel(value) {
+  const label = String(value ?? '').trim();
+  if (!label) throw httpError(400, 'Gib dem QR-Platz einen Namen, etwa „Bar“ oder „Eingang“.');
+  if (label.length > env.qrSourceLabelMaxLength) {
+    throw httpError(400, `Der Name eines QR-Platzes darf höchstens ${env.qrSourceLabelMaxLength} Zeichen lang sein. Kürze ihn bitte.`);
+  }
+  return label;
+}
+
+// The short name stands in the address of the printed code and comes back from the guest page.
+function qrSourceSlug(value) {
+  const slug = String(value ?? '').trim();
+  if (!/^[a-z0-9-]+$/.test(slug)) {
+    throw httpError(400, 'Der Kurzname steht in der Adresse des Codes und darf nur Kleinbuchstaben, Ziffern und Bindestriche enthalten, etwa „bar“ oder „eingang-nord“.');
+  }
+  if (slug.length > env.qrSourceSlugMaxLength) {
+    throw httpError(400, `Der Kurzname darf höchstens ${env.qrSourceSlugMaxLength} Zeichen lang sein. Kürze ihn bitte.`);
+  }
+  return slug;
+}
+
 adminRouter.post('/qr-sources', requireRole('event_manager'), async (req, res, next) => {
   try {
+    const label = qrSourceLabel(req.body.label);
+    const sourceSlug = qrSourceSlug(req.body.sourceSlug);
+    const type = req.body.type || 'dynamic_organization';
+    if (!qrSourceTypes.includes(type)) {
+      throw httpError(400, 'Ein QR-Platz gilt für alle Events (Typ „dynamic_organization“) oder für ein einzelnes Event (Typ „event_specific“).');
+    }
+    if (type === 'event_specific' && !req.body.eventId) {
+      throw httpError(400, 'Ein QR-Platz für ein einzelnes Event braucht dieses Event. Gib die Event-ID mit.');
+    }
     if (req.body.eventId) await ensureEventAccess(req, req.body.eventId);
     const result = await query(
       `INSERT INTO qr_sources (organization_id, event_id, source_slug, label, type, active)
@@ -1478,25 +1511,35 @@ adminRouter.post('/qr-sources', requireRole('event_manager'), async (req, res, n
       [
         req.admin.organizationId,
         req.body.eventId || null,
-        req.body.sourceSlug,
-        req.body.label,
-        req.body.type || 'dynamic_organization',
+        sourceSlug,
+        label,
+        type,
         req.body.active !== false
       ]
-    );
+    ).catch((error) => {
+      if (error.code === '23505') {
+        throw httpError(409, `Den Kurznamen „${sourceSlug}“ hat schon ein QR-Platz. Wähle einen anderen, etwa „${sourceSlug}-2“.`);
+      }
+      throw error;
+    });
     res.status(201).json(result.rows[0]);
   } catch (error) {
     next(error);
   }
 });
 
+// Renames a QR place or switches it off. The short name stays: printed codes carry it.
 adminRouter.patch('/qr-sources/:id', requireRole('event_manager'), async (req, res, next) => {
   try {
+    const label = req.body.label === undefined ? null : qrSourceLabel(req.body.label);
+    if (req.body.active !== undefined && typeof req.body.active !== 'boolean') {
+      throw httpError(400, 'Ob ein QR-Platz zählt, steht im Feld „active“ als true oder false.');
+    }
     const result = await query(
       `UPDATE qr_sources
        SET label = COALESCE($3, label), active = COALESCE($4, active), updated_at = now()
        WHERE id = $1 AND organization_id = $2 RETURNING *`,
-      [req.params.id, req.admin.organizationId, req.body.label, req.body.active]
+      [req.params.id, req.admin.organizationId, label, req.body.active ?? null]
     );
     if (!result.rows[0]) throw httpError(404, 'Diese QR-Quelle gibt es nicht mehr. Lade die Seite neu.');
     res.json(result.rows[0]);

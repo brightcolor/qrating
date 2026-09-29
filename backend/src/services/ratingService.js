@@ -1,12 +1,6 @@
 import { withTransaction } from '../db/pool.js';
 import { hashValue } from '../utils/crypto.js';
 
-// How long a low rating waits for the rest of the form before the organizer hears of it.
-// A guest who leaves a callback number within this time is named with it in the alert; one
-// who stops after the tap is reported all the same, only without a number. The alert reads
-// the rating when it runs, so a guest who changes their mind to four stars sets off nothing.
-export const lowRatingGraceMinutes = 30;
-
 // Whether a change of stars should put a low-rating alert on its way. Only the step into
 // the low range does: a second low tap, or a tap that leaves it, adds nothing.
 export function turnsLow(previousRating, rating) {

@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.59.2
+**Version:** 0.60.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -163,6 +163,8 @@ The admin area is built around the event. Everything that belongs to one evening
 - **Einstellungen**: Organisation, Team, Meldungen, Verbindungen (Pretix, Newsletter, E-Mail, Webhooks), Sicherheit, Tarif, Darstellung
 - **Plattform**, for the platform role only: Mandanten, Website, Tarife
 
+**QR & Aushang** also holds the QR places of the organization: each place has a code of its own, such as `/f/<organization>/bar`, and counts scans and votes for its spot in every event. Event managers and above create, rename and delete places there. A new name keeps the address of printed codes. A deleted place leaves its name on the votes and counted scans it brought in, and its printed codes still lead to the guest page, counting without a place.
+
 Every page has its own address, such as `/admin/events/<id>/fragen`, `/admin/einstellungen/team` or `/admin/plattform/mandanten`. Addresses from before this structure (`/admin/auswertung?event=…`, `/admin/fragen`, `/admin/benutzer`, `/admin/smtp` and the others) lead to the page that took over their content.
 
 ### Ten Looks
@@ -268,7 +270,7 @@ Every value that shapes what qrating does is a setting with a default and bounds
 | **Deletion periods and background jobs** | | | |
 | `RETENTION_MIN_DAYS` | `1` | 1–365 | Shortest deletion period an organization can enter, in days. |
 | `RETENTION_MAX_DAYS` | `3650` | 1–36500 | Longest deletion period an organization can enter, in days. |
-| `RETENTION_PHONE_DEFAULT_DAYS` | `90` | 1–36500 | Deletion period of callback numbers while an organization enters none, in days. |
+| `RETENTION_PHONE_DEFAULT_DAYS` | `90` | 1–36500 | Deletion period of callback numbers a new organization starts with, in days; each organization can enter its own. |
 | `RETENTION_INTERVAL_HOURS` | `12` | 1–720 | Time between two deletion runs of an organization, in hours. |
 | `JOB_RETRY_MINUTES` | `2` | 1–1440 | Wait before a failed background job runs again, in minutes. |
 | `JOB_MAX_ATTEMPTS` | `5` | 1–50 | Attempts of a background job before it counts as failed. |
@@ -276,12 +278,16 @@ Every value that shapes what qrating does is a setting with a default and bounds
 | `RETENTION_JOB_MAX_ATTEMPTS` | `2` | 1–50 | Attempts of a deletion run before it counts as failed. |
 | `SCHEDULER_BATCH_SIZE` | `20` | 1–1000 | Syncs and deletion runs the planner schedules per round at most. |
 | `JOB_HISTORY_DAYS` | `30` | 1–3650 | How long finished background jobs stay in the list, in days. |
+| `LOW_RATING_GRACE_MINUTES` | `30` | 0–1440 | How long the alert after a tap on one or two stars waits for the rest of the form, in minutes; 0 sends it at once. |
 | **Lists in the admin area and the report** | | | |
 | `ANALYTICS_VOICES_LIMIT` | `100` | 1–5000 | Votes the evaluation of an event lists. |
 | `ANALYTICS_COMMENTS_LIMIT` | `100` | 1–5000 | Comments the evaluation of an event returns. |
 | `ANALYTICS_ABANDONED_LIMIT` | `200` | 1–5000 | Abandoned visits the evaluation of an event lists. |
 | `CALLBACKS_LIST_LIMIT` | `200` | 1–5000 | Cases the list of callbacks shows. |
 | `REPORT_COMMENTS_LIMIT` | `50` | 1–1000 | Comments in the PDF report. |
+| **QR places** | | | |
+| `QR_SOURCE_LABEL_MAX_LENGTH` | `60` | 10–200 | Longest name of a QR place, in characters. |
+| `QR_SOURCE_SLUG_MAX_LENGTH` | `40` | 3–80 | Longest short name of a QR place in the address, in characters. The guest page reports it back in a field of at most 80 characters. |
 | **Events and the wallboard** | | | |
 | `UPCOMING_EVENTS_MAX` | `5` | 1–20 | Upcoming events that can be picked by hand for the page after a rating. |
 | `FEEDBACK_WINDOW_MAX_DAYS` | `365` | 1–3650 | Longest feedback round after the end of an event, days part. |
@@ -512,7 +518,7 @@ An event picture can also be set by hand in the admin area. The tab **Einstellun
 
 ## Notifications
 
-Low ratings can create a workflow case and notify only users who are allowed to access the affected event.
+Low ratings can create a workflow case and notify only users who are allowed to access the affected event. A tap on one or two stars schedules the alert after `LOW_RATING_GRACE_MINUTES`, so a callback number left in that time travels with it; the alert reads the stars when it runs.
 
 People, their roles and who is responsible for which event live under **Einstellungen → Team**. **Einstellungen → Meldungen** holds the channels.
 
@@ -555,7 +561,7 @@ Handing personal data to a newsletter system belongs in the privacy statement of
 
 Feedback can be anonymous. Newsletter opt-ins are stored separately with consent text and timestamp. New newsletter emails are encrypted at rest and additionally stored as a normalized keyed hash/domain pair for deduplication and reporting without exposing the raw address. Low-rating callback phone numbers and contact notes are encrypted at rest and can be anonymized through retention jobs.
 
-Retention periods are whole days between `RETENTION_MIN_DAYS` and `RETENTION_MAX_DAYS`; the API answers anything else with HTTP 400 and names the bounds. An empty period for feedback or newsletter entries keeps them. Callback numbers always have a period, `RETENTION_PHONE_DEFAULT_DAYS` unless the organization enters its own, and the privacy page states the same. The deletion run of an organization starts every `RETENTION_INTERVAL_HOURS`; each deletion in it runs for itself, so one that fails leaves the others their turn and the job names what failed.
+Retention periods are whole days between `RETENTION_MIN_DAYS` and `RETENTION_MAX_DAYS`; the API answers anything else with HTTP 400 and names the bounds. An empty period for feedback or newsletter entries keeps them. Callback numbers always have a period: a new organization starts with `RETENTION_PHONE_DEFAULT_DAYS` and can enter its own, and the privacy page states the same. A number keeps the period the privacy page named when the guest left it; a shorter period entered later deletes it earlier, a longer one keeps it no longer than named. The deletion run of an organization starts every `RETENTION_INTERVAL_HOURS`; each deletion in it runs for itself, so one that fails leaves the others their turn and the job names what failed.
 
 The wallboard hangs where guests read along. It shows numbers and quotes nobody; what guests wrote stays in the evaluation.
 

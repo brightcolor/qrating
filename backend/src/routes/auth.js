@@ -160,10 +160,10 @@ authRouter.post('/setup/first-admin', authLimiter, async (req, res, next) => {
           [existingOrganization.id, organizationName, organizationSlug]
         )).rows[0]
         : (await client.query(
-          `INSERT INTO organizations (name, slug, primary_color, privacy_text)
-           VALUES ($1, $2, $3, $4)
+          `INSERT INTO organizations (name, slug, primary_color, privacy_text, retention_low_rating_phone_days)
+           VALUES ($1, $2, $3, $4, $5)
            RETURNING *`,
-          [organizationName, organizationSlug, env.newOrganizationColor, env.newOrganizationPrivacyText]
+          [organizationName, organizationSlug, env.newOrganizationColor, env.newOrganizationPrivacyText, env.retentionPhoneDefaultDays]
         )).rows[0];
 
       // The account that sets the installation up also runs the platform above the organizations.
@@ -377,7 +377,11 @@ authRouter.get('/me', requireAdmin, async (req, res, next) => {
       twoFactorEnabled: Boolean(user.two_factor_enabled),
       adminTheme: user.admin_theme || null,
       // Settings the pages of the admin area need to know.
-      settings: { upcomingEventsMax: env.upcomingEventsMax },
+      settings: {
+        upcomingEventsMax: env.upcomingEventsMax,
+        qrSourceLabelMaxLength: env.qrSourceLabelMaxLength,
+        qrSourceSlugMaxLength: env.qrSourceSlugMaxLength
+      },
       two_factor_enabled: undefined,
       platform_admin: undefined,
       admin_theme: undefined

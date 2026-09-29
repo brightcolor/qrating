@@ -107,7 +107,7 @@ describe('the upcoming events after a rating', () => {
       const me = await request('GET', '/admin/me', { cookie: ownerCookie });
 
       expect(saved.body.upcoming_event_ids).toEqual(others.slice(0, 2));
-      expect(me.body.settings).toEqual({ upcomingEventsMax: 2 });
+      expect(me.body.settings).toMatchObject({ upcomingEventsMax: 2 });
     } finally {
       env.upcomingEventsMax = before;
     }

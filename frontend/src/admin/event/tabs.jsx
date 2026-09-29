@@ -7,6 +7,8 @@ import { Button, ButtonLink, Check, ErrorBox, Field, Icon, Input, Loading, Notic
 import { SourcesTable } from './analytics.jsx';
 import { openPreview } from './actions.jsx';
 import { formatDayTime, roundInfo } from './model.js';
+import { placeAddress, placeDeleteNotice, placeLabelProblem } from './qrPlaces.js';
+import { hasRole } from '../roles.js';
 
 export function QuestionsTab({ event, onChanged }) {
   return <EventQuestions event={event} onChanged={onChanged} />;
@@ -15,13 +17,13 @@ export function QuestionsTab({ event, onChanged }) {
 // ------------------------------------------------------------------ QR & Aushang
 
 export function QrTab({ event }) {
+  const { me } = useAdmin();
   const { data: dashboard } = useAsync(() => api('/admin/dashboard'), []);
   const { data: designs } = useAsync(() => api('/admin/print-designs'), []);
   const [reload, setReload] = useState(0);
   const { data: sources } = useAsync(() => api('/admin/qr-sources'), [reload]);
   const { data: qr } = useAsync(() => api(`/admin/events/${event.id}/qr-analytics`), [event.id, reload]);
   const [design, setDesign] = useState('klassik');
-  const [draft, setDraft] = useState({ sourceSlug: '', label: '' });
   const [message, setMessage] = useState('');
   const eventUrl = event.feedbackUrl || `/e/${event.event_feedback_token}`;
   const orgUrl = dashboard ? `${dashboard.feedbackAppUrl}/f/${dashboard.organization.slug}` : '';
@@ -32,19 +34,6 @@ export function QrTab({ event }) {
       setMessage('Adresse kopiert.');
     } catch {
       setMessage(errorNotice({ message: 'Der Browser lässt das Kopieren nicht zu. Markiere die Adresse und kopiere sie von Hand.' }));
-    }
-  }
-
-  async function createSource(e) {
-    e.preventDefault();
-    setMessage('');
-    try {
-      await api('/admin/qr-sources', { method: 'POST', body: JSON.stringify({ ...draft, type: 'dynamic_organization' }) });
-      setMessage(`QR-Platz „${draft.label}“ angelegt. Sein Code: ${orgUrl}/${draft.sourceSlug}`);
-      setDraft({ sourceSlug: '', label: '' });
-      setReload(reload + 1);
-    } catch (err) {
-      setMessage(errorNotice(err));
     }
   }
 
@@ -91,20 +80,142 @@ export function QrTab({ event }) {
       <Panel title="QR-Plätze bei diesem Event" note="Scans und Stimmen je Platz">
         <SourcesTable rows={qr?.bySource} />
       </Panel>
-      <Panel title="Neuer QR-Platz" note="etwa Bar, Ausgang, Garderobe">
-        <form onSubmit={createSource} className="grid gap-3 sm:grid-cols-2">
-          <Field label="Name"><Input value={draft.label} onChange={(e) => setDraft({ ...draft, label: e.target.value, sourceSlug: draft.sourceSlug || '' })} placeholder="Bar" required /></Field>
-          <Field label="Kurzname in der Adresse"><Input value={draft.sourceSlug} onChange={(e) => setDraft({ ...draft, sourceSlug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') })} placeholder="bar" required /></Field>
-          <p className="q-hint sm:col-span-2">Der Code dazu: {orgUrl || '…'}/{draft.sourceSlug || 'kurzname'}. Er führt wie der Hauptcode zum laufenden Event, zählt Scans aber für diesen Platz.</p>
-          <div className="sm:col-span-2"><Button type="submit" variant="primary" icon="plus">Platz anlegen</Button></div>
-        </form>
-        {sources?.length > 0 && <div className="mt-3 grid gap-1">
-          <p className="q-label">Vorhandene Plätze</p>
-          {sources.map((source) => <p key={source.id} className="flex justify-between gap-2"><span>{source.label}</span><span className="truncate text-q-muted">/f/{dashboard?.organization.slug}/{source.source_slug}</span></p>)}
-        </div>}
-      </Panel>
+      <QrPlacesPanel sources={sources} orgUrl={orgUrl} me={me} onChanged={() => setReload((count) => count + 1)} />
     </div>
   </div>;
+}
+
+// The places of the organization: each one has a code of its own that counts scans and votes for
+// its spot. A place belongs to every event, so a new name or a deletion counts for all of them.
+function QrPlacesPanel({ sources, orgUrl, me, onChanged }) {
+  const labelMax = me?.settings?.qrSourceLabelMaxLength || undefined;
+  const slugMax = me?.settings?.qrSourceSlugMaxLength || undefined;
+  const canManage = hasRole(me?.role, 'event_manager');
+  const [draft, setDraft] = useState({ sourceSlug: '', label: '' });
+  const [editing, setEditing] = useState(null);
+  const [deleting, setDeleting] = useState(null);
+  const [problem, setProblem] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+
+  async function createSource(e) {
+    e.preventDefault();
+    setMessage('');
+    try {
+      const created = await api('/admin/qr-sources', { method: 'POST', body: JSON.stringify({ ...draft, type: 'dynamic_organization' }) });
+      setMessage(`QR-Platz „${created.label}“ angelegt. Sein Code: ${placeAddress(orgUrl, created)}`);
+      setDraft({ sourceSlug: '', label: '' });
+      onChanged();
+    } catch (err) {
+      setMessage(errorNotice(err));
+    }
+  }
+
+  function startRename(source) {
+    setDeleting(null);
+    setProblem('');
+    setMessage('');
+    setEditing({ id: source.id, label: source.label });
+  }
+
+  function startDelete(source) {
+    setEditing(null);
+    setMessage('');
+    setDeleting(source.id);
+  }
+
+  async function saveName(e, source) {
+    e.preventDefault();
+    const found = placeLabelProblem(editing.label, labelMax);
+    if (found) {
+      setProblem(found);
+      return;
+    }
+    setBusy(true);
+    try {
+      const saved = await api(`/admin/qr-sources/${source.id}`, { method: 'PATCH', body: JSON.stringify({ label: editing.label }) });
+      setEditing(null);
+      setMessage(`QR-Platz heißt jetzt „${saved.label}“.`);
+      onChanged();
+    } catch (err) {
+      setProblem(err.message);
+      // A place deleted meanwhile leaves the list with the next reading.
+      if (err.status === 404) onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(source) {
+    setBusy(true);
+    try {
+      await api(`/admin/qr-sources/${source.id}`, { method: 'DELETE' });
+      setDeleting(null);
+      setMessage(`QR-Platz „${source.label}“ gelöscht. Stimmen und Scans behalten den Namen.`);
+      onChanged();
+    } catch (err) {
+      setMessage(errorNotice(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <Panel title="QR-Plätze verwalten" note="gelten für alle Events">
+    <div className="grid gap-3">
+      <Notice message={message} />
+      {sources && (sources.length ? <ul className="grid gap-2">
+        {sources.map((source) => {
+          const address = placeAddress(orgUrl, source);
+          const renaming = editing?.id === source.id;
+          const problemId = `qr-place-problem-${source.id}`;
+          return <li key={source.id} className="grid gap-2 rounded-lg bg-q-sunken p-2.5">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="font-semibold">{source.label}{source.active === false && <span className="q-pill q-pill-soon ml-1.5">pausiert</span>}</p>
+                <p className="break-all text-q-muted">{address}</p>
+                {source.type === 'event_specific' && <p className="q-hint">nur für {source.event_name || 'ein einzelnes Event'}</p>}
+              </div>
+              {canManage && !renaming && deleting !== source.id && <div className="flex flex-wrap gap-1.5">
+                <Button size="sm" icon="pencil" onClick={() => startRename(source)}>Umbenennen</Button>
+                <Button size="sm" variant="danger-soft" icon="trash" onClick={() => startDelete(source)}>Löschen …</Button>
+              </div>}
+            </div>
+            {renaming && <form onSubmit={(e) => saveName(e, source)} onKeyDown={(e) => { if (e.key === 'Escape') setEditing(null); }} className="grid gap-2">
+              <Field label="Neuer Name" hint={`Die Adresse ${address} bleibt, gedruckte Codes gelten weiter.`}>
+                <Input
+                  value={editing.label}
+                  onChange={(e) => { setEditing({ ...editing, label: e.target.value }); setProblem(''); }}
+                  maxLength={labelMax}
+                  autoFocus
+                  aria-invalid={Boolean(problem)}
+                  aria-describedby={problem ? problemId : undefined}
+                />
+              </Field>
+              {problem && <p id={problemId} role="alert" className="q-notice q-notice-error">{problem}</p>}
+              <div className="flex flex-wrap gap-2">
+                <Button type="submit" variant="primary" size="sm" icon="check" disabled={busy}>Namen speichern</Button>
+                <Button variant="ghost" size="sm" onClick={() => setEditing(null)}>Abbrechen</Button>
+              </div>
+            </form>}
+            {deleting === source.id && <div className="grid gap-2 rounded-lg bg-q-danger-soft p-3">
+              <p>{placeDeleteNotice(source, address)}</p>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="danger" size="sm" icon="trash" onClick={() => remove(source)} disabled={busy}>Platz löschen</Button>
+                <Button variant="ghost" size="sm" onClick={() => setDeleting(null)}>Abbrechen</Button>
+              </div>
+            </div>}
+          </li>;
+        })}
+      </ul> : <p className="text-q-muted">Noch keine QR-Plätze. Ein Platz bekommt einen eigenen Code und zählt Scans und Stimmen für seine Stelle, etwa an der Bar.</p>)}
+      {canManage ? <form onSubmit={createSource} className="grid gap-3 border-t border-q-line pt-3 sm:grid-cols-2">
+        <p className="q-label sm:col-span-2">Neuer Platz, etwa Bar, Ausgang oder Garderobe</p>
+        <Field label="Name"><Input value={draft.label} onChange={(e) => setDraft({ ...draft, label: e.target.value })} placeholder="Bar" maxLength={labelMax} required /></Field>
+        <Field label="Kurzname in der Adresse"><Input value={draft.sourceSlug} onChange={(e) => setDraft({ ...draft, sourceSlug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') })} placeholder="bar" maxLength={slugMax} required /></Field>
+        <p className="q-hint sm:col-span-2">Der Code dazu: {orgUrl || '…'}/{draft.sourceSlug || 'kurzname'}. Er führt wie der Hauptcode zum laufenden Event, zählt Scans aber für diesen Platz.</p>
+        <div className="sm:col-span-2"><Button type="submit" variant="primary" icon="plus">Platz anlegen</Button></div>
+      </form> : <p className="q-hint">Plätze anlegen, umbenennen und löschen können Event-Manager, Admins und Owner.</p>}
+    </div>
+  </Panel>;
 }
 
 // ------------------------------------------------------------------ Einstellungen des Events

@@ -4,7 +4,8 @@ import { db, query } from '../src/db/pool.js';
 import { runMigrations, seedDefaultData } from '../src/db/bootstrap.js';
 import { app } from '../src/server.js';
 import { JobWorker } from '../src/services/jobService.js';
-import { lowRatingGraceMinutes, turnsLow } from '../src/services/ratingService.js';
+import { turnsLow } from '../src/services/ratingService.js';
+import { env } from '../src/config/env.js';
 import { freshSetupCode } from './support/setupCode.js';
 
 vi.mock('../src/db/pool.js', async () => {
@@ -198,7 +199,25 @@ describe('a low tap reaches the organizer, but waits for the rest of the form', 
 
     expect(alerts).toHaveLength(1);
     const wait = new Date(alerts[0].run_after).getTime() - started;
-    expect(wait).toBeGreaterThan((lowRatingGraceMinutes - 1) * 60_000);
+    expect(wait).toBeGreaterThan((env.lowRatingGraceMinutes - 1) * 60_000);
+  });
+
+  it('waits as long as the setting says', async () => {
+    const before = env.lowRatingGraceMinutes;
+    env.lowRatingGraceMinutes = 5;
+    try {
+      const started = Date.now();
+      await tap('tief-kurz', 1);
+      const [vote] = await votesOf('tief-kurz');
+
+      const [alert] = await alertsFor(vote.id);
+
+      const wait = new Date(alert.run_after).getTime() - started;
+      expect(wait).toBeGreaterThan(4 * 60_000);
+      expect(wait).toBeLessThan(6 * 60_000);
+    } finally {
+      env.lowRatingGraceMinutes = before;
+    }
   });
 
   it('plans no second alert for a second low tap', async () => {

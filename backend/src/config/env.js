@@ -44,7 +44,7 @@ export const numberSettings = [
   // Deletion periods and background jobs
   { key: 'retentionMinDays', name: 'RETENTION_MIN_DAYS', fallback: 1, min: 1, max: 365, hint: 'Kürzeste Löschfrist, die eine Organisation eintragen kann, in Tagen.' },
   { key: 'retentionMaxDays', name: 'RETENTION_MAX_DAYS', fallback: 3650, min: 1, max: 36500, hint: 'Längste Löschfrist, die eine Organisation eintragen kann, in Tagen.' },
-  { key: 'retentionPhoneDefaultDays', name: 'RETENTION_PHONE_DEFAULT_DAYS', fallback: 90, min: 1, max: 36500, hint: 'Löschfrist für Rückrufnummern, solange eine Organisation keine eigene einträgt, in Tagen.' },
+  { key: 'retentionPhoneDefaultDays', name: 'RETENTION_PHONE_DEFAULT_DAYS', fallback: 90, min: 1, max: 36500, hint: 'Löschfrist für Rückrufnummern, mit der eine neue Organisation beginnt, in Tagen; jede Organisation kann ihre eigene eintragen.' },
   { key: 'retentionIntervalHours', name: 'RETENTION_INTERVAL_HOURS', fallback: 12, min: 1, max: 720, hint: 'Abstand zwischen zwei Löschläufen je Organisation, in Stunden.' },
   { key: 'jobRetryMinutes', name: 'JOB_RETRY_MINUTES', fallback: 2, min: 1, max: 1440, hint: 'Wartezeit, bevor eine gescheiterte Hintergrundaufgabe erneut läuft, in Minuten.' },
   { key: 'jobMaxAttempts', name: 'JOB_MAX_ATTEMPTS', fallback: 5, min: 1, max: 50, hint: 'Versuche einer Hintergrundaufgabe, bevor sie als gescheitert gilt.' },
@@ -52,6 +52,7 @@ export const numberSettings = [
   { key: 'retentionJobMaxAttempts', name: 'RETENTION_JOB_MAX_ATTEMPTS', fallback: 2, min: 1, max: 50, hint: 'Versuche eines Löschlaufs, bevor er als gescheitert gilt.' },
   { key: 'schedulerBatchSize', name: 'SCHEDULER_BATCH_SIZE', fallback: 20, min: 1, max: 1000, hint: 'So viele Abgleiche und Löschläufe setzt der Planer je Takt höchstens an.' },
   { key: 'jobHistoryDays', name: 'JOB_HISTORY_DAYS', fallback: 30, min: 1, max: 3650, hint: 'So lange bleiben erledigte Hintergrundaufgaben in der Liste, in Tagen.' },
+  { key: 'lowRatingGraceMinutes', name: 'LOW_RATING_GRACE_MINUTES', fallback: 30, min: 0, max: 1440, hint: 'So lange wartet die Meldung nach einem Tipp auf wenige Sterne auf den Rest des Formulars, in Minuten; bei 0 geht sie sofort hinaus.' },
 
   // Lists in the admin area and the report
   { key: 'analyticsVoicesLimit', name: 'ANALYTICS_VOICES_LIMIT', fallback: 100, min: 1, max: 5000, hint: 'So viele Stimmen zeigt die Auswertung eines Events.' },
@@ -59,6 +60,11 @@ export const numberSettings = [
   { key: 'analyticsAbandonedLimit', name: 'ANALYTICS_ABANDONED_LIMIT', fallback: 200, min: 1, max: 5000, hint: 'So viele abgebrochene Besuche zeigt die Auswertung eines Events.' },
   { key: 'callbacksListLimit', name: 'CALLBACKS_LIST_LIMIT', fallback: 200, min: 1, max: 5000, hint: 'So viele Fälle zeigt die Liste der Rückrufe.' },
   { key: 'reportCommentsLimit', name: 'REPORT_COMMENTS_LIMIT', fallback: 50, min: 1, max: 1000, hint: 'So viele Kommentare stehen im PDF-Report.' },
+
+  // QR places. The short name travels in the address of the code and comes back from the guest
+  // page in a field of at most 80 characters, so it can never be longer than that.
+  { key: 'qrSourceLabelMaxLength', name: 'QR_SOURCE_LABEL_MAX_LENGTH', fallback: 60, min: 10, max: 200, hint: 'Längster Name eines QR-Platzes, in Zeichen.' },
+  { key: 'qrSourceSlugMaxLength', name: 'QR_SOURCE_SLUG_MAX_LENGTH', fallback: 40, min: 3, max: 80, hint: 'Längster Kurzname eines QR-Platzes in der Adresse, in Zeichen.' },
 
   // Events and the wallboard
   { key: 'upcomingEventsMax', name: 'UPCOMING_EVENTS_MAX', fallback: 5, min: 1, max: 20, hint: 'So viele kommende Events lassen sich nach dem Feedback von Hand auswählen.' },

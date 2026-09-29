@@ -67,10 +67,10 @@ platformRouter.post('/organizations', async (req, res, next) => {
     }
 
     const created = (await query(
-      `INSERT INTO organizations (name, slug, primary_color, privacy_text)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO organizations (name, slug, primary_color, privacy_text, retention_low_rating_phone_days)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [name, slug, color, env.newOrganizationPrivacyText]
+      [name, slug, color, env.newOrganizationPrivacyText, env.retentionPhoneDefaultDays]
     )).rows[0];
 
     await writeAudit({ query }, {

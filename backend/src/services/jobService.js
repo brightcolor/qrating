@@ -4,6 +4,7 @@ import { buildEventReportPdf } from '../utils/pdf.js';
 import { buildDownloadName } from '../utils/downloadName.js';
 import { NewsletterService } from './newsletterService.js';
 import { env } from '../config/env.js';
+import { periodAllowed, phoneRetentionDays } from '../utils/retention.js';
 
 export async function enqueueJob(db, organizationId, jobType, payload, options = {}) {
   const result = await db.query(
@@ -215,7 +216,7 @@ export class JobWorker {
     const failures = [];
     const periodOf = (value, subject) => {
       const days = Number(value);
-      if (Number.isInteger(days) && days >= env.retentionMinDays && days <= env.retentionMaxDays) return days;
+      if (periodAllowed(days)) return days;
       failures.push(`Die Löschfrist für ${subject} steht auf „${value}“ und liegt außerhalb von ${env.retentionMinDays} bis ${env.retentionMaxDays} Tagen; korrigiere sie unter Einstellungen → Organisation.`);
       return null;
     };
@@ -227,8 +228,10 @@ export class JobWorker {
       }
     };
 
-    const phoneDays = periodOf(Number(org.retention_low_rating_phone_days) || env.retentionPhoneDefaultDays, 'Rückrufnummern');
+    const phoneDays = periodOf(phoneRetentionDays(org), 'Rückrufnummern');
     if (phoneDays) {
+      // A number goes when the period the privacy page named at the time it was left runs out
+      // (retention_until), or earlier once the organization shortened its period since.
       await step(() => this.db.query(
         `UPDATE low_rating_cases
          SET contact_phone_encrypted = null,

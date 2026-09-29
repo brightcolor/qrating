@@ -4,6 +4,24 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.60.0] - 2026-09-29
+
+### Added
+
+- QR places can be renamed and deleted in the admin area, under **QR & Aushang → QR-Plätze verwalten**. A new name keeps the address of printed codes. Deleting asks first and says what stays: votes and scans keep the name of the place, and printed codes still lead to the guest page, counting without a place. Roles below event manager see the places without these actions.
+- `QR_SOURCE_LABEL_MAX_LENGTH` and `QR_SOURCE_SLUG_MAX_LENGTH` bound the name and the short name of a QR place; the admin area takes both from the account.
+- `LOW_RATING_GRACE_MINUTES` sets how long the alert after a tap on one or two stars waits for the rest of the form, by default 30 minutes as before.
+
+### Fixed
+
+- A callback number stays as long as the privacy page said when the guest left it. Before, every number was deleted after 90 days, also where the organization keeps them longer.
+- New organizations start with `RETENTION_PHONE_DEFAULT_DAYS` for callback numbers. Before, they always started with 90 days, whatever the setting said.
+- Creating and renaming a QR place checks the name and the short name and answers with a message that names the rule: a name is needed, a short name takes lower-case letters, digits and hyphens, a short name that is taken is named, and a place is either for all events or for one event. Before, an empty name could be saved, and a short name that was taken ended in a general message.
+
+### Changed
+
+- Version bumped to `0.60.0`.
+
 ## [0.59.2] - 2026-09-29
 
 ### Fixed

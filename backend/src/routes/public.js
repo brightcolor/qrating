@@ -2,7 +2,7 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import Joi from 'joi';
 import { query, withTransaction } from '../db/pool.js';
-import { lowRatingGraceMinutes, openVoteFor, recordRating, turnsLow } from '../services/ratingService.js';
+import { openVoteFor, recordRating, turnsLow } from '../services/ratingService.js';
 import { EventResolver, calculateFeedbackWindow } from '../services/eventResolver.js';
 import { defaultTexts, defaultTextsByLanguage, loadResolvedTexts } from '../services/textService.js';
 import { eventToPublic } from '../db/bootstrap.js';
@@ -20,6 +20,7 @@ import { describeWait } from '../middleware/errors.js';
 import { verifyPreviewToken } from '../utils/previewLink.js';
 import { privacyPage } from '../services/privacyService.js';
 import { setupOpen } from '../services/setupService.js';
+import { periodAllowed, phoneRetentionDays } from '../utils/retention.js';
 
 export const publicRouter = express.Router();
 
@@ -476,11 +477,12 @@ publicRouter.post('/events/:eventToken/rating', feedbackLimiter, async (req, res
         newsletter: false
       });
     }
-    // A low tap reaches the organizer even if the guest leaves now. The alert waits a while,
-    // so a callback number left in the next minutes still travels with it.
+    // A low tap reaches the organizer even if the guest leaves now. The alert waits for
+    // LOW_RATING_GRACE_MINUTES, so a callback number left in that time still travels with it;
+    // it reads the rating when it runs, so a guest who changes to four stars sets off nothing.
     if (!vote.completed && turnsLow(vote.previousRating, vote.rating)) {
       await enqueueJob({ query }, event.organization_id, 'notification.low_rating', { eventId: event.id, feedbackId: vote.id }, {
-        runAfter: new Date(Date.now() + lowRatingGraceMinutes * 60 * 1000)
+        runAfter: new Date(Date.now() + env.lowRatingGraceMinutes * 60 * 1000)
       }).catch((jobError) => console.warn(`Die Meldung zur niedrigen Bewertung liess sich nicht einplanen: ${jobError.message}`));
     }
     res.status(vote.created ? 201 : 200).json({ ok: true });
@@ -631,12 +633,16 @@ publicRouter.post('/events/:eventToken/feedback', feedbackLimiter, async (req, r
     });
     if (feedback.rating <= 2) {
       if (value.contactPhone || value.contactNote) {
+        // The number stays as long as the privacy page says at this moment. A period outside the
+        // bounds of the settings sets no date; the deletion run names it and deletes nothing.
+        const organization = (await query('SELECT retention_low_rating_phone_days FROM organizations WHERE id = $1', [event.organization_id])).rows[0];
+        const phoneDays = phoneRetentionDays(organization);
         await query(
           `INSERT INTO low_rating_cases (
             organization_id, event_id, feedback_response_id, rating, status,
             contact_phone_encrypted, contact_note, contact_note_encrypted, visitor_message, consent_text, retention_until
           )
-          VALUES ($1,$2,$3,$4,'open',$5,null,$6,$7,$8, now() + interval '90 days')
+          VALUES ($1,$2,$3,$4,'open',$5,null,$6,$7,$8, now() + ($9::int * interval '1 day'))
           ON CONFLICT (feedback_response_id) DO UPDATE SET
             contact_phone_encrypted = EXCLUDED.contact_phone_encrypted,
             contact_note = null,
@@ -651,7 +657,8 @@ publicRouter.post('/events/:eventToken/feedback', feedbackLimiter, async (req, r
             value.contactPhone ? encryptSecret(value.contactPhone) : null,
             value.contactNote ? encryptSecret(value.contactNote) : null,
             texts.low_rating_contact_text,
-            'Besucher hat freiwillig eine Rückrufnummer zur Klärung einer niedrigen Bewertung hinterlassen.'
+            'Besucher hat freiwillig eine Rückrufnummer zur Klärung einer niedrigen Bewertung hinterlassen.',
+            periodAllowed(phoneDays) ? phoneDays : null
           ]
         );
       }
