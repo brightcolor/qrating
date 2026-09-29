@@ -24,7 +24,7 @@ export function signAdmin(user, { organizationId = user.organization_id, role = 
 
 // What a session hears once its account is no longer in use.
 const closedAccountMessages = {
-  disabled: 'Dein Konto ist deaktiviert. Ein Admin deiner Organisation kann es wieder aktivieren.',
+  disabled: 'Dein Konto ist deaktiviert. Ein Owner deiner Organisation kann es wieder aktivieren.',
   invited: 'Dein Konto ist noch nicht aktiviert. Öffne den Link aus deiner Einladungs-E-Mail und lege dort ein Passwort fest.'
 };
 
@@ -59,7 +59,7 @@ export async function requireAdmin(req, res, next) {
     )).rows[0];
     if (!account) return refuse('Dein Konto gibt es nicht mehr. Bitte melde dich mit einem anderen Konto an.');
     if (account.status !== 'active') {
-      return refuse(closedAccountMessages[account.status] || 'Dein Konto ist gesperrt. Ein Admin deiner Organisation kann es wieder aktivieren.');
+      return refuse(closedAccountMessages[account.status] || 'Dein Konto ist gesperrt. Ein Owner deiner Organisation kann es wieder aktivieren.');
     }
     if ((Number(session.sv) || 0) !== Number(account.session_version)) {
       return refuse('Deine Sitzung ist beendet, weil für dein Konto ein neues Passwort gesetzt wurde. Melde dich mit dem neuen Passwort an.');

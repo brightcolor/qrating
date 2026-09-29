@@ -12,6 +12,7 @@ import { clearAdminCookie, setAdminCookie } from '../utils/security.js';
 import { buildOtpAuthUrl, generateRecoveryCodes, generateTotpSecret, verifyTotp } from '../services/twoFactorService.js';
 import { writeAudit } from '../services/auditService.js';
 import { markSetupClosed, setupCodeMatches, setupOpen } from '../services/setupService.js';
+import { issueResetLink, resetValidity } from '../services/passwordResetService.js';
 
 export const authRouter = express.Router();
 
@@ -211,7 +212,7 @@ authRouter.post('/login', authLimiter, async (req, res, next) => {
     if (!user || !(await bcrypt.compare(password || '', user.password_hash))) {
       throw httpError(401, 'E-Mail oder Passwort ist falsch. Prüfe beides oder setze dein Passwort zurück.');
     }
-    if (user.status === 'disabled') throw httpError(403, 'Dieses Konto ist deaktiviert. Ein Admin deiner Organisation kann es wieder aktivieren.');
+    if (user.status === 'disabled') throw httpError(403, 'Dieses Konto ist deaktiviert. Ein Owner deiner Organisation kann es wieder aktivieren.');
     if (user.status === 'invited') throw httpError(403, 'Dieses Konto ist noch nicht aktiviert. Öffne den Link aus deiner Einladungs-E-Mail und lege dort ein Passwort fest.');
     res.json(await beginSession(res, user));
   } catch (error) {
@@ -287,28 +288,20 @@ authRouter.post('/password-reset/request', passwordResetLimiter, async (req, res
   try {
     const email = normalizeEmail(req.body.email);
     const user = (await query('SELECT * FROM users WHERE email = $1', [email])).rows[0];
-    let resetUrl = null;
-    if (user && user.status !== 'disabled') {
-      const token = randomToken(32);
-      resetUrl = `${env.adminAppUrl}/admin/reset-password?token=${token}`;
-      await query(
-        `UPDATE users
-         SET password_reset_token_hash = $2,
-             password_reset_expires_at = now() + ($3 * interval '1 hour'),
-             password_reset_requested_at = now(),
-             updated_at = now()
-         WHERE id = $1`,
-        [user.id, hashValue(token), env.passwordResetValidHours]
-      );
-      const hours = env.passwordResetValidHours === 1 ? 'eine Stunde' : `${env.passwordResetValidHours} Stunden`;
-      const smtp = new SmtpService({ query });
-      await smtp.sendMail(user.organization_id, {
+    // Only an account in use gets a link; an invited person takes up the invitation instead.
+    if (user && user.status === 'active') {
+      const link = await issueResetLink({ query }, user);
+      const sent = await new SmtpService({ query }).sendSystemMail({
         to: user.email,
         subject: 'qrating Passwort zurücksetzen',
-        text: `Du kannst dein qrating Passwort hier zurücksetzen:\n\n${resetUrl}\n\nDer Link ist ${hours} gültig.`
-      }).catch(() => null);
+        text: `Du kannst dein qrating Passwort hier zurücksetzen:\n\n${link}\n\nDer Link ist ${resetValidity()} gültig. Hast du das nicht angefordert, lass die Mail einfach liegen; dein Passwort bleibt dann, wie es ist.`
+      }).catch((error) => ({ error: error.message }));
+      // The operator learns why no mail went out; the link itself never goes into a log.
+      if (sent?.skipped) console.warn(`qrating: Ein Link zum Zurücksetzen wurde angefordert, aber es ist kein Mailserver der Installation eingetragen (SYSTEM_SMTP_HOST, SYSTEM_MAIL_FROM). Einen Link erzeugt „${env.resetLinkCommand}“.`);
+      if (sent?.error) console.warn(`qrating: Ein Link zum Zurücksetzen ließ sich nicht verschicken. ${sent.error}`);
     }
-    res.json({ ok: true, resetUrl: env.nodeEnv === 'production' ? null : resetUrl });
+    // The same answer for every address, so nobody learns which ones have an account.
+    res.json({ ok: true });
   } catch (error) {
     next(error);
   }
@@ -322,7 +315,7 @@ authRouter.post('/password-reset/confirm', authLimiter, async (req, res, next) =
       `SELECT * FROM users
        WHERE password_reset_token_hash = $1
          AND password_reset_expires_at > now()
-         AND status <> 'disabled'`,
+         AND status = 'active'`,
       [hashValue(String(req.body.token || ''))]
     )).rows[0];
     if (!user) throw httpError(400, 'Dieser Link zum Zurücksetzen ist ungültig oder abgelaufen. Fordere auf der Anmeldeseite einen neuen an.');

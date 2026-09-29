@@ -4,7 +4,7 @@ import { buildEventReportPdf } from '../utils/pdf.js';
 import { buildDownloadName } from '../utils/downloadName.js';
 import { NewsletterService } from './newsletterService.js';
 import { env } from '../config/env.js';
-import { periodAllowed, phoneRetentionDays } from '../utils/retention.js';
+import { effectivePhoneDays, periodAllowed, phoneRetentionDays } from '../utils/retention.js';
 
 export async function enqueueJob(db, organizationId, jobType, payload, options = {}) {
   const result = await db.query(
@@ -220,48 +220,54 @@ export class JobWorker {
       failures.push(`Die Löschfrist für ${subject} steht auf „${value}“ und liegt außerhalb von ${env.retentionMinDays} bis ${env.retentionMaxDays} Tagen; korrigiere sie unter Einstellungen → Organisation.`);
       return null;
     };
-    const step = async (run) => {
+    // The job result says in plain words what did not happen; the database text goes to the log.
+    const step = async (subject, run) => {
       try {
         await run();
       } catch (error) {
-        failures.push(error.message);
+        console.error(`qrating: Löschlauf der Organisation ${job.organization_id}, ${subject}: ${error.message}`);
+        failures.push(`Die ${subject} ließen sich nicht löschen; der nächste Lauf versucht es erneut.`);
       }
     };
 
-    const phoneDays = periodOf(phoneRetentionDays(org), 'Rückrufnummern');
-    if (phoneDays) {
-      // A number goes when the period the privacy page named at the time it was left runs out
-      // (retention_until), or earlier once the organization shortened its period since.
-      await step(() => this.db.query(
-        `UPDATE low_rating_cases
-         SET contact_phone_encrypted = null,
-             contact_note = null,
-             contact_note_encrypted = null,
-             internal_note = COALESCE(internal_note, '') || CASE WHEN internal_note IS NULL OR internal_note = '' THEN '' ELSE E'\n' END || 'Telefon-/Kontaktangaben automatisch nach Aufbewahrungsfrist gelöscht.',
-             updated_at = now()
-         WHERE organization_id = $1
-           AND (
-             contact_phone_encrypted IS NOT NULL
-             OR contact_note_encrypted IS NOT NULL
-             OR contact_note IS NOT NULL
-           )
-           AND (
-             retention_until <= now()
-             OR created_at < now() - ($2 * interval '1 day')
-           )`,
-        [job.organization_id, phoneDays]
-      ));
+    // Callback numbers always go: when the period the privacy page named at the time a number was
+    // left runs out (retention_until), or earlier once the organization shortened its period. A
+    // stored period outside the bounds counts as the nearest bound, the one the privacy page
+    // names as well, so the numbers still leave on time; the log says what to correct.
+    const storedPhoneDays = phoneRetentionDays(org);
+    const phoneDays = effectivePhoneDays(org);
+    if (!periodAllowed(storedPhoneDays)) {
+      console.warn(`qrating: Die Löschfrist für Rückrufnummern der Organisation ${job.organization_id} steht auf „${storedPhoneDays}“ und liegt außerhalb von ${env.retentionMinDays} bis ${env.retentionMaxDays} Tagen; es gelten ${phoneDays} Tage. Korrigiere sie unter Einstellungen → Organisation.`);
     }
+    await step('Rückrufnummern', () => this.db.query(
+      `UPDATE low_rating_cases
+       SET contact_phone_encrypted = null,
+           contact_note = null,
+           contact_note_encrypted = null,
+           internal_note = COALESCE(internal_note, '') || CASE WHEN internal_note IS NULL OR internal_note = '' THEN '' ELSE E'\n' END || 'Telefon-/Kontaktangaben automatisch nach Aufbewahrungsfrist gelöscht.',
+           updated_at = now()
+       WHERE organization_id = $1
+         AND (
+           contact_phone_encrypted IS NOT NULL
+           OR contact_note_encrypted IS NOT NULL
+           OR contact_note IS NOT NULL
+         )
+         AND (
+           retention_until <= now()
+           OR created_at < now() - ($2 * interval '1 day')
+         )`,
+      [job.organization_id, phoneDays]
+    ));
     const feedbackDays = org.retention_feedback_days ? periodOf(org.retention_feedback_days, 'Bewertungen') : null;
     if (feedbackDays) {
       // Visits of the guest page follow the feedback: same organization, same period.
-      await step(() => this.db.query(
+      await step('Besuche der Gästeseite', () => this.db.query(
         `DELETE FROM guest_sessions
          WHERE organization_id = $1
            AND started_at < now() - ($2 * interval '1 day')`,
         [job.organization_id, feedbackDays]
       ));
-      await step(() => this.db.query(
+      await step('Bewertungen', () => this.db.query(
         `DELETE FROM feedback_responses
          WHERE organization_id = $1
            AND submitted_at < now() - ($2 * interval '1 day')`,
@@ -270,7 +276,7 @@ export class JobWorker {
     }
     const newsletterDays = org.retention_newsletter_days ? periodOf(org.retention_newsletter_days, 'Newsletter-Anmeldungen') : null;
     if (newsletterDays) {
-      await step(() => this.db.query(
+      await step('Newsletter-Anmeldungen', () => this.db.query(
         `DELETE FROM newsletter_optins
          WHERE organization_id = $1
            AND consent_given_at < now() - ($2 * interval '1 day')`,

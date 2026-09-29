@@ -148,10 +148,11 @@ export function useDismiss(ref, onDismiss, active) {
   }, [ref, onDismiss, active]);
 }
 
-export function Button({ variant = 'secondary', icon, iconSize = 16, size, className = '', children, type = 'button', ...props }) {
+// Takes a ref, so an inline confirmation can put the focus on its safe choice and give it back.
+export const Button = React.forwardRef(function Button({ variant = 'secondary', icon, iconSize = 16, size, className = '', children, type = 'button', ...props }, ref) {
   const classes = ['q-btn', `q-btn-${variant}`, size === 'sm' ? 'q-btn-sm' : '', !children ? 'q-btn-icon' : '', className].filter(Boolean).join(' ');
-  return <button type={type} className={classes} {...props}>{icon && <Icon name={icon} size={iconSize} />}{children}</button>;
-}
+  return <button ref={ref} type={type} className={classes} {...props}>{icon && <Icon name={icon} size={iconSize} />}{children}</button>;
+});
 
 export function ButtonLink({ variant = 'secondary', icon, size, className = '', children, ...props }) {
   const classes = ['q-btn', `q-btn-${variant}`, size === 'sm' ? 'q-btn-sm' : '', className].filter(Boolean).join(' ');

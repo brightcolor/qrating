@@ -41,6 +41,11 @@ export const numberSettings = [
   { key: 'passwordResetRateLimitMax', name: 'PASSWORD_RESET_RATE_LIMIT_MAX', fallback: 5, min: 1, max: 100000, hint: 'So viele Anfragen zum Zurücksetzen nimmt qrating je Anschluss im Zeitfenster an.' },
   { key: 'setupCodeLength', name: 'SETUP_CODE_LENGTH', fallback: 16, min: 12, max: 64, hint: 'Länge des Einrichtungscodes für die Ersteinrichtung, in Zeichen.' },
 
+  // Mail server of the installation. It alone carries the mails that open an account, links to
+  // reset a password and invitations, because whoever controls the mail server of an
+  // organization could read those.
+  { key: 'systemSmtpPort', name: 'SYSTEM_SMTP_PORT', fallback: 587, min: 1, max: 65535, hint: 'Port des Mailservers der Installation.' },
+
   // Deletion periods and background jobs
   { key: 'retentionMinDays', name: 'RETENTION_MIN_DAYS', fallback: 1, min: 1, max: 365, hint: 'Kürzeste Löschfrist, die eine Organisation eintragen kann, in Tagen.' },
   { key: 'retentionMaxDays', name: 'RETENTION_MAX_DAYS', fallback: 3650, min: 1, max: 36500, hint: 'Längste Löschfrist, die eine Organisation eintragen kann, in Tagen.' },
@@ -80,6 +85,11 @@ export const textSettings = [
   { key: 'organizationSlug', name: 'ORGANIZATION_SLUG', fallback: 'demo-events', rule: 'aus Kleinbuchstaben, Ziffern und Bindestrichen bestehen', test: (value) => /^[a-z0-9-]{1,80}$/.test(value), hint: 'Kurzname dieser Organisation, er steht im QR-Link.' },
   { key: 'adminCookieName', name: 'ADMIN_COOKIE_NAME', fallback: 'qrating_admin', rule: 'aus Buchstaben, Ziffern, _ und - bestehen und höchstens 64 Zeichen lang sein', test: (value) => /^[A-Za-z0-9_-]{1,64}$/.test(value), hint: 'Name des Cookies, das die Anmeldung im Adminbereich trägt.' },
   { key: 'setupCodeCommand', name: 'SETUP_CODE_COMMAND', fallback: 'docker compose exec backend node src/cli/setup-code.js', rule: 'höchstens 300 Zeichen lang sein', test: (value) => value.length <= 300, hint: 'Befehl, den die Ersteinrichtung nennt, um einen neuen Einrichtungscode zu zeigen.' },
+  { key: 'resetLinkCommand', name: 'RESET_LINK_COMMAND', fallback: 'docker compose exec backend node src/cli/reset-link.js <E-Mail>', rule: 'höchstens 300 Zeichen lang sein', test: (value) => value.length <= 300, hint: 'Befehl, den das Log nennt, um einen Link zum Zurücksetzen ohne Mail zu erzeugen.' },
+  { key: 'systemSmtpHost', name: 'SYSTEM_SMTP_HOST', fallback: '', optional: true, rule: 'ein Rechnername aus Buchstaben, Ziffern, Punkten und Bindestrichen sein', test: (value) => /^[A-Za-z0-9.-]{1,253}$/.test(value), hint: 'Mailserver der Installation für Links zum Zurücksetzen und Einladungen; leer verschickt diese Mails nicht.' },
+  { key: 'systemSmtpSecure', name: 'SYSTEM_SMTP_SECURE', fallback: 'false', rule: 'true oder false sein', test: (value) => /^(true|false)$/.test(value), hint: 'true verschlüsselt die Verbindung von Anfang an (meist Port 465); false nutzt STARTTLS, sobald der Server es anbietet.' },
+  { key: 'systemSmtpUser', name: 'SYSTEM_SMTP_USER', fallback: '', optional: true, rule: 'höchstens 200 Zeichen lang sein', test: (value) => value.length <= 200, hint: 'Benutzername am Mailserver der Installation; leer meldet sich nicht an.' },
+  { key: 'systemMailFrom', name: 'SYSTEM_MAIL_FROM', fallback: '', optional: true, rule: 'eine E-Mail-Adresse sein, gern mit Namen wie „qrating <noreply@example.com>“', test: (value) => /^([^<>@]{1,100}<[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+>|[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+)$/.test(value), hint: 'Absender der Mails über den Mailserver der Installation.' },
   { key: 'newOrganizationColor', name: 'NEW_ORGANIZATION_COLOR', fallback: '#2563eb', rule: 'eine Farbe im Format #RRGGBB sein', test: (value) => /^#[0-9a-fA-F]{6}$/.test(value), hint: 'Farbe einer neu angelegten Organisation.' },
   { key: 'newOrganizationPrivacyText', name: 'NEW_ORGANIZATION_PRIVACY_TEXT', fallback: 'Feedback ist anonym möglich. E-Mail-Adressen werden nur für den gewählten Zweck gespeichert.', rule: 'höchstens 2000 Zeichen lang sein', test: (value) => value.length <= 2000, hint: 'Datenschutzhinweis einer neu angelegten Organisation.' }
 ];
@@ -125,7 +135,30 @@ export function readSettings(source = process.env) {
       errors.push(`${settingName(fallback)} (${values[fallback]}) muss zwischen ${settingName(low)} (${values[low]}) und ${settingName(high)} (${values[high]}) liegen.`);
     }
   }
+  if (values.systemSmtpHost && !values.systemMailFrom) {
+    errors.push('SYSTEM_MAIL_FROM fehlt. Mit SYSTEM_SMTP_HOST braucht der Mailserver der Installation einen Absender, etwa „qrating <noreply@example.com>“.');
+  }
+  errors.push(...secretProblems(source));
   return { values, errors };
+}
+
+// Values from the examples that ship with qrating. Whoever knows them could sign sessions or read
+// stored tokens, so a production installation does not start with them.
+const exampleSecrets = ['change-me-at-least-32-chars', 'change-me-32-byte-secret-value!!', 'dev-secret-change-me', 'change-me-32-byte-secret-value'];
+const secretMinLength = 32;
+
+function secretProblems(source) {
+  if ((source.NODE_ENV || 'development') !== 'production') return [];
+  return ['SESSION_SECRET', 'PRETIX_TOKEN_SECRET'].flatMap((name) => {
+    const value = String(source[name] ?? '');
+    if (!value || exampleSecrets.includes(value)) {
+      return [`${name} fehlt oder steht noch auf dem Beispielwert. Trage einen zufälligen Wert mit mindestens ${secretMinLength} Zeichen ein, etwa aus „openssl rand -hex 32“.`];
+    }
+    if (value.length < secretMinLength) {
+      return [`${name} ist ${value.length} Zeichen lang und damit zu kurz. Trage einen zufälligen Wert mit mindestens ${secretMinLength} Zeichen ein, etwa aus „openssl rand -hex 32“.`];
+    }
+    return [];
+  });
 }
 
 export function settingsFailure(errors) {
@@ -134,7 +167,12 @@ export function settingsFailure(errors) {
 }
 
 const { values: settings, errors: settingErrors } = readSettings();
-if (settingErrors.length) throw new Error(settingsFailure(settingErrors));
+if (settingErrors.length) {
+  // Operators read this in the log or the console; the message says everything, a stack trace
+  // with internal paths adds nothing.
+  console.error(settingsFailure(settingErrors));
+  process.exit(1);
+}
 
 const adminAppUrl = normalizeUrl(process.env.ADMIN_APP_URL || process.env.PUBLIC_APP_URL || defaultAdminAppUrl);
 const feedbackAppUrl = normalizeUrl(
@@ -153,10 +191,8 @@ export const env = {
   adminAppUrl,
   feedbackAppUrl,
   ...settings,
+  // A secret like the ones above, so it stays out of the settings list and its messages.
+  systemSmtpPassword: process.env.SYSTEM_SMTP_PASSWORD || '',
   trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
-  corsAllowedOrigins,
-  billingAdminEmails: String(process.env.BILLING_ADMIN_EMAILS || '')
-    .split(',')
-    .map((email) => email.trim().toLowerCase())
-    .filter(Boolean)
+  corsAllowedOrigins
 };

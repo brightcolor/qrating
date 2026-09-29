@@ -11,3 +11,11 @@ export function phoneRetentionDays(organization) {
 export function periodAllowed(days) {
   return Number.isInteger(days) && days >= env.retentionMinDays && days <= env.retentionMaxDays;
 }
+
+// The period that really applies to callback numbers: the one of the organization, held to the
+// bounds of the settings. A value from before the bounds, or one the operator's new bounds leave
+// outside, still deletes, and the privacy page names the period that holds.
+export function effectivePhoneDays(organization) {
+  const days = Math.round(phoneRetentionDays(organization));
+  return Math.min(Math.max(days, env.retentionMinDays), env.retentionMaxDays);
+}

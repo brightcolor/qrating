@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   effectiveBillingPlan,
   getBillingPlans,
@@ -6,7 +6,6 @@ import {
   planById,
   updateBillingPlans
 } from '../src/services/billingService.js';
-import { env } from '../src/config/env.js';
 
 const dbPlanRows = [
   {
@@ -51,10 +50,6 @@ const dbPlanRows = [
 ];
 
 describe('BillingService', () => {
-  afterEach(() => {
-    env.billingAdminEmails = [];
-  });
-
   it('uses active paid plan when no override exists', () => {
     const result = effectiveBillingPlan({ billing_plan: 'pro', billing_status: 'active' });
     expect(result.plan).toBe('pro');
@@ -101,10 +96,9 @@ describe('BillingService', () => {
   });
 
   it('allows platform admins to update the global plan matrix', async () => {
-    env.billingAdminEmails = ['owner@example.com'];
     const db = {
       query: vi.fn(async (sql) => {
-        if (sql.includes('FROM users')) return { rows: [{ email: 'owner@example.com', status: 'active' }] };
+        if (sql.includes('FROM users')) return { rows: [{ email: 'owner@example.com', platform_admin: true, status: 'active' }] };
         if (sql.includes('FROM billing_plans')) return { rows: dbPlanRows };
         return { rows: [] };
       })
@@ -132,6 +126,18 @@ describe('BillingService', () => {
     const db = {
       query: vi.fn(async (sql) => {
         if (sql.includes('FROM users')) return { rows: [{ email: 'owner@example.com', platform_admin: true, status: 'disabled' }] };
+        return { rows: dbPlanRows };
+      })
+    };
+
+    await expect(updateBillingPlans(db, 'user-1', [])).rejects.toMatchObject({ status: 403 });
+    expect(db.query.mock.calls.some(([sql]) => sql.includes('INSERT INTO billing_plans'))).toBe(false);
+  });
+
+  it('gives no plans to an account without the platform role, whatever its address', async () => {
+    const db = {
+      query: vi.fn(async (sql) => {
+        if (sql.includes('FROM users')) return { rows: [{ email: 'billing@example.com', platform_admin: false, status: 'active' }] };
         return { rows: dbPlanRows };
       })
     };

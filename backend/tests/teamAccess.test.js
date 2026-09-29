@@ -10,6 +10,7 @@ import { requireAdmin, signAdmin } from '../src/middleware/auth.js';
 import { SmtpService } from '../src/services/smtpService.js';
 import { randomToken } from '../src/utils/crypto.js';
 import { freshSetupCode } from './support/setupCode.js';
+import { catchSystemMail } from './support/systemMail.js';
 
 vi.mock('../src/db/pool.js', async () => {
   const { createPglitePool } = await import('./support/pglitePool.js');
@@ -120,7 +121,11 @@ describe('taking over an account of the own organization', () => {
 
     expect([disabled.status, reinvited.status, session.status, back.status]).toEqual([200, 409, 401, 200]);
     expect(await userRow(home.manager.user.id)).toMatchObject({ status: 'active', role: 'event_manager', invite_token_hash: null });
-    expect((await request('POST', '/admin/login', { body: { email: 'manager@beispiel.test', password } })).status).toBe(200);
+    // The session from before the deactivation stays ended; a new sign-in opens a new one.
+    const oldSession = await request('GET', '/admin/events', { cookie: home.manager.cookie });
+    const signedIn = await request('POST', '/admin/login', { body: { email: 'manager@beispiel.test', password } });
+    expect([oldSession.status, signedIn.status]).toEqual([401, 200]);
+    home.manager.cookie = signedIn.cookie;
   });
 
   it('lets nobody change their own role or access', async () => {
@@ -164,6 +169,17 @@ describe('taking over an account of the own organization', () => {
     expect(await userRow(id)).toMatchObject({ status: 'active', role: 'analyst' });
   });
 
+  it('keeps a withdrawn invitation withdrawn', async () => {
+    const invited = await request('POST', '/admin/users/invite', { cookie: home.owner.cookie, body: { email: 'zurueck@beispiel.test', role: 'analyst' } });
+    const withdrawn = await request('PATCH', `/admin/users/${invited.body.user.id}`, { cookie: home.owner.cookie, body: { status: 'disabled' } });
+
+    const switchedOn = await request('PATCH', `/admin/users/${invited.body.user.id}`, { cookie: home.owner.cookie, body: { status: 'active' } });
+
+    expect([withdrawn.status, switchedOn.status]).toEqual([200, 409]);
+    expect(switchedOn.body.error).toContain('nie angenommen');
+    expect(await userRow(invited.body.user.id)).toMatchObject({ status: 'disabled' });
+  });
+
   it('keeps an invitation valid for the days of its setting', async () => {
     const before = env.inviteValidDays;
     env.inviteValidDays = 3;
@@ -179,7 +195,7 @@ describe('taking over an account of the own organization', () => {
   });
 
   it('hands the link back only when no mail carried it', async () => {
-    const sent = vi.spyOn(SmtpService.prototype, 'sendMail').mockResolvedValue({ messageId: 'probe' });
+    const sent = vi.spyOn(SmtpService.prototype, 'sendSystemMail').mockResolvedValue({ messageId: 'probe' });
     try {
       const invited = await request('POST', '/admin/users/invite', { cookie: home.owner.cookie, body: { email: 'post@beispiel.test' } });
 
@@ -274,9 +290,16 @@ describe('a session', () => {
   it('ends when a new password is set, while the session of the new password holds', async () => {
     const member = await account(home.id, 'passwort@beispiel.test', 'analyst');
     const signedIn = await request('POST', '/admin/login', { body: { email: 'passwort@beispiel.test', password } });
-    const asked = await request('POST', '/admin/password-reset/request', { body: { email: 'passwort@beispiel.test' } });
+    const mail = catchSystemMail();
+    let link;
+    try {
+      await request('POST', '/admin/password-reset/request', { body: { email: 'passwort@beispiel.test' } });
+      link = mail.linkTo('passwort@beispiel.test');
+    } finally {
+      mail.restore();
+    }
 
-    const confirmed = await request('POST', '/admin/password-reset/confirm', { body: { token: tokenOf(asked.body.resetUrl), password: 'ganz-neues-passwort' } });
+    const confirmed = await request('POST', '/admin/password-reset/confirm', { body: { token: tokenOf(link), password: 'ganz-neues-passwort' } });
 
     const old = await request('GET', '/admin/events', { cookie: signedIn.cookie });
     const signed = await request('GET', '/admin/events', { cookie: member.cookie });
@@ -351,9 +374,14 @@ describe('a session', () => {
 
   it('finds an address typed with spaces and capitals', async () => {
     const signedIn = await request('POST', '/admin/login', { body: { email: '  Zweite-Owner@Beispiel.TEST ', password } });
-    const asked = await request('POST', '/admin/password-reset/request', { body: { email: ' ZWEITE-OWNER@beispiel.test' } });
+    const mail = catchSystemMail();
+    try {
+      await request('POST', '/admin/password-reset/request', { body: { email: ' ZWEITE-OWNER@beispiel.test' } });
 
-    expect(signedIn.status).toBe(200);
-    expect(asked.body.resetUrl).toBeTruthy();
+      expect(signedIn.status).toBe(200);
+      expect(mail.linkTo('zweite-owner@beispiel.test')).toBeTruthy();
+    } finally {
+      mail.restore();
+    }
   });
 });

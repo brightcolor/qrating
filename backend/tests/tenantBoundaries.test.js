@@ -5,6 +5,7 @@ import { runMigrations, seedDefaultData } from '../src/db/bootstrap.js';
 import { app } from '../src/server.js';
 import { signAdmin } from '../src/middleware/auth.js';
 import { freshSetupCode } from './support/setupCode.js';
+import { catchSystemMail } from './support/systemMail.js';
 
 vi.mock('../src/db/pool.js', async () => {
   const { createPglitePool } = await import('./support/pglitePool.js');
@@ -45,6 +46,17 @@ async function account(organizationId, email, role, extra = '') {
 }
 
 const tokenOf = (url) => new URL(url).searchParams.get('token');
+
+// Asks for a reset link the way a person does and reads it from the mail of the installation.
+async function resetLinkFor(email) {
+  const mail = catchSystemMail();
+  try {
+    await request('POST', '/admin/password-reset/request', { body: { email } });
+    return mail.linkTo(email);
+  } finally {
+    mail.restore();
+  }
+}
 
 beforeAll(async () => {
   await runMigrations();
@@ -273,10 +285,10 @@ describe('a session', () => {
 describe('an account with a second factor', () => {
   it('gets no session from a reset link alone', async () => {
     const guarded = await account(other.organization.id, 'zweiter-faktor@stadthalle.test', 'admin', 'two_factor_enabled = true');
-    const asked = await request('POST', '/admin/password-reset/request', { body: { email: 'zweiter-faktor@stadthalle.test' } });
+    const link = await resetLinkFor('zweiter-faktor@stadthalle.test');
 
     const confirmed = await request('POST', '/admin/password-reset/confirm', {
-      body: { token: tokenOf(asked.body.resetUrl), password: 'neues-passwort-123' }
+      body: { token: tokenOf(link), password: 'neues-passwort-123' }
     });
 
     expect(confirmed.status).toBe(200);
@@ -300,10 +312,10 @@ describe('an account with a second factor', () => {
   });
 
   it('keeps the direct way in for an account without a second factor', async () => {
-    const asked = await request('POST', '/admin/password-reset/request', { body: { email: 'owner@stadthalle.test' } });
+    const link = await resetLinkFor('owner@stadthalle.test');
 
     const confirmed = await request('POST', '/admin/password-reset/confirm', {
-      body: { token: tokenOf(asked.body.resetUrl), password: 'neues-passwort-123' }
+      body: { token: tokenOf(link), password: 'neues-passwort-123' }
     });
 
     expect(confirmed.status).toBe(200);

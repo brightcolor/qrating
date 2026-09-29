@@ -4,6 +4,33 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.61.0] - 2026-09-29
+
+### Security
+
+- Links to reset a password and invitations travel over a mail server of the installation only (`SYSTEM_SMTP_HOST`, `SYSTEM_SMTP_PORT`, `SYSTEM_SMTP_SECURE`, `SYSTEM_SMTP_USER`, `SYSTEM_SMTP_PASSWORD`, `SYSTEM_MAIL_FROM`). Before, they went over the mail server an organization enters itself, so an admin who ran that one could read the reset links of owners and take accounts without a second factor over. Without a mail server of the installation, an invitation link shows up for the owner who invited, and `docker compose exec backend node src/cli/reset-link.js <address>` creates a reset link; the log names that command (`RESET_LINK_COMMAND`).
+- The answer to a reset request never carries the link. Before, every installation without `NODE_ENV=production` handed it to whoever asked. Reset links go to accounts in use only; an invited person takes up the invitation.
+- A deactivation ends the sessions of an account for good. Before, switching the account on again made its old cookies valid again.
+- Plans and overrides belong to the platform role alone, and `BILLING_ADMIN_EMAILS` is gone: an owner could invite a listed address that had no account yet and take that invitation up himself.
+- Deletion periods and the details of the privacy page belong to admins and owners; event managers keep the name and the links of the organization.
+- With `NODE_ENV=production` the backend refuses missing, short or example values for `SESSION_SECRET` and `PRETIX_TOKEN_SECRET`. `docker-compose.yml` carries no example secrets any more.
+- An owner demoted by another owner in the same moment no longer changes the team with the rights read before.
+- A withdrawn invitation stays withdrawn: the account switches on only through a new invitation the person takes up.
+
+### Fixed
+
+- The deletion run removes callback numbers on time in every case: at the date the privacy page named when the number was left, or earlier after a shorter period. A stored period outside the bounds counts as the nearest bound, and the privacy page names that one. Before, such a period skipped all callback numbers, expired ones included.
+- A shorter deletion period asks before it is saved and says what the next deletion run removes.
+- Every role sets up two-factor authentication for its own account under Einstellungen → Sicherheit. Before, only admins saw it.
+- A deletion run that fails names the part in plain words; the database message goes to the log.
+- An invalid setting stops the start with the message alone, without a stack trace.
+- Messages for a deactivated account name the owner who can switch it on again.
+
+### Changed
+
+- The organization page shows the fields a role may not change as read-only, with a note who can.
+- Version bumped to `0.61.0`.
+
 ## [0.60.0] - 2026-09-29
 
 ### Added

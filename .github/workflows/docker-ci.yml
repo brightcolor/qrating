@@ -138,8 +138,12 @@ jobs:
       - name: Compose build
         run: docker compose build backend frontend
 
+      # The backend starts in production only with real secrets, so the stack gets fresh ones.
       - name: Start stack
-        run: docker compose up -d postgres backend frontend
+        run: |
+          echo "SESSION_SECRET=$(openssl rand -hex 32)" > .env
+          echo "PRETIX_TOKEN_SECRET=$(openssl rand -hex 32)" >> .env
+          docker compose up -d postgres backend frontend
 
       - name: Wait for backend readiness
         run: |

@@ -33,8 +33,15 @@ describe('JobWorker privacy retention', () => {
       })
     };
 
-    await expect(new JobWorker(db).handlePrivacyRetention({ organization_id: 'org-1' }))
-      .rejects.toThrow('Der Löschlauf ist nur teilweise gelaufen. Die Tabelle der Rückrufe war gesperrt.');
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      // The job result says in plain words what did not happen; the database text goes to the log.
+      await expect(new JobWorker(db).handlePrivacyRetention({ organization_id: 'org-1' }))
+        .rejects.toThrow('Der Löschlauf ist nur teilweise gelaufen. Die Rückrufnummern ließen sich nicht löschen; der nächste Lauf versucht es erneut.');
+      expect(logged.mock.calls.flat().join(' ')).toContain('Die Tabelle der Rückrufe war gesperrt.');
+    } finally {
+      logged.mockRestore();
+    }
     expect(calls.some((sql) => sql.includes('DELETE FROM feedback_responses'))).toBe(true);
     expect(calls.some((sql) => sql.includes('DELETE FROM newsletter_optins'))).toBe(true);
   });

@@ -109,12 +109,12 @@ describe('a callback number stays as long as the privacy page says', () => {
     }
   });
 
-  it('sets no date for a period outside the bounds, so the deletion run decides and names it', async () => {
+  it('holds a period outside the bounds to the nearest bound', async () => {
     await setPhoneDays(env.retentionMaxDays + 1);
 
     const left = await leaveNumber('rueckruf-ausserhalb');
 
-    expect(left.days).toBe(null);
+    expect(Number(left.days)).toBe(env.retentionMaxDays);
   });
 
   it('keeps the number past 90 days when the organization keeps numbers for 180', async () => {
@@ -132,5 +132,62 @@ describe('a callback number stays as long as the privacy page says', () => {
 
     const kept = (await query('SELECT contact_phone_encrypted IS NOT NULL AS has_phone FROM low_rating_cases WHERE id = $1', [left.id])).rows[0];
     expect(kept.has_phone).toBe(true);
+  });
+});
+
+describe('the deletion run removes callback numbers on time', () => {
+  const run = () => new JobWorker({ query }).handlePrivacyRetention({ organization_id: event.organization_id });
+  const hasPhone = async (id) => (await query('SELECT contact_phone_encrypted IS NOT NULL AS has_phone FROM low_rating_cases WHERE id = $1', [id])).rows[0].has_phone;
+  // Moves a case back in time: created that many days ago, promised until that many days from its creation.
+  const age = (id, days, promisedDays) => query(
+    `UPDATE low_rating_cases
+     SET created_at = now() - ($2 * interval '1 day'),
+         retention_until = now() - ($2 * interval '1 day') + ($3 * interval '1 day')
+     WHERE id = $1`,
+    [id, days, promisedDays]
+  );
+
+  it('deletes a number whose promised date has passed, even under a longer period now', async () => {
+    await setPhoneDays(180);
+    const left = await leaveNumber('lauf-zusage-vorbei');
+    await age(left.id, 50, 45);
+
+    await run();
+
+    expect(await hasPhone(left.id)).toBe(false);
+  });
+
+  it('deletes a number older than a period shortened since', async () => {
+    await setPhoneDays(180);
+    const left = await leaveNumber('lauf-verkuerzt');
+    await age(left.id, 100, 180);
+    await setPhoneDays(30);
+
+    await run();
+
+    expect(await hasPhone(left.id)).toBe(false);
+  });
+
+  it('keeps a number inside both its promise and the current period', async () => {
+    await setPhoneDays(45);
+    const left = await leaveNumber('lauf-offen');
+    await age(left.id, 20, 45);
+
+    await run();
+
+    expect(await hasPhone(left.id)).toBe(true);
+  });
+
+  it('still deletes when the stored period lies outside the bounds, and the privacy page names the period that holds', async () => {
+    await setPhoneDays(env.retentionMaxDays + 1);
+    const left = await leaveNumber('lauf-ausserhalb');
+    await age(left.id, env.retentionMaxDays + 10, env.retentionMaxDays);
+
+    await expect(run()).resolves.toBeUndefined();
+
+    expect(await hasPhone(left.id)).toBe(false);
+    const slug = (await query('SELECT slug FROM organizations WHERE id = $1', [event.organization_id])).rows[0].slug;
+    const privacy = JSON.stringify((await request('GET', `/public/privacy/${slug}`)).body);
+    expect(privacy).toContain(`${env.retentionMaxDays} Tage`);
   });
 });

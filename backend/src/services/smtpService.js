@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { env } from '../config/env.js';
 import { httpError } from '../middleware/errors.js';
 import { openSecret, smtpFailure } from '../utils/serviceErrors.js';
 
@@ -32,6 +33,28 @@ export class SmtpService {
         pass: settings.password_encrypted ? openSecret(settings.password_encrypted, 'Das gespeicherte SMTP-Passwort') : ''
       } : undefined
     });
+  }
+
+  // The mail server of the installation carries the mails that open an account. Whoever runs the
+  // mail server of an organization could read those, so they never go that way. Without a server
+  // of the installation they stay unsent, and the caller says what to do instead.
+  systemMailReady() {
+    return Boolean(env.systemSmtpHost && env.systemMailFrom);
+  }
+
+  async sendSystemMail(message) {
+    if (!this.systemMailReady()) return { skipped: true, reason: 'system_smtp_missing' };
+    const transporter = this.mailer.createTransport({
+      host: env.systemSmtpHost,
+      port: env.systemSmtpPort,
+      secure: env.systemSmtpSecure === 'true',
+      auth: env.systemSmtpUser ? { user: env.systemSmtpUser, pass: env.systemSmtpPassword } : undefined
+    });
+    try {
+      return await transporter.sendMail({ from: env.systemMailFrom, ...message });
+    } catch (error) {
+      throw smtpFailure(error);
+    }
   }
 
   async sendMail(organizationId, message) {

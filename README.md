@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.60.0
+**Version:** 0.61.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -123,7 +123,19 @@ After setup:
 
 - invite further people under Einstellungen → Team
 - assign roles and event access per user
-- configure SMTP before using email invitations or password reset links
+- enter the mail server of the installation (see below) before inviting people by mail or relying on password reset links
+
+### Mail Server Of The Installation
+
+Links to reset a password and invitations open an account, so they travel over a mail server of the installation only, never over the mail server an organization enters for itself: whoever runs that one could read the links and take accounts over. The operator enters it in `.env` with `SYSTEM_SMTP_HOST`, `SYSTEM_SMTP_PORT`, `SYSTEM_SMTP_SECURE`, `SYSTEM_SMTP_USER`, `SYSTEM_SMTP_PASSWORD` and `SYSTEM_MAIL_FROM`.
+
+Without it, no such mail goes out. An invitation link then shows up for the owner who invited, to pass on by hand. A requested reset link stays unsent, the log says so, and the operator creates one for an account in use:
+
+```bash
+docker compose exec backend node src/cli/reset-link.js person@example.com
+```
+
+The answer to a reset request is the same for every address, and the link never appears in it.
 
 ## Tenants
 
@@ -140,8 +152,8 @@ Accounts without the platform role only ever see their own organization; the pla
 | Role | Works on |
 |---|---|
 | Owner | everything in the organization, including team, roles and access |
-| Admin | mail server, newsletter, webhooks, the plan of the organization |
-| Event Manager | all events, forms and questions, texts of the guest page, QR sources, Pretix, look of the guest page |
+| Admin | mail server, newsletter, webhooks, the plan of the organization, deletion periods and the details of the privacy page |
+| Event Manager | all events, forms and questions, texts of the guest page, QR sources, Pretix, look of the guest page, name and links of the organization |
 | Analyst | the evaluation and the exports of the events assigned to them |
 | Support | the callbacks of the events assigned to them |
 
@@ -229,15 +241,14 @@ RATE_LIMIT_MAX=30
 IMAGE_CACHE_MAX_BYTES=5242880
 WORKER_INTERVAL_MS=5000
 PRETIX_SCHEDULER_INTERVAL_MS=60000
-
-BILLING_ADMIN_EMAILS=
 ```
 
+- `SESSION_SECRET` and `PRETIX_TOKEN_SECRET`: random values of at least 32 characters, for example from `openssl rand -hex 32`. With `NODE_ENV=production` the backend refuses the example values above and names the setting.
 - `POSTGRES_DATA`: a path gives a bind mount for the database files. Installations that started with the named volume keep working with an empty value.
 - `FRONTEND_PORT` and `BACKEND_PORT`: host bindings, for example `127.0.0.1:8140` when a tunnel or local reverse proxy is the only entry.
 - All values above reach the backend container through `docker-compose.yml`.
 
-Plans and overrides belong to the platform role. `BILLING_ADMIN_EMAILS` stays as a fallback for installations that grant those rights by email address; it does not enable external provider flows.
+Plans and overrides belong to the platform role alone. An address list grants no such rights any more: an owner could invite any address that has no account yet and take that invitation up himself.
 
 ### All Settings
 
@@ -267,6 +278,13 @@ Every value that shapes what qrating does is a setting with a default and bounds
 | `PASSWORD_RESET_RATE_LIMIT_MAX` | `5` | 1–100000 | Password reset requests accepted per address within that window. |
 | `SETUP_CODE_LENGTH` | `16` | 12–64 | Length of the setup code of the first setup, in characters. |
 | `SETUP_CODE_COMMAND` | `docker compose exec backend node src/cli/setup-code.js` | up to 300 characters | Command the setup page names for showing a fresh setup code. |
+| `RESET_LINK_COMMAND` | `docker compose exec backend node src/cli/reset-link.js <E-Mail>` | up to 300 characters | Command the log names for a password reset link without mail. |
+| **Mail server of the installation** | | | |
+| `SYSTEM_SMTP_HOST` | empty | a host name, or empty | Mail server for password reset links and invitations. Empty sends neither; the log then names the command for a reset link, and invitation links show up for the owner. |
+| `SYSTEM_SMTP_PORT` | `587` | 1–65535 | Port of that mail server. |
+| `SYSTEM_SMTP_SECURE` | `false` | `true` or `false` | `true` encrypts from the first byte (usually port 465); `false` uses STARTTLS when the server offers it. |
+| `SYSTEM_SMTP_USER` | empty | up to 200 characters, or empty | User name at that mail server; empty signs in without one. The password goes into `SYSTEM_SMTP_PASSWORD`. |
+| `SYSTEM_MAIL_FROM` | empty | an address, optionally with a name, or empty | Sender of those mails, such as `qrating <noreply@example.com>`. |
 | **Deletion periods and background jobs** | | | |
 | `RETENTION_MIN_DAYS` | `1` | 1–365 | Shortest deletion period an organization can enter, in days. |
 | `RETENTION_MAX_DAYS` | `3650` | 1–36500 | Longest deletion period an organization can enter, in days. |
@@ -692,13 +710,13 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.59.1`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.61.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 
 - Put the app behind HTTPS.
-- Keep `SESSION_SECRET` and `PRETIX_TOKEN_SECRET` unique per deployment.
-- Use a real SMTP account before enabling invitations, password reset, alerts, or report delivery.
+- Keep `SESSION_SECRET` and `PRETIX_TOKEN_SECRET` unique per deployment, at least 32 random characters each. With `NODE_ENV=production` the backend does not start with missing, short or example values.
+- Enter the mail server of the installation before relying on invitations or password reset links; organizations enter their own mail server for alerts and reports.
 - Keep Pretix tokens limited to the required organizer scope.
 - Restrict admin access with strong passwords and least-privilege roles.
 - Verify legal content, retention periods, and newsletter consent wording with qualified counsel.

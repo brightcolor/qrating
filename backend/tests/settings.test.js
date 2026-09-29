@@ -57,7 +57,11 @@ describe('the settings of an installation', () => {
       expect(setting.fallback, setting.name).toBeLessThanOrEqual(setting.max);
       expect(setting.hint.length, setting.name).toBeGreaterThan(10);
     }
-    for (const setting of textSettings) expect(setting.test(setting.fallback), setting.name).toBe(true);
+    // An optional setting starts empty and so stays off until the operator fills it in.
+    for (const setting of textSettings) {
+      if (setting.optional && setting.fallback === '') continue;
+      expect(setting.test(setting.fallback), setting.name).toBe(true);
+    }
   });
 
   it('documents every setting in the example environment and in the README', () => {
@@ -65,5 +69,30 @@ describe('the settings of an installation', () => {
       expect(exampleEnv, setting.name).toMatch(new RegExp(`^#?\\s?${setting.name}=`, 'm'));
       expect(readme, setting.name).toContain(`\`${setting.name}\``);
     }
+  });
+
+  it('hands every setting to the backend container', () => {
+    const compose = readFileSync(new URL('../../docker-compose.yml', import.meta.url), 'utf8');
+    // PORT stays out: the container always listens on 4000, where nginx expects it.
+    for (const setting of [...numberSettings, ...textSettings].filter((item) => item.name !== 'PORT')) {
+      expect(compose, setting.name).toContain(`${setting.name}: \${${setting.name}:-}`);
+    }
+    expect(compose).toContain('SYSTEM_SMTP_PASSWORD: ${SYSTEM_SMTP_PASSWORD:-}');
+  });
+
+  it('stops a production installation with example or short secrets', () => {
+    const production = { NODE_ENV: 'production', PRETIX_TOKEN_SECRET: 'p'.repeat(40) };
+
+    expect(readSettings({ ...production, SESSION_SECRET: 'change-me-at-least-32-chars' }).errors.join(' '))
+      .toContain('SESSION_SECRET fehlt oder steht noch auf dem Beispielwert');
+    expect(readSettings({ ...production, SESSION_SECRET: 'kurz' }).errors.join(' ')).toContain('SESSION_SECRET ist 4 Zeichen lang');
+    expect(readSettings({ ...production, SESSION_SECRET: 's'.repeat(40) }).errors).toEqual([]);
+    expect(readSettings({ SESSION_SECRET: 'kurz' }).errors).toEqual([]);
+  });
+
+  it('asks for a sender along with the mail server of the installation', () => {
+    expect(readSettings({ SYSTEM_SMTP_HOST: 'mail.example.com' }).errors.join(' ')).toContain('SYSTEM_MAIL_FROM fehlt');
+    expect(readSettings({ SYSTEM_SMTP_HOST: 'mail.example.com', SYSTEM_MAIL_FROM: 'qrating <noreply@example.com>' }).errors).toEqual([]);
+    expect(readSettings({ SYSTEM_MAIL_FROM: 'kein Absender' }).errors.join(' ')).toContain('SYSTEM_MAIL_FROM muss eine E-Mail-Adresse sein');
   });
 });

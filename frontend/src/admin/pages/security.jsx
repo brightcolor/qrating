@@ -3,6 +3,7 @@ import { api } from '../../lib/api.js';
 import { useAdmin } from '../context.js';
 import { eventLabel, formatDate } from '../eventLabel.js';
 import { Button, ErrorBox, Icon, Input, Loading, Notice, Panel, errorNotice, useAsync } from '../ui.jsx';
+import { hasRole } from '../roles.js';
 
 function Figure({ label, value, tone }) {
   return <div className="q-panel" style={{ padding: 12 }}>
@@ -111,9 +112,14 @@ function TwoFactorSetup({ onRefresh }) {
 }
 
 export function SecurityCenter() {
+  const { me } = useAdmin();
+  // Every person looks after the second factor of their own account. The checks of the installation
+  // belong to admins, the protected contacts to event managers and above, as on the server.
+  const canCheck = hasRole(me?.role, 'admin');
+  const canContacts = hasRole(me?.role, 'event_manager');
   const [reload, setReload] = useState(0);
-  const { data, loading, error } = useAsync(() => api('/admin/security-center'), [reload]);
-  const { data: pii, error: piiError } = useAsync(() => api('/admin/pii-vault'), [reload]);
+  const { data, loading, error } = useAsync(() => (canCheck ? api('/admin/security-center') : Promise.resolve(null)), [reload, canCheck]);
+  const { data: pii, error: piiError } = useAsync(() => (canContacts ? api('/admin/pii-vault') : Promise.resolve(null)), [reload, canContacts]);
   const [revealed, setRevealed] = useState({});
   const [message, setMessage] = useState('');
 
@@ -142,22 +148,20 @@ export function SecurityCenter() {
   return <div className="grid gap-4">
     <Notice message={message} />
     <ErrorBox error={error} />
-    {loading && <Loading />}
-    {data && <>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    {canCheck && loading && <Loading />}
+    {data && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Figure label="Aktive Personen" value={data.summary.activeUsers} />
         <Figure label="mit 2FA" value={data.summary.usersWith2fa} />
         <Figure label="Admins ohne 2FA" value={data.summary.adminsWithout2fa} tone={data.summary.adminsWithout2fa ? 'bad' : ''} />
         <Figure label="Alte Klartextdaten" value={(data.summary.legacyNewsletterRows || 0) + (data.summary.legacyWebhookSecrets || 0)} />
-      </div>
-      <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-        <Panel title="Prüfungen der Installation" actions={<Button size="sm" icon="refresh" onClick={() => setReload(reload + 1)}>Neu prüfen</Button>}>
-          <div className="grid gap-2">{data.checks.map((item) => <CheckRow key={item.id} item={item} />)}</div>
-        </Panel>
-        <Panel title="2FA für dein Konto"><TwoFactorSetup onRefresh={() => setReload(reload + 1)} /></Panel>
-      </div>
-    </>}
-    <Panel title="Geschützte Kontaktdaten" note="Jedes Anzeigen landet im Protokoll.">
+    </div>}
+    <div className={`grid gap-4 ${data ? 'xl:grid-cols-[1.1fr_0.9fr]' : ''}`}>
+      {data && <Panel title="Prüfungen der Installation" actions={<Button size="sm" icon="refresh" onClick={() => setReload(reload + 1)}>Neu prüfen</Button>}>
+        <div className="grid gap-2">{data.checks.map((item) => <CheckRow key={item.id} item={item} />)}</div>
+      </Panel>}
+      <Panel title="2FA für dein Konto"><TwoFactorSetup onRefresh={() => setReload(reload + 1)} /></Panel>
+    </div>
+    {canContacts && <Panel title="Geschützte Kontaktdaten" note="Jedes Anzeigen landet im Protokoll.">
       <ErrorBox error={piiError} />
       {pii && <div className="grid gap-4">
         <div className="flex flex-wrap items-center gap-3 text-q-muted">
@@ -199,7 +203,7 @@ export function SecurityCenter() {
           </div>
         </div>
       </div>}
-    </Panel>
+    </Panel>}
     {data && <Panel title="Letzte Einträge im Protokoll">
       <table className="q-table">
         <tbody>

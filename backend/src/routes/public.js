@@ -20,7 +20,7 @@ import { describeWait } from '../middleware/errors.js';
 import { verifyPreviewToken } from '../utils/previewLink.js';
 import { privacyPage } from '../services/privacyService.js';
 import { setupOpen } from '../services/setupService.js';
-import { periodAllowed, phoneRetentionDays } from '../utils/retention.js';
+import { effectivePhoneDays } from '../utils/retention.js';
 
 export const publicRouter = express.Router();
 
@@ -633,10 +633,8 @@ publicRouter.post('/events/:eventToken/feedback', feedbackLimiter, async (req, r
     });
     if (feedback.rating <= 2) {
       if (value.contactPhone || value.contactNote) {
-        // The number stays as long as the privacy page says at this moment. A period outside the
-        // bounds of the settings sets no date; the deletion run names it and deletes nothing.
+        // The number stays as long as the privacy page says at this moment.
         const organization = (await query('SELECT retention_low_rating_phone_days FROM organizations WHERE id = $1', [event.organization_id])).rows[0];
-        const phoneDays = phoneRetentionDays(organization);
         await query(
           `INSERT INTO low_rating_cases (
             organization_id, event_id, feedback_response_id, rating, status,
@@ -658,7 +656,7 @@ publicRouter.post('/events/:eventToken/feedback', feedbackLimiter, async (req, r
             value.contactNote ? encryptSecret(value.contactNote) : null,
             texts.low_rating_contact_text,
             'Besucher hat freiwillig eine Rückrufnummer zur Klärung einer niedrigen Bewertung hinterlassen.',
-            periodAllowed(phoneDays) ? phoneDays : null
+            effectivePhoneDays(organization)
           ]
         );
       }

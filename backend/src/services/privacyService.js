@@ -1,7 +1,7 @@
 // The privacy page of an organization, written from what this installation really does.
 // Every sentence follows a setting or a table, so the page and the software stay in step.
 import { env } from '../config/env.js';
-import { phoneRetentionDays } from '../utils/retention.js';
+import { effectivePhoneDays } from '../utils/retention.js';
 
 export const processorLine = 'qrating, ein Produkt von bright color (siehe qrating.de/impressum)';
 
@@ -108,8 +108,8 @@ export function privacySections(organization = {}, { newsletter = null, mailHost
       items: [
         periodSentence(organization.retention_feedback_days, 'Bewertungen und Besuche der Gästeseite'),
         periodSentence(organization.retention_newsletter_days, 'Anmeldungen zum Newsletter'),
-        // The deletion job falls back to its default period for callback numbers, and the page says so too.
-        periodSentence(phoneRetentionDays(organization), 'Telefonnummern aus einem Rückrufwunsch')
+        // The period the deletion run keeps to: the organization's own, held to the bounds of the settings.
+        periodSentence(effectivePhoneDays(organization), 'Telefonnummern aus einem Rückrufwunsch')
       ]
     },
     {

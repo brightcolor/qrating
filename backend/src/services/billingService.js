@@ -1,4 +1,3 @@
-import { env } from '../config/env.js';
 import { httpError } from '../middleware/errors.js';
 
 export const defaultPlanDefinitions = [
@@ -242,12 +241,12 @@ export function effectiveBillingPlan(organization, now = new Date()) {
   return { plan: 'free', source: 'free' };
 }
 
-// The platform role decides over the plans of every tenant; the mail list stays as a fallback.
-// Either way the account has to be in use: a disabled account keeps no rights over plans,
-// even while an older session cookie of it is still valid.
+// The platform role alone decides over the plans of every tenant, and only while the account is
+// in use: a disabled account keeps no rights over plans, even while an older session cookie of it
+// is still valid. An address list is no proof: an owner can invite any address that has no
+// account yet and take that invitation up himself.
 function canOverrideBilling(user) {
-  if (user.status !== 'active') return false;
-  return Boolean(user.platform_admin) || env.billingAdminEmails.includes(String(user.email || '').toLowerCase());
+  return user.status === 'active' && Boolean(user.platform_admin);
 }
 
 function publicBilling(organization, user) {

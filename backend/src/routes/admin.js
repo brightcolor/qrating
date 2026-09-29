@@ -1655,11 +1655,13 @@ adminRouter.post('/users/invite', requireRole('owner'), async (req, res, next) =
     });
     const inviteUrl = `${env.adminAppUrl}/admin/accept-invite?token=${token}`;
     const days = env.inviteValidDays === 1 ? 'einen Tag' : `${env.inviteValidDays} Tage`;
-    const smtp = new SmtpService({ query });
-    const mail = await smtp.sendMail(req.admin.organizationId, {
+    // An invitation opens an account, so it travels over the mail server of the installation;
+    // whoever runs the mail server of the organization could otherwise take the link up first.
+    const organizationName = (await query('SELECT name FROM organizations WHERE id = $1', [req.admin.organizationId])).rows[0]?.name || 'qrating';
+    const mail = await new SmtpService({ query }).sendSystemMail({
       to: email,
-      subject: 'Einladung zu qrating',
-      text: `Du wurdest zu qrating eingeladen.\n\nEinladung abschließen:\n${inviteUrl}\n\nDer Link ist ${days} gültig.`
+      subject: `Einladung zu ${organizationName} in qrating`,
+      text: `Du wurdest zu ${organizationName} in qrating eingeladen.\n\nEinladung abschließen:\n${inviteUrl}\n\nDer Link ist ${days} gültig.`
     }).catch((error) => ({ skipped: true, reason: 'send_failed', error: smtpFailure(error).message }));
     // The link only comes back when no mail carried it; then the owner passes it on by hand.
     res.status(201).json({ user, mail, inviteUrl: mail?.skipped ? inviteUrl : null });
@@ -1689,6 +1691,11 @@ adminRouter.patch('/users/:id', requireRole('owner'), async (req, res, next) => 
         `SELECT id FROM users WHERE organization_id = $1 AND role = 'owner' AND status = 'active' ORDER BY id FOR UPDATE`,
         [req.admin.organizationId]
       )).rows.map((row) => row.id);
+      // The role was read before the lock; an owner demoted meanwhile by another owner acts no more.
+      // A platform admin on a visit is owner by the visit and stands in no list here.
+      if (!req.admin.acting && !owners.includes(req.admin.sub)) {
+        throw httpError(403, 'Du bist inzwischen kein aktiver Owner dieser Organisation mehr. Lade die Seite neu; ein Owner kann deine Rolle anpassen.');
+      }
       const target = (await client.query(
         'SELECT * FROM users WHERE id = $1 AND organization_id = $2 FOR UPDATE',
         [req.params.id, req.admin.organizationId]
@@ -1705,16 +1712,24 @@ adminRouter.patch('/users/:id', requireRole('owner'), async (req, res, next) => 
       if (statusChanges && target.status === 'invited' && status === 'active') {
         throw httpError(409, 'Ein eingeladenes Konto wird aktiv, sobald die Person die Einladung annimmt. Zurückziehen kannst du die Einladung mit „Deaktiviert“.');
       }
+      // A withdrawn invitation stays withdrawn: the person never chose a password, so switching
+      // the account on would leave it without a way in except a reset link.
+      if (statusChanges && status === 'active' && target.invite_token_hash && !target.last_login_at) {
+        throw httpError(409, `${target.name || 'Diese Person'} hat die Einladung nie angenommen. Lade die Person unter „Person einladen“ neu ein.`);
+      }
       const leavesOwners = target.role === 'owner' && target.status === 'active'
         && ((roleChanges && role !== 'owner') || (statusChanges && status !== 'active'));
       if (leavesOwners && !owners.some((id) => id !== target.id)) {
         throw httpError(409, `${target.name} ist der letzte aktive Owner deiner Organisation. Mach zuerst eine andere Person zum Owner.`);
       }
+      // A deactivation ends every session for good: switched on again, the account signs in anew,
+      // and a cookie from a lost laptop stays useless.
       const updated = (await client.query(
         `UPDATE users
          SET name = COALESCE($3, name),
              role = COALESCE($4, role),
              status = COALESCE($5, status),
+             session_version = session_version + CASE WHEN $5::text = 'disabled' AND status <> 'disabled' THEN 1 ELSE 0 END,
              updated_at = now()
          WHERE id = $1 AND organization_id = $2
          RETURNING ${teamColumns}`,
@@ -1811,11 +1826,44 @@ function retentionDays(body, key, subject, { emptyKeeps = true } = {}) {
   return days;
 }
 
+// Deletion periods and the details of the privacy page decide what happens with the data of
+// guests; changing them belongs to admins and owners. The organization page sends every field on
+// each save, so only a field that really changes counts.
+async function privacyChanges(req, { phoneDays, feedbackDays, newsletterDays }) {
+  const current = (await query(
+    `SELECT retention_low_rating_phone_days, retention_feedback_days, retention_newsletter_days,
+            legal_name, legal_address, legal_email, privacy_text
+     FROM organizations WHERE id = $1`,
+    [req.admin.organizationId]
+  )).rows[0] || {};
+  const text = (value) => String(value ?? '').trim();
+  const changed = [];
+  if (phoneDays !== null && phoneDays !== current.retention_low_rating_phone_days) changed.push('die Löschfrist für Rückrufnummern');
+  if (Object.hasOwn(req.body, 'retentionFeedbackDays') && feedbackDays !== (current.retention_feedback_days ?? null)) changed.push('die Löschfrist für Bewertungen');
+  if (Object.hasOwn(req.body, 'retentionNewsletterDays') && newsletterDays !== (current.retention_newsletter_days ?? null)) changed.push('die Löschfrist für Newsletter-Anmeldungen');
+  for (const [key, column, label] of [
+    ['legalName', 'legal_name', 'die verantwortliche Stelle'],
+    ['legalAddress', 'legal_address', 'die Anschrift'],
+    ['legalEmail', 'legal_email', 'die E-Mail für Datenschutzanfragen'],
+    ['privacyText', 'privacy_text', 'den Datenschutzhinweis']
+  ]) {
+    if (req.body[key] !== undefined && req.body[key] !== null && text(req.body[key]) !== text(current[column])) changed.push(label);
+  }
+  return changed;
+}
+
 adminRouter.patch('/branding', requireRole('event_manager'), async (req, res, next) => {
   try {
     const phoneDays = retentionDays(req.body, 'retentionLowRatingPhoneDays', 'Rückrufnummern', { emptyKeeps: false });
     const feedbackDays = retentionDays(req.body, 'retentionFeedbackDays', 'Bewertungen');
     const newsletterDays = retentionDays(req.body, 'retentionNewsletterDays', 'Newsletter-Anmeldungen');
+    if (!hasRole(req.admin.role, 'admin')) {
+      const changed = await privacyChanges(req, { phoneDays, feedbackDays, newsletterDays });
+      if (changed.length) {
+        const list = changed.length === 1 ? changed[0] : `${changed.slice(0, -1).join(', ')} und ${changed.at(-1)}`;
+        throw httpError(403, `Du hast ${list} geändert. Das ändert ein Admin oder Owner deiner Organisation; die übrigen Angaben speicherst du, wenn diese Felder bleiben, wie sie waren.`);
+      }
+    }
     const wallboard = wallboardInput(req.body.wallboardSettings);
     const result = await query(
       `UPDATE organizations

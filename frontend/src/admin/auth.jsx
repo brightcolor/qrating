@@ -176,8 +176,8 @@ function Login({ onLogin }) {
       return;
     }
     try {
-      const result = await api('/admin/password-reset/request', { method: 'POST', body: JSON.stringify({ email }) });
-      setMessage(result.resetUrl ? `Link zum Zurücksetzen: ${result.resetUrl}` : 'Wenn ein Konto mit dieser E-Mail-Adresse existiert, ist jetzt ein Link zum Zurücksetzen unterwegs.');
+      await api('/admin/password-reset/request', { method: 'POST', body: JSON.stringify({ email }) });
+      setMessage('Wenn ein Konto mit dieser E-Mail-Adresse besteht, ist jetzt ein Link zum Zurücksetzen unterwegs. Kommt keine Mail an, wende dich an die Person, die eure qrating-Installation betreibt.');
     } catch (err) {
       setError(err.message);
     }

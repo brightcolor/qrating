@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../../lib/api.js';
 import { useAdmin } from '../context.js';
+import { shortenedPeriods, shortenedSentence } from '../retention.js';
+import { hasRole } from '../roles.js';
 import { eventLabel, formatDate } from '../eventLabel.js';
 import { settingsParts, settingsSections } from '../navigation.js';
 import { shellListsSections, themeFor, themes } from '../themes.js';
@@ -28,10 +30,34 @@ export function SettingsPage({ section, part }) {
 // ------------------------------------------------------------------ Organisation
 
 function Organization() {
-  const { reloadMe } = useAdmin();
+  const { me, reloadMe } = useAdmin();
   const { data, loading, error } = useAsync(() => api('/admin/branding'), []);
   const [form, setForm] = useState(null);
   const [message, setMessage] = useState('');
+  // What the server holds now; a save updates it, so the next save compares with the saved state.
+  const [stored, setStored] = useState(null);
+  const [shorter, setShorter] = useState(null);
+  const keepRef = useRef(null);
+  const saveRef = useRef(null);
+  // The server keeps these rules as well; the page offers only what the role may change.
+  const canEdit = hasRole(me?.role, 'event_manager');
+  const canPrivacy = hasRole(me?.role, 'admin');
+
+  useEffect(() => {
+    if (data) setStored(data);
+  }, [data]);
+
+  // The confirmation takes the focus on its safe choice; closing it gives the focus back once the
+  // save button is usable again, after the next paint.
+  const returnFocus = useRef(false);
+  useEffect(() => {
+    if (shorter) {
+      keepRef.current?.focus();
+    } else if (returnFocus.current) {
+      returnFocus.current = false;
+      saveRef.current?.focus();
+    }
+  }, [shorter]);
 
   useEffect(() => {
     if (data) setForm({
@@ -52,12 +78,28 @@ function Organization() {
     });
   }, [data]);
 
-  async function save(e) {
+  function save(e) {
     e.preventDefault();
+    setMessage('');
+    const found = canPrivacy ? shortenedPeriods(form, stored) : [];
+    if (found.length) {
+      setShorter(found);
+      return;
+    }
+    persist();
+  }
+
+  function keepPeriods() {
+    returnFocus.current = true;
+    setShorter(null);
+  }
+
+  async function persist() {
+    setShorter(null);
     setMessage('');
     const { minSeconds, honeypotEnabled, ...branding } = form;
     try {
-      await api('/admin/branding', { method: 'PATCH', body: JSON.stringify(branding) });
+      setStored(await api('/admin/branding', { method: 'PATCH', body: JSON.stringify(branding) }));
     } catch (err) {
       setMessage(errorNotice(err));
       return;
@@ -81,45 +123,60 @@ function Organization() {
     {loading && <Loading />}
     <ErrorBox error={error} />
     {form && data && <form onSubmit={save} className="grid gap-4">
+      {!canEdit && <p className="q-notice q-notice-info">Diese Angaben ändert ein Event-Manager, Admin oder Owner deiner Organisation.</p>}
       <Panel title="Mandant">
-        <div className="grid gap-3 md:grid-cols-2">
+        <fieldset disabled={!canEdit} className="m-0 grid min-w-0 gap-3 border-0 p-0 md:grid-cols-2">
           <Field label="Name" hint="Erscheint auf der Gästeseite und in Berichten."><Input value={form.name} onChange={set('name')} /></Field>
           <Field label="Kurzname im QR-Code" hint="Steht im QR-Code und bleibt deshalb fest."><Input value={data.slug} readOnly /></Field>
           <p className="md:col-span-2 text-q-muted">Gästeseite: <a className="font-semibold text-q-accent-text underline" href={`${data.feedbackAppUrl}/f/${data.slug}`} target="_blank" rel="noreferrer">{data.feedbackAppUrl}/f/{data.slug}</a></p>
-        </div>
+        </fieldset>
       </Panel>
       <Panel title="Rechtliches und Datenschutz">
-        <div className="grid gap-3 md:grid-cols-2">
+        <fieldset disabled={!canPrivacy} className="m-0 grid min-w-0 gap-3 border-0 p-0 md:grid-cols-2">
           <Field label="Verantwortlich laut Datenschutz"><Input value={form.legalName} onChange={set('legalName')} placeholder="Name der Firma oder Person" /></Field>
           <Field label="E-Mail für Datenschutzanfragen"><Input type="email" value={form.legalEmail} onChange={set('legalEmail')} placeholder="datenschutz@example.de" /></Field>
           <Field label="Anschrift" className="md:col-span-2"><TextArea value={form.legalAddress} onChange={set('legalAddress')} placeholder="Straße 1, 12345 Ort" style={{ minHeight: 64 }} /></Field>
           <Field label="Datenschutzhinweis" className="md:col-span-2"><TextArea value={form.privacyText} onChange={set('privacyText')} /></Field>
-          <p className="q-hint md:col-span-2">Diese Angaben stehen auf der Datenschutzseite deiner Gästeseite unter <code>/datenschutz/{data.slug}</code>. Solange eine davon fehlt, trägt die Seite einen sichtbaren Hinweis, dass sie unvollständig ist.</p>
-        </div>
+          <p className="q-hint md:col-span-2">Diese Angaben stehen auf der Datenschutzseite deiner Gästeseite unter <code>/datenschutz/{data.slug}</code>. Solange eine davon fehlt, trägt die Seite einen sichtbaren Hinweis, dass sie unvollständig ist.{canPrivacy ? '' : ' Ändern kann sie ein Admin oder Owner deiner Organisation.'}</p>
+        </fieldset>
       </Panel>
       <div className="grid gap-4 xl:grid-cols-2">
         <Panel title="Links">
-          <div className="grid gap-3 sm:grid-cols-2">
+          <fieldset disabled={!canEdit} className="m-0 grid min-w-0 gap-3 border-0 p-0 sm:grid-cols-2">
             <Field label="Website"><Input value={form.websiteUrl} onChange={set('websiteUrl')} /></Field>
             <Field label="Ticketshop"><Input value={form.ticketshopUrl} onChange={set('ticketshopUrl')} /></Field>
             <Field label="Instagram"><Input value={form.instagramUrl} onChange={set('instagramUrl')} /></Field>
             <Field label="Facebook"><Input value={form.facebookUrl} onChange={set('facebookUrl')} /></Field>
-          </div>
+          </fieldset>
         </Panel>
         <Panel title="Aufbewahrung und Spam-Schutz">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Rückrufnummern löschen nach Tagen" hint={daysRange}><Input type="number" min={limits.minDays} max={limits.maxDays} value={form.retentionLowRatingPhoneDays} onChange={set('retentionLowRatingPhoneDays')} /></Field>
-            <Field label="Feedback löschen nach Tagen" hint={`Leer heißt behalten. ${daysRange}`.trim()}><Input type="number" min={limits.minDays} max={limits.maxDays} value={form.retentionFeedbackDays} onChange={set('retentionFeedbackDays')} /></Field>
-            <Field label="Newsletter-Anmeldungen löschen nach Tagen" hint={`Leer heißt behalten. ${daysRange}`.trim()}><Input type="number" min={limits.minDays} max={limits.maxDays} value={form.retentionNewsletterDays} onChange={set('retentionNewsletterDays')} /></Field>
-            <Field label="Mindestzeit bis Absenden (Sek.)"><Input type="number" min="0" value={form.minSeconds} onChange={(e) => setForm({ ...form, minSeconds: Number(e.target.value) })} /></Field>
-            <Check label="Unsichtbares Fangfeld gegen Bots (Honeypot)" checked={form.honeypotEnabled} onChange={set('honeypotEnabled')} className="sm:col-span-2" />
+          <div className="grid gap-3">
+            <fieldset disabled={!canPrivacy} className="m-0 grid min-w-0 gap-3 border-0 p-0 sm:grid-cols-2">
+              <Field label="Rückrufnummern löschen nach Tagen" hint={`Pflichtfeld. ${daysRange} Eine kürzere Frist gilt auch für gespeicherte Nummern, eine längere für neue.`.trim()}><Input type="number" min={limits.minDays} max={limits.maxDays} value={form.retentionLowRatingPhoneDays} onChange={set('retentionLowRatingPhoneDays')} required /></Field>
+              <Field label="Feedback löschen nach Tagen" hint={`Leer heißt behalten. ${daysRange}`.trim()}><Input type="number" min={limits.minDays} max={limits.maxDays} value={form.retentionFeedbackDays} onChange={set('retentionFeedbackDays')} /></Field>
+              <Field label="Newsletter-Anmeldungen löschen nach Tagen" hint={`Leer heißt behalten. ${daysRange}`.trim()}><Input type="number" min={limits.minDays} max={limits.maxDays} value={form.retentionNewsletterDays} onChange={set('retentionNewsletterDays')} /></Field>
+              {!canPrivacy && <p className="q-hint sm:col-span-2">Löschfristen ändert ein Admin oder Owner deiner Organisation.</p>}
+            </fieldset>
+            <fieldset disabled={!canEdit} className="m-0 grid min-w-0 gap-3 border-0 p-0 sm:grid-cols-2">
+              <Field label="Mindestzeit bis Absenden (Sek.)"><Input type="number" min="0" value={form.minSeconds} onChange={(e) => setForm({ ...form, minSeconds: Number(e.target.value) })} /></Field>
+              <Check label="Unsichtbares Fangfeld gegen Bots (Honeypot)" checked={form.honeypotEnabled} onChange={set('honeypotEnabled')} className="sm:col-span-2" />
+            </fieldset>
           </div>
         </Panel>
       </div>
-      <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" variant="primary" icon="check">Organisation speichern</Button>
+      {shorter && <div role="group" aria-labelledby="shorter-title" className="grid gap-2 rounded-lg bg-q-danger-soft p-3" onKeyDown={(e) => { if (e.key === 'Escape') keepPeriods(); }}>
+        <p id="shorter-title" className="font-semibold">Kürzere Löschfrist speichern?</p>
+        <ul className="grid gap-1">{shorter.map((item) => <li key={item.subject}>{shortenedSentence(item)}</li>)}</ul>
+        <p>Gelöschtes lässt sich nicht zurückholen.</p>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="danger" icon="trash" onClick={persist}>Kürzere Frist speichern</Button>
+          <Button ref={keepRef} variant="ghost" onClick={keepPeriods}>Abbrechen</Button>
+        </div>
+      </div>}
+      {canEdit && <div className="flex flex-wrap items-center gap-3">
+        <Button ref={saveRef} type="submit" variant="primary" icon="check" disabled={Boolean(shorter)}>Organisation speichern</Button>
         <Notice message={message} />
-      </div>
+      </div>}
     </form>}
   </Page>;
 }
