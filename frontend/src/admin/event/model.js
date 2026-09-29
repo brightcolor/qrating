@@ -272,6 +272,11 @@ export function textAnswers(voices = []) {
 
 const placeNames = { dynamic: 'QR-Code', dynamic_organization: 'QR-Code', event_specific: 'Eventlink', event: 'Direkt', preview: 'Vorschau' };
 
+// The way a guest came, in words; a real place keeps its own name.
+export function placeName(value) {
+  return placeNames[value] || value;
+}
+
 // One voice as a list shows it. A guest who scanned a spot that has no QR source, or lost it
 // before the name was kept, still came through that spot: its short name says which one.
 export function voiceView(voice, zone) {

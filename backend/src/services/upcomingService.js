@@ -3,8 +3,7 @@
 import { plainText } from '../utils/localized.js';
 import { isPublishedInSource, sourcePayload } from '../utils/sourcePayload.js';
 import { upcomingEvents } from './eventResolver.js';
-
-const defaultCount = 3;
+import { env } from '../config/env.js';
 
 // Pretix says when a sale runs. A link that leads to a closed shop helps nobody,
 // so it only appears while tickets can really be bought.
@@ -45,12 +44,14 @@ async function organizationEvents(db, organizationId) {
   return result.rows;
 }
 
-// The chosen events of an event win; without a choice the next ones by date follow.
-export async function upcomingFor(db, event, organization = {}, { limit = defaultCount } = {}) {
+// The chosen events of an event win, as many as UPCOMING_EVENTS_MAX lets an organizer pick;
+// without a choice the next UPCOMING_EVENTS_AUTO_COUNT by date follow.
+export async function upcomingFor(db, event, organization = {}) {
   if (!event || event.upcoming_enabled === false) return [];
   const rows = await organizationEvents(db, event.organization_id);
   const chosen = Array.isArray(event.upcoming_event_ids) ? event.upcoming_event_ids : [];
   const byId = new Map(rows.map((row) => [row.id, row]));
+  const limit = chosen.length ? env.upcomingEventsMax : env.upcomingEventsAutoCount;
   // A hand-picked event that the organizer has not published in Pretix stays out too.
   const picked = chosen.length
     ? chosen.map((id) => byId.get(id)).filter(Boolean).filter(isPublishedInSource)
@@ -59,8 +60,8 @@ export async function upcomingFor(db, event, organization = {}, { limit = defaul
   return picked.filter((row) => row.id !== event.id).slice(0, limit).map((row) => publicUpcoming(row, organization, now));
 }
 
-// The page of an organization without an open round: everything that is still to come.
-export async function upcomingForOrganization(db, organization, { limit = 5 } = {}) {
+// The page of an organization without an open round: what is still to come.
+export async function upcomingForOrganization(db, organization, { limit = env.organizationPageUpcomingCount } = {}) {
   const rows = await organizationEvents(db, organization.id);
   const now = new Date();
   return upcomingEvents(rows, undefined, limit).map((row) => publicUpcoming(row, organization, now));

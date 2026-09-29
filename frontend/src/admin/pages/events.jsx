@@ -4,24 +4,26 @@ import { useAdmin } from '../context.js';
 import { dateBlock, eventPhase, formatAverage, formatDateLine, formatDayTime, roundInfo } from '../event/model.js';
 import { eventGroups } from '../shells.jsx';
 import { Button, ErrorBox, EventsUnavailable, Field, Icon, Input, Loading, Page, Panel } from '../ui.jsx';
+import { can, unassignedNote } from '../permissions.js';
 
 // All events of the organisation. A new event starts here; everything about one event lives
 // inside it (workspace.jsx).
 export function EventsPage() {
-  const { theme, events, eventsState, reloadEvents } = useAdmin();
+  const { theme, events, eventsState, reloadEvents, me } = useAdmin();
   const [creating, setCreating] = useState(false);
-  const actions = <Button variant="primary" icon="plus" onClick={() => setCreating(!creating)}>Neues Event</Button>;
+  const mayCreate = can(me, 'events');
+  const actions = mayCreate ? <Button variant="primary" icon="plus" onClick={() => setCreating(!creating)}>Neues Event</Button> : null;
   if (theme.id === 'tabellenwerk') {
     return <div className="grid gap-3">
       {creating && <EventCreate onDone={() => setCreating(false)} />}
-      <EventsTable onCreate={() => setCreating(!creating)} />
+      <EventsTable onCreate={mayCreate ? () => setCreating(!creating) : null} />
     </div>;
   }
   return <Page title="Events" subtitle="Events aus Pretix kommen von selbst dazu. Von Hand angelegte stehen daneben." actions={actions}>
     {creating && <EventCreate onDone={() => setCreating(false)} />}
     <EventsUnavailable error={eventsState.error} onRetry={reloadEvents} />
     {eventsState.loading && !events.length && <Loading />}
-    {!eventsState.loading && !eventsState.error && !events.length && <Panel><p className="text-q-muted">Noch kein Event. Lege eines an oder verbinde Pretix unter Einstellungen → Verbindungen.</p></Panel>}
+    {!eventsState.loading && !eventsState.error && !events.length && <Panel><p className="text-q-muted">{mayCreate ? 'Noch kein Event. Lege eines an oder verbinde Pretix unter Einstellungen → Verbindungen.' : unassignedNote}</p></Panel>}
     {eventGroups(events).map((group) => <Panel key={group.phase} title={group.title} note={`${group.events.length}`}>
       <div className="grid">
         {group.events.map((event) => <EventRow key={event.id} event={event} phase={group.phase} />)}
@@ -104,7 +106,7 @@ const phases = [
 ];
 
 export function EventsTable({ selectedId = null, selectedTab = 'auswertung', onCreate }) {
-  const { events, go, reloadEvents, eventsState } = useAdmin();
+  const { events, go, reloadEvents, eventsState, me } = useAdmin();
   const [phase, setPhase] = useState('all');
   const [search, setSearch] = useState('');
   const [creating, setCreating] = useState(false);
@@ -123,7 +125,7 @@ export function EventsTable({ selectedId = null, selectedTab = 'auswertung', onC
     });
   return <section className="events-table">
     <div className="toolbar">
-      <Button variant="primary" size="sm" icon="plus" onClick={() => (onCreate ? onCreate() : setCreating(!creating))}>Neues Event</Button>
+      {can(me, 'events') && <Button variant="primary" size="sm" icon="plus" onClick={() => (onCreate ? onCreate() : setCreating(!creating))}>Neues Event</Button>}
       <Button size="sm" icon="refresh" onClick={reloadEvents}>{eventsState.loading ? 'Lädt …' : 'Neu laden'}</Button>
       <div className="seg" role="group" aria-label="Auswahl">
         {phases.map((item) => <button key={item.id} type="button" aria-pressed={phase === item.id} onClick={() => setPhase(item.id)}>{item.label} {counted[item.id]}</button>)}

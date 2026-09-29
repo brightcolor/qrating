@@ -4,11 +4,12 @@ import { useAdmin } from '../context.js';
 import { eventLabel } from '../eventLabel.js';
 import { formatAverage, hourColumns, relativeTime } from '../event/model.js';
 import { Button, Check, ErrorBox, EventsUnavailable, Field, Input, Notice, Page, Panel, Select, errorNotice, useAsync } from '../ui.jsx';
+import { can } from '../permissions.js';
 
 // A screen for the wall of the venue: the numbers of one event, refreshed by itself. It hangs
 // where guests read along, so it shows numbers and quotes nobody.
 export function WallboardPage({ eventId: wantedId }) {
-  const { events, eventsState, currentEvent, go, reloadEvents } = useAdmin();
+  const { events, eventsState, currentEvent, go, reloadEvents, me } = useAdmin();
   const { data: branding } = useAsync(() => api('/admin/branding'), []);
   // What the form shows, and what the screen runs with until the form is saved.
   const [settings, setSettings] = useState(null);
@@ -55,7 +56,8 @@ export function WallboardPage({ eventId: wantedId }) {
   }
 
   const columns = hourColumns(data?.timeline || [], { columns: 10, zone: event?.event_timezone });
-  const dark = settings?.dark !== false;
+  // The screen keeps its saved look until the form is saved, the same as its reload interval.
+  const dark = active?.dark !== false;
 
   return <Page title="Wallboard" subtitle="Für den Bildschirm im Saal. Aktualisiert sich von selbst." actions={<>
     <Select value={eventId} onChange={(e) => go({ page: 'wallboard', eventId: e.target.value }, { replace: true })} aria-label="Event">
@@ -91,7 +93,7 @@ export function WallboardPage({ eventId: wantedId }) {
         </div>
       </>}
     </section>
-    {settings && <Panel title="Einstellungen des Wallboards">
+    {settings && can(me, 'guestPage') && <Panel title="Einstellungen des Wallboards">
       <form onSubmit={saveSettings} className="flex flex-wrap items-end gap-4">
         <Check label="Dunkel" checked={settings.dark} onChange={(e) => setSettings({ ...settings, dark: e.target.checked })} />
         <Field label="Neu laden alle … Sekunden" hint={limits.minSeconds ? `Erlaubt sind ${limits.minSeconds} bis ${limits.maxSeconds} Sekunden.` : null}>

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api, assetUrl } from '../../lib/api.js';
 import { useAdmin } from '../context.js';
 import { eventTabs } from '../navigation.js';
+import { can, unassignedNote } from '../permissions.js';
 import { Button, ErrorBox, EventsUnavailable, Icon, Loading, Notice, Page, Stars, Tabs, useAsync } from '../ui.jsx';
 import { EventSwitcher, PreviewButton, ReportMenu } from './actions.jsx';
 import { Analytics, InboxStream, KpiInline } from './analytics.jsx';
@@ -11,12 +12,20 @@ import { EventsTable } from '../pages/events.jsx';
 
 // One event with its four tabs. Every look draws its own header around the same tabs; the
 // evaluation inside follows the draft of the look (analytics.jsx).
-export function EventWorkspace({ eventId, tab }) {
-  const { events, eventsState, currentEvent, go, theme, reloadEvents } = useAdmin();
+export function EventWorkspace({ eventId, tab: askedTab }) {
+  const { events, eventsState, currentEvent, go, theme, reloadEvents, me } = useAdmin();
   const [message, setMessage] = useState('');
   const [fallback, setFallback] = useState(null);
   const [reload, setReload] = useState(0);
   const event = events.find((item) => item.id === eventId) || null;
+  // Questions and settings change the event; a role below event manager sees the other tabs, and a
+  // link to one of those two opens the evaluation.
+  const tabs = me ? eventTabs.filter((item) => !item.needs || can(me, item.needs)) : eventTabs;
+  const tab = tabs.some((item) => item.id === askedTab) ? askedTab : 'auswertung';
+
+  useEffect(() => {
+    if (event && askedTab && tab !== askedTab) go({ page: 'event', eventId: event.id, tab }, { replace: true });
+  }, [event, askedTab, tab, go]);
 
   // An address without an event, or with one that is not in the list, opens the current event
   // and says so. The address follows, so a reload lands on the same page.
@@ -41,6 +50,7 @@ export function EventWorkspace({ eventId, tab }) {
   if (!event) {
     if (eventsState.loading) return <Loading />;
     if (eventsState.error) return <Page title="Events"><EventsUnavailable error={eventsState.error} onRetry={reloadEvents} /></Page>;
+    if (!can(me, 'events')) return <Page title="Events"><p className="text-q-muted">{unassignedNote}</p></Page>;
     return <Page title="Events"><p className="text-q-muted">Noch kein Event. Lege unter Events eines an oder hole deine Events aus Pretix.</p>
       <div><Button variant="primary" icon="plus" onClick={() => go({ page: 'events' })}>Event anlegen</Button></div></Page>;
   }
@@ -56,7 +66,7 @@ export function EventWorkspace({ eventId, tab }) {
       : tab === 'einstellungen' ? <EventSettingsTab event={event} onChanged={refresh} />
         : <Analytics themeId={theme.id} event={event} analytics={analytics} onChanged={refresh} />;
   const Frame = frames[theme.id] || BandFrame;
-  const shared = { event, tab, setTab, analytics, onMessage: setMessage, onChanged: refresh };
+  const shared = { event, tab, tabs, setTab, analytics, onMessage: setMessage, onChanged: refresh };
   return <div className={`ws ws-${theme.id}`}>
     <Notice message={fallbackNote} className="mb-3" />
     <Notice message={message} className="mb-3" />
@@ -82,7 +92,7 @@ const sourceName = (event) => (event.source === 'pretix' ? 'aus Pretix' : 'von H
 
 // ------------------------------------------------------------------ 1 Bändchen
 
-function BandFrame({ event, tab, setTab, onMessage, children }) {
+function BandFrame({ event, tab, tabs, setTab, onMessage, children }) {
   const { go } = useAdmin();
   const { round } = useRound(event);
   return <>
@@ -101,14 +111,14 @@ function BandFrame({ event, tab, setTab, onMessage, children }) {
       <PreviewButton event={event} onError={(err) => onMessage({ tone: 'error', text: err.message })} className="band-btn" />
       <ReportMenu event={event} onMessage={onMessage} className="band-btn" />
     </div>
-    <Tabs items={eventTabs} active={tab} onSelect={setTab} className="ws-tabs" label="Bereiche des Events" />
+    <Tabs items={tabs} active={tab} onSelect={setTab} className="ws-tabs" label="Bereiche des Events" />
     {children}
   </>;
 }
 
 // ------------------------------------------------------------------ 2 Einlassliste
 
-function SheetFrame({ event, tab, setTab, onMessage, children }) {
+function SheetFrame({ event, tab, tabs, setTab, onMessage, children }) {
   const { round } = useRound(event);
   return <div className="sheet">
     <div className="sheet-top">
@@ -122,14 +132,14 @@ function SheetFrame({ event, tab, setTab, onMessage, children }) {
         <ReportMenu event={event} onMessage={onMessage} className="q-btn q-btn-primary" />
       </div>
     </div>
-    <Tabs items={eventTabs.map(({ icon, ...item }) => item)} active={tab} onSelect={setTab} className="sheet-tabs" label="Bereiche des Events" />
+    <Tabs items={tabs.map(({ icon, ...item }) => item)} active={tab} onSelect={setTab} className="sheet-tabs" label="Bereiche des Events" />
     <div className={tab === 'auswertung' ? '' : 'sheet-pad'}>{children}</div>
   </div>;
 }
 
 // ------------------------------------------------------------------ 3 Mischpult
 
-function LcdFrame({ event, tab, setTab, onMessage, children }) {
+function LcdFrame({ event, tab, tabs, setTab, onMessage, children }) {
   const { round } = useRound(event);
   return <>
     <div className="sig-top">
@@ -144,7 +154,7 @@ function LcdFrame({ event, tab, setTab, onMessage, children }) {
       </div>
     </div>
     <div className="key-tabs" role="tablist" aria-label="Bereiche des Events">
-      {eventTabs.map((item) => <button key={item.id} type="button" role="tab" aria-selected={item.id === tab} className="q-btn q-btn-secondary key" onClick={() => setTab(item.id)}><Icon name={item.icon} size={16} />{item.label}</button>)}
+      {tabs.map((item) => <button key={item.id} type="button" role="tab" aria-selected={item.id === tab} className="q-btn q-btn-secondary key" onClick={() => setTab(item.id)}><Icon name={item.icon} size={16} />{item.label}</button>)}
     </div>
     {children}
   </>;
@@ -174,7 +184,7 @@ function Timeline({ event, analytics }) {
   </section>;
 }
 
-function PlanFrame({ event, tab, setTab, analytics, onMessage, children }) {
+function PlanFrame({ event, tab, tabs, setTab, analytics, onMessage, children }) {
   return <>
     <div className="plan-title">
       <div className="min-w-0"><h1 className="q-h1">{event.name}</h1><p className="text-q-muted">{meta(event)}, {sourceName(event)}</p></div>
@@ -185,7 +195,7 @@ function PlanFrame({ event, tab, setTab, analytics, onMessage, children }) {
     </div>
     <Timeline event={event} analytics={analytics} />
     <div className="pill-tabs" role="tablist" aria-label="Bereiche des Events">
-      {eventTabs.map((item) => <button key={item.id} type="button" role="tab" aria-selected={item.id === tab} onClick={() => setTab(item.id)}><Icon name={item.icon} size={15} />{item.label}</button>)}
+      {tabs.map((item) => <button key={item.id} type="button" role="tab" aria-selected={item.id === tab} onClick={() => setTab(item.id)}><Icon name={item.icon} size={15} />{item.label}</button>)}
     </div>
     {children}
   </>;
@@ -193,7 +203,7 @@ function PlanFrame({ event, tab, setTab, analytics, onMessage, children }) {
 
 // ------------------------------------------------------------------ 5 Eintrittskarte
 
-function TicketFrame({ event, tab, setTab, analytics, onMessage, children }) {
+function TicketFrame({ event, tab, tabs, setTab, analytics, onMessage, children }) {
   const { round } = useRound(event);
   const block = dateBlock(event.date_from, event.event_timezone);
   const longMonth = new Date(event.date_from).toLocaleDateString('de-DE', { month: 'long', timeZone: event.event_timezone || 'Europe/Berlin' });
@@ -215,7 +225,7 @@ function TicketFrame({ event, tab, setTab, analytics, onMessage, children }) {
       </div>
     </section>
     <div className="seg-tabs" role="tablist" aria-label="Bereiche des Events">
-      {eventTabs.map((item) => <button key={item.id} type="button" role="tab" aria-selected={item.id === tab} onClick={() => setTab(item.id)}><Icon name={item.icon} size={15} />{item.label}</button>)}
+      {tabs.map((item) => <button key={item.id} type="button" role="tab" aria-selected={item.id === tab} onClick={() => setTab(item.id)}><Icon name={item.icon} size={15} />{item.label}</button>)}
     </div>
     {children}
   </>;
@@ -223,7 +233,7 @@ function TicketFrame({ event, tab, setTab, analytics, onMessage, children }) {
 
 // ------------------------------------------------------------------ 6 Kommandozeile
 
-function CrumbFrame({ event, tab, setTab, onMessage, children }) {
+function CrumbFrame({ event, tab, tabs, setTab, onMessage, children }) {
   const { go } = useAdmin();
   const { round } = useRound(event);
   // The digits 1 to 4 switch the tabs while no field has the keyboard.
@@ -235,11 +245,11 @@ function CrumbFrame({ event, tab, setTab, onMessage, children }) {
       // An open search or drawer lies over the tabs; the digits belong to it.
       if (document.querySelector('[aria-modal="true"]')) return;
       const index = Number(e.key) - 1;
-      if (index >= 0 && index < eventTabs.length) setTab(eventTabs[index].id);
+      if (index >= 0 && index < tabs.length) setTab(tabs[index].id);
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [setTab]);
+  }, [setTab, tabs]);
   return <>
     <div className="crumbs">
       <button type="button" className="q-btn q-btn-ghost q-btn-sm" onClick={() => go({ page: 'events' })}>Events</button>
@@ -251,17 +261,17 @@ function CrumbFrame({ event, tab, setTab, onMessage, children }) {
         <ReportMenu event={event} onMessage={onMessage} />
       </span>
     </div>
-    <Tabs items={eventTabs.map((item, index) => ({ id: item.id, label: item.label, kbd: String(index + 1) }))} active={tab} onSelect={setTab} className="cmd-tabs" label="Bereiche des Events" />
+    <Tabs items={tabs.map((item, index) => ({ id: item.id, label: item.label, kbd: String(index + 1) }))} active={tab} onSelect={setTab} className="cmd-tabs" label="Bereiche des Events" />
     {children}
   </>;
 }
 
 // ------------------------------------------------------------------ 7 Posteingang
 
-function InboxFrame({ event, tab, setTab, analytics, onMessage, onChanged, children }) {
+function InboxFrame({ event, tab, tabs, setTab, analytics, onMessage, onChanged, children }) {
   const { round } = useRound(event);
   const tabRow = <div className="flex flex-wrap gap-1.5">
-    {eventTabs.map((item) => <button key={item.id} type="button" className="q-chip" aria-pressed={item.id === tab} onClick={() => setTab(item.id)}><Icon name={item.icon} size={14} />{item.id === 'auswertung' ? 'Stimmen' : item.label}</button>)}
+    {tabs.map((item) => <button key={item.id} type="button" className="q-chip" aria-pressed={item.id === tab} onClick={() => setTab(item.id)}><Icon name={item.icon} size={14} />{item.id === 'auswertung' ? 'Stimmen' : item.label}</button>)}
   </div>;
   if (tab !== 'auswertung') {
     return <>
@@ -285,9 +295,9 @@ function InboxFrame({ event, tab, setTab, analytics, onMessage, onChanged, child
       <div className="min-w-0"><b>{round.state === 'open' ? 'Runde offen' : round.short}</b><p>{round.state === 'open' ? `${round.label.replace('Runde offen ', '')}, ${round.left}` : round.label}</p></div>
       <div className="acts">
         <PreviewButton event={event} onError={(err) => onMessage({ tone: 'error', text: err.message })} />
-        <Button icon="questions" onClick={() => setTab('fragen')}>Fragen</Button>
+        {tabs.some((item) => item.id === 'fragen') && <Button icon="questions" onClick={() => setTab('fragen')}>Fragen</Button>}
         <Button icon="qr" onClick={() => setTab('qr')}>QR</Button>
-        <Button icon="settings" aria-label="Einstellungen des Events" onClick={() => setTab('einstellungen')} />
+        {tabs.some((item) => item.id === 'einstellungen') && <Button icon="settings" aria-label="Einstellungen des Events" onClick={() => setTab('einstellungen')} />}
       </div>
     </div>
     <InboxStream event={event} analytics={analytics} onChanged={onChanged} header={header} />
@@ -296,7 +306,7 @@ function InboxFrame({ event, tab, setTab, analytics, onMessage, onChanged, child
 
 // ------------------------------------------------------------------ 8 Plakat
 
-function PosterFrame({ event, tab, setTab, onMessage, children }) {
+function PosterFrame({ event, tab, tabs, setTab, onMessage, children }) {
   const { round } = useRound(event);
   const [head, ...rest] = event.name.split(/\s[–-]\s/);
   const date = new Date(event.date_from).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', timeZone: event.event_timezone || 'Europe/Berlin' });
@@ -317,14 +327,14 @@ function PosterFrame({ event, tab, setTab, onMessage, children }) {
         <ReportMenu event={event} onMessage={onMessage} className="q-btn q-btn-primary" />
       </span>
     </div>
-    <Tabs items={eventTabs.map(({ icon, ...item }) => item)} active={tab} onSelect={setTab} className="poster-tabs" label="Bereiche des Events" />
+    <Tabs items={tabs.map(({ icon, ...item }) => item)} active={tab} onSelect={setTab} className="poster-tabs" label="Bereiche des Events" />
     {children}
   </>;
 }
 
 // ------------------------------------------------------------------ 9 Schwarzlicht
 
-function LiveFrame({ event, tab, setTab, analytics, onMessage, children }) {
+function LiveFrame({ event, tab, tabs, setTab, analytics, onMessage, children }) {
   const { round, now } = useRound(event);
   const activity = recentActivity(analytics?.voices || [], now);
   return <>
@@ -343,14 +353,14 @@ function LiveFrame({ event, tab, setTab, analytics, onMessage, children }) {
         {activity.latest.map((item) => <div key={item.id}><span className="s"><Stars rating={item.rating} size={11} /></span><small>{item.ago}</small></div>)}
       </div>
     </div>
-    <Tabs items={eventTabs} active={tab} onSelect={setTab} className="live-tabs" label="Bereiche des Events" />
+    <Tabs items={tabs} active={tab} onSelect={setTab} className="live-tabs" label="Bereiche des Events" />
     {children}
   </>;
 }
 
 // ------------------------------------------------------------------ 10 Tabellenwerk
 
-function TableFrame({ event, tab, setTab, onMessage, children }) {
+function TableFrame({ event, tab, tabs, setTab, onMessage, children }) {
   const { round } = useRound(event);
   return <>
     <EventsTable selectedId={event.id} selectedTab={tab} />
@@ -359,7 +369,7 @@ function TableFrame({ event, tab, setTab, onMessage, children }) {
         <h2>{event.name}</h2>
         <span className="text-q-muted">{round.state === 'open' ? round.label : round.short}</span>
         <div className="small-tabs" role="tablist" aria-label="Bereiche des Events">
-          {eventTabs.map((item) => <button key={item.id} type="button" role="tab" aria-selected={item.id === tab} onClick={() => setTab(item.id)}>{item.label}</button>)}
+          {tabs.map((item) => <button key={item.id} type="button" role="tab" aria-selected={item.id === tab} onClick={() => setTab(item.id)}>{item.label}</button>)}
         </div>
         <div className="acts">
           <PreviewButton event={event} onError={(err) => onMessage({ tone: 'error', text: err.message })} />

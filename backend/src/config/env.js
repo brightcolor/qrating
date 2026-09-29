@@ -72,7 +72,9 @@ export const numberSettings = [
   { key: 'qrSourceSlugMaxLength', name: 'QR_SOURCE_SLUG_MAX_LENGTH', fallback: 40, min: 3, max: 80, hint: 'Längster Kurzname eines QR-Platzes in der Adresse, in Zeichen.' },
 
   // Events and the wallboard
-  { key: 'upcomingEventsMax', name: 'UPCOMING_EVENTS_MAX', fallback: 5, min: 1, max: 20, hint: 'So viele kommende Events lassen sich nach dem Feedback von Hand auswählen.' },
+  { key: 'upcomingEventsMax', name: 'UPCOMING_EVENTS_MAX', fallback: 5, min: 1, max: 20, hint: 'So viele kommende Events lassen sich nach dem Feedback von Hand auswählen, und so viele zeigt die Gästeseite dann.' },
+  { key: 'upcomingEventsAutoCount', name: 'UPCOMING_EVENTS_AUTO_COUNT', fallback: 3, min: 1, max: 20, hint: 'So viele kommende Events zeigt die Gästeseite nach dem Feedback, solange keine von Hand gewählt sind.' },
+  { key: 'organizationPageUpcomingCount', name: 'ORGANIZATION_PAGE_UPCOMING_COUNT', fallback: 5, min: 1, max: 50, hint: 'So viele kommende Events nennt die Seite einer Organisation, solange keine Runde läuft.' },
   { key: 'feedbackWindowMaxDays', name: 'FEEDBACK_WINDOW_MAX_DAYS', fallback: 365, min: 1, max: 3650, hint: 'Längste Bewertungsrunde nach dem Ende eines Events, Tage-Anteil.' },
   { key: 'feedbackWindowMaxHours', name: 'FEEDBACK_WINDOW_MAX_HOURS', fallback: 8760, min: 1, max: 87600, hint: 'Längste Bewertungsrunde nach dem Ende eines Events, Stunden-Anteil.' },
   { key: 'wallboardRefreshDefaultSeconds', name: 'WALLBOARD_REFRESH_DEFAULT_SECONDS', fallback: 15, min: 1, max: 86400, hint: 'So oft lädt das Wallboard neu, solange eine Organisation nichts anderes einträgt, in Sekunden.' },

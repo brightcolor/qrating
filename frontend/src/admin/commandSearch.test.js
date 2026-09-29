@@ -34,6 +34,16 @@ describe('the search bar of the command look', () => {
     expect(offered[0].group).toBe('Events');
   });
 
+  it('offers only the tabs the role can use', () => {
+    const analyst = searchCommands(commandEntries({ events, me: { role: 'analyst' } }), 'herbst').map((entry) => entry.label);
+    const manager = searchCommands(commandEntries({ events, me: { role: 'event_manager' } }), 'herbst').map((entry) => entry.label);
+
+    expect(analyst).toContain('Auswertung von Herbstnacht');
+    expect(analyst).not.toContain('Fragen von Herbstnacht');
+    expect(analyst).not.toContain('Einstellungen von Herbstnacht');
+    expect(manager).toContain('Fragen von Herbstnacht');
+  });
+
   it('keeps the platform pages for the platform role', () => {
     expect(searchCommands(entries, 'mandanten')).toEqual([]);
     expect(searchCommands(commandEntries({ events, platformAdmin: true }), 'mandanten').map((entry) => entry.label)).toEqual(['Mandanten']);

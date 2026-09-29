@@ -1,6 +1,10 @@
 // QR places as the admin area names and checks them. The server checks the same rules again;
 // saying them in the form spares a round trip and puts the message next to the field.
 
+// Names the guest page gives its own ways in. A place with such a short name could not be told
+// apart from them in the numbers; the server refuses them as well.
+export const reservedSlugs = ['event', 'dynamic', 'dynamic_organization', 'event_specific', 'preview', 'unknown'];
+
 // A name for a place, or the reason it cannot be one.
 export function placeLabelProblem(label, maxLength) {
   const text = String(label ?? '').trim();
@@ -9,12 +13,24 @@ export function placeLabelProblem(label, maxLength) {
   return null;
 }
 
+// A short name for the address of the code, or the reason it cannot be one.
+export function placeSlugProblem(slug, maxLength) {
+  const text = String(slug ?? '').trim();
+  if (!text || /^-+$/.test(text)) return 'Gib dem Platz einen Kurznamen für die Adresse, etwa „bar“.';
+  if (!/^[a-z0-9-]+$/.test(text)) return 'Der Kurzname darf nur Kleinbuchstaben, Ziffern und Bindestriche enthalten, etwa „bar“ oder „eingang-nord“.';
+  if (maxLength && text.length > maxLength) return `Der Kurzname darf höchstens ${maxLength} Zeichen lang sein. Kürze ihn bitte.`;
+  if (reservedSlugs.includes(text)) return `„${text}“ benennt schon einen Weg zur Gästeseite. Wähle einen anderen Kurznamen, etwa „${text}-platz“.`;
+  return null;
+}
+
 // The address a printed code of the place carries; the start of it arrives with the organization.
 export function placeAddress(organizationUrl, source) {
   return `${organizationUrl || '…'}/${source.source_slug}`;
 }
 
-// What deleting a place does, said before it happens.
+// What deleting a place does, said before it happens: the names stay, the printed codes keep
+// working, and whatever comes through them afterwards stands under the short name, until a new
+// place takes that short name up.
 export function placeDeleteNotice(source, address) {
-  return `QR-Platz „${source.label}“ löschen? Stimmen und Scans, die über ihn kamen, behalten den Namen „${source.label}“. Gedruckte Codes mit der Adresse ${address} führen weiter zur Gästeseite; ihre Scans zählen dann ohne Platz.`;
+  return `QR-Platz „${source.label}“ löschen? Stimmen und Scans, die über ihn kamen, behalten den Namen „${source.label}“. Gedruckte Codes mit der Adresse ${address} führen weiter zur Gästeseite; was danach über sie kommt, steht unter dem Kurznamen „${source.source_slug}“. Ein neuer Platz mit dem Kurznamen „${source.source_slug}“ zählt diese Codes wieder für sich.`;
 }

@@ -5,6 +5,7 @@ import { dateBlock, eventPhase, formatDay } from './event/model.js';
 import { menuMounted, menuShown, nextMenuState } from './navigation.js';
 import { wideScreenQuery } from './screens.js';
 import { Button, Icon, useDismiss } from './ui.jsx';
+import { can } from './permissions.js';
 
 // The frames around the pages. Each look picks one; all of them read the same menu groups
 // (navigation.js) and all of them fold into the same drawer on a phone.
@@ -326,7 +327,7 @@ function EventListShell({ groups, activeKey, go, counts, me, events, route, onLo
           })}
         </div>)}
         {!events.length && <p className="p-3 text-q-muted">Noch keine Events.</p>}
-        <button type="button" className="q-nav-item mt-2" style={{ color: 'rgb(var(--q-muted))' }} onClick={() => go({ page: 'events' })}><Icon name="plus" size={15} />Event anlegen</button>
+        {can(me, 'events') && <button type="button" className="q-nav-item mt-2" style={{ color: 'rgb(var(--q-muted))' }} onClick={() => go({ page: 'events' })}><Icon name="plus" size={15} />Event anlegen</button>}
       </nav>
       <div className="q-eventlist-foot">
         {foot.map((item) => <button key={item.key} type="button" className="q-nav-item" aria-current={item.key === footKey ? 'page' : undefined} onClick={() => go(item.route)}>
@@ -352,7 +353,7 @@ export function CommandPalette({ open, onClose, go, events, me }) {
   // The frame hands in a fresh close function on every render; the key handler reads the newest.
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
-  const entries = useMemo(() => commandEntries({ events, platformAdmin: me?.platformAdmin, eventDate: (event) => formatDay(event.date_from, event.event_timezone) }), [events, me?.platformAdmin]);
+  const entries = useMemo(() => commandEntries({ events, platformAdmin: me?.platformAdmin, me, eventDate: (event) => formatDay(event.date_from, event.event_timezone) }), [events, me]);
   const hits = useMemo(() => searchCommands(entries, query), [entries, query]);
 
   useEffect(() => {

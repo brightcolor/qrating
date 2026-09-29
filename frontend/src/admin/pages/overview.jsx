@@ -4,6 +4,7 @@ import { useAdmin } from '../context.js';
 import { eventPhase, formatAverage, formatDayTime, roundInfo } from '../event/model.js';
 import { Button, ButtonLink, ErrorBox, EventsUnavailable, Loading, Page, Panel, Stars, useAsync } from '../ui.jsx';
 import { caseTexts } from './callbacks.jsx';
+import { can, unassignedNote } from '../permissions.js';
 
 // The first page after sign-in: what runs now, what needs a call, what comes next.
 export function Overview() {
@@ -15,6 +16,7 @@ export function Overview() {
   const coming = events.filter((event) => eventPhase(event, now) === 'soon').sort((a, b) => new Date(a.date_from) - new Date(b.date_from)).slice(0, 4);
   const round = currentEvent ? roundInfo(currentEvent, now) : null;
   const stats = currentEvent?.stats || {};
+  const mayEdit = can(me, 'events');
 
   return <Page title="Übersicht" subtitle={me?.organization_name}>
     <ErrorBox error={error} />
@@ -40,10 +42,10 @@ export function Overview() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="primary" icon="chart" onClick={() => go({ page: 'event', eventId: currentEvent.id, tab: 'auswertung' })}>Auswertung</Button>
-            <Button icon="questions" onClick={() => go({ page: 'event', eventId: currentEvent.id, tab: 'fragen' })}>Fragen</Button>
+            {mayEdit && <Button icon="questions" onClick={() => go({ page: 'event', eventId: currentEvent.id, tab: 'fragen' })}>Fragen</Button>}
             <Button icon="qr" onClick={() => go({ page: 'event', eventId: currentEvent.id, tab: 'qr' })}>QR & Aushang</Button>
           </div>
-        </div> : eventsState.error ? <p className="text-q-muted">Sobald die Eventliste geladen ist, steht hier das aktuelle Event.</p> : <div className="grid gap-3">
+        </div> : eventsState.error ? <p className="text-q-muted">Sobald die Eventliste geladen ist, steht hier das aktuelle Event.</p> : !mayEdit ? <p className="text-q-muted">{unassignedNote}</p> : <div className="grid gap-3">
           <p className="text-q-muted">Noch kein Event. Lege eines an oder hole deine Events aus Pretix.</p>
           <div className="flex flex-wrap gap-2">
             <Button variant="primary" icon="plus" onClick={() => go({ page: 'events' })}>Event anlegen</Button>
@@ -66,10 +68,10 @@ export function Overview() {
           <tbody>
             {coming.map((event) => {
               const questions = event.stats?.questionCount;
-              return <tr key={event.id} className="cursor-pointer" onClick={() => go({ page: 'event', eventId: event.id, tab: 'fragen' })}>
+              return <tr key={event.id} className="cursor-pointer" onClick={() => go({ page: 'event', eventId: event.id, tab: mayEdit ? 'fragen' : 'auswertung' })}>
                 <td><strong>{event.name}</strong></td>
                 <td className="text-q-muted">{formatDayTime(event.date_from, event.event_timezone)}</td>
-                <td className="r">{questions ? `${questions} Fragen` : <span className="text-q-danger">noch keine Fragen</span>}</td>
+                <td className="r">{questions ? `${questions} Fragen` : mayEdit ? <span className="text-q-danger">noch keine Fragen</span> : 'noch keine Fragen'}</td>
               </tr>;
             })}
           </tbody>

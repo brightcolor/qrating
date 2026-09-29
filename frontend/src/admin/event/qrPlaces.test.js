@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { placeAddress, placeDeleteNotice, placeLabelProblem } from './qrPlaces.js';
+import { placeAddress, placeDeleteNotice, placeLabelProblem, placeSlugProblem } from './qrPlaces.js';
 import { hasRole } from '../roles.js';
 
 describe('the name of a QR place', () => {
@@ -23,12 +23,32 @@ describe('deleting a QR place', () => {
     expect(placeAddress('', source)).toBe('…/bar');
   });
 
-  it('says what stays and where printed codes lead', () => {
+  it('says what stays, where printed codes lead and who takes them up', () => {
     const notice = placeDeleteNotice(source, 'https://qrat.ing/f/beispiel/bar');
 
     expect(notice).toMatch(/„Bar“ löschen\?/);
     expect(notice).toMatch(/behalten den Namen „Bar“/);
     expect(notice).toMatch(/https:\/\/qrat\.ing\/f\/beispiel\/bar führen weiter zur Gästeseite/);
+    expect(notice).toMatch(/steht unter dem Kurznamen „bar“/);
+    expect(notice).toMatch(/Ein neuer Platz mit dem Kurznamen „bar“ zählt diese Codes wieder für sich/);
+  });
+});
+
+describe('the short name of a QR place', () => {
+  it('asks for one', () => {
+    expect(placeSlugProblem('', 40)).toMatch(/Kurznamen/);
+    expect(placeSlugProblem('---', 40)).toMatch(/Kurznamen/);
+  });
+
+  it('takes what fits into an address, up to the length of the setting', () => {
+    expect(placeSlugProblem('bar-nord', 40)).toBe(null);
+    expect(placeSlugProblem('Bar Nord', 40)).toMatch(/Kleinbuchstaben/);
+    expect(placeSlugProblem('eingang-nord', 5)).toMatch(/höchstens 5 Zeichen/);
+  });
+
+  it('keeps the names of the ways into the guest page free', () => {
+    expect(placeSlugProblem('event', 40)).toMatch(/„event“ benennt schon einen Weg zur Gästeseite/);
+    expect(placeSlugProblem('preview', 40)).toMatch(/Weg zur Gästeseite/);
   });
 });
 

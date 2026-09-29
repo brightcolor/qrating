@@ -1,4 +1,5 @@
 import { eventTabs, guestSections, platformSections, settingsSections } from './navigation.js';
+import { can } from './permissions.js';
 
 // Everything the search bar of the command look can reach: every page, every section of the
 // settings, every event, and the tabs of every event. Words beside the names find a page by
@@ -13,11 +14,13 @@ const pages = [
   { key: 'wallboard', label: 'Wallboard', icon: 'wallboard', route: { page: 'wallboard' }, keywords: 'Bildschirm Live Anzeige' }
 ];
 
-export function commandEntries({ events = [], platformAdmin = false, eventDate = () => '' } = {}) {
+export function commandEntries({ events = [], platformAdmin = false, eventDate = () => '', me = null } = {}) {
   const entries = [];
+  // A tab the role cannot use is no destination either; without an account every tab is listed.
+  const tabs = eventTabs.filter((tab) => !tab.needs || !me || can(me, tab.needs));
   for (const event of events) {
     entries.push({ id: `event:${event.id}`, group: 'Events', label: event.name, note: eventDate(event), icon: 'events', route: { page: 'event', eventId: event.id, tab: 'auswertung' }, keywords: event.location || '' });
-    for (const tab of eventTabs) {
+    for (const tab of tabs) {
       entries.push({
         id: `event:${event.id}:${tab.id}`,
         group: 'Direkt zu',

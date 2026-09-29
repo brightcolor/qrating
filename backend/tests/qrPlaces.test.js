@@ -82,6 +82,13 @@ describe('a new QR place', () => {
     expect(refused.body.error).toMatch(/Kleinbuchstaben, Ziffern und Bindestriche/);
   });
 
+  it('keeps the names of the ways into the guest page free', async () => {
+    const refused = await create({ sourceSlug: 'event', label: 'Eventlink' });
+
+    expect(refused.status).toBe(400);
+    expect(refused.body.error).toMatch(/„event“ benennt schon einen Weg zur Gästeseite/);
+  });
+
   it('names the short name that is taken already', async () => {
     const taken = await create({ sourceSlug: 'garderobe', label: 'Zweite Garderobe' });
 

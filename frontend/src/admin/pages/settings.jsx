@@ -3,8 +3,10 @@ import { api } from '../../lib/api.js';
 import { useAdmin } from '../context.js';
 import { shortenedPeriods, shortenedSentence } from '../retention.js';
 import { hasRole } from '../roles.js';
+import { can, whoCan } from '../permissions.js';
+import { accessLabel, activeOwners, invitationToRenew, roleLabels, teamLock } from '../team.js';
 import { eventLabel, formatDate } from '../eventLabel.js';
-import { settingsParts, settingsSections } from '../navigation.js';
+import { settingsSections } from '../navigation.js';
 import { shellListsSections, themeFor, themes } from '../themes.js';
 import { Button, Check, ErrorBox, Field, Icon, Input, Loading, Notice, Page, Panel, Select, Tabs, TextArea, errorNotice, useAsync } from '../ui.jsx';
 import { SecurityCenter, Operations } from './security.jsx';
@@ -183,12 +185,16 @@ function Organization() {
 
 // ------------------------------------------------------------------ Team
 
-const roleLabels = { support: 'Support', analyst: 'Analyst', event_manager: 'Event Manager', admin: 'Admin', owner: 'Owner' };
-
 function Team() {
   const { events, me } = useAdmin();
+  // The server keeps these rules as well; the page offers only what the role may change.
+  const canTeam = can(me, 'team');
+  const canAssign = can(me, 'assignments');
   const [reload, setReload] = useState(0);
   const { data: users, loading, error } = useAsync(() => api('/admin/users'), [reload]);
+  // An owner learns before filling in the form whether the plan takes more people.
+  const { data: billing } = useAsync(() => (canTeam ? api('/admin/billing') : Promise.resolve(null)), [canTeam]);
+  const teamsInPlan = billing ? Boolean(billing.currentPlan?.limits?.teams) : true;
   const [selectedEvent, setSelectedEvent] = useState('');
   // The ticks belong to one event. After a switch, the list and the save button wait for the
   // answer about the new event, so the ticks of one event never land on another.
@@ -197,13 +203,14 @@ function Team() {
   const setAssignments = (rows) => setLoadedAssignments({ eventId: selectedEvent, rows });
   const [invite, setInvite] = useState({ name: '', email: '', role: 'support' });
   const [message, setMessage] = useState('');
+  const owners = activeOwners(users || []);
 
   useEffect(() => {
     if (!selectedEvent && events?.[0]) setSelectedEvent(events[0].id);
   }, [events, selectedEvent]);
 
   useEffect(() => {
-    if (!selectedEvent) return undefined;
+    if (!selectedEvent || !canAssign) return undefined;
     let active = true;
     api(`/admin/events/${selectedEvent}/assignments`)
       .then((rows) => active && setLoadedAssignments({ eventId: selectedEvent, rows }))
@@ -211,32 +218,41 @@ function Team() {
     return () => {
       active = false;
     };
-  }, [selectedEvent, reload]);
+  }, [selectedEvent, reload, canAssign]);
 
-  async function inviteUser(e) {
-    e.preventDefault();
+  async function sendInvite(person) {
+    setMessage('');
     try {
-      const result = await api('/admin/users/invite', { method: 'POST', body: JSON.stringify(invite) });
+      const result = await api('/admin/users/invite', { method: 'POST', body: JSON.stringify(person) });
       const mail = result.mail || {};
       // How long the link holds comes with the invitation; the setting lives on the server.
       const validity = result.user?.invite_expires_at ? ` Der Link gilt bis ${formatDate(result.user.invite_expires_at)}.` : '';
       if (mail.error) setMessage(errorNotice({ message: `Einladung erstellt, die E-Mail ließ sich aber nicht senden. ${mail.error} Schicke der Person diesen Link: ${result.inviteUrl}${validity}` }));
-      else if (mail.skipped) setMessage(`Einladung erstellt. Der E-Mail-Versand ist ausgeschaltet, schicke der Person diesen Link: ${result.inviteUrl}${validity}`);
-      else setMessage(`Einladung an ${invite.email} verschickt.${validity}`);
-      setInvite({ name: '', email: '', role: 'support' });
-      setReload(reload + 1);
+      else if (mail.skipped) setMessage(`Einladung erstellt. Diese Installation verschickt keine Einladungsmails, schicke der Person diesen Link: ${result.inviteUrl}${validity}`);
+      else setMessage(`Einladung an ${person.email} verschickt.${validity}`);
+      setReload((value) => value + 1);
+      return true;
     } catch (err) {
       setMessage(errorNotice(err));
+      return false;
     }
   }
 
+  async function inviteUser(e) {
+    e.preventDefault();
+    if (await sendInvite(invite)) setInvite({ name: '', email: '', role: 'support' });
+  }
+
   async function update(user, patch, text) {
+    setMessage('');
     try {
       await api(`/admin/users/${user.id}`, { method: 'PATCH', body: JSON.stringify(patch) });
       setMessage(text);
-      setReload(reload + 1);
+      setReload((value) => value + 1);
+      return true;
     } catch (err) {
       setMessage(errorNotice(err));
+      return false;
     }
   }
 
@@ -248,7 +264,7 @@ function Team() {
         body: JSON.stringify({ assignments: assignments.map((item) => ({ userId: item.user_id, assigned: item.assigned, notifyLowRating: item.notify_low_rating })) })
       });
       setMessage('Zuständigkeiten gespeichert.');
-      setReload(reload + 1);
+      setReload((value) => value + 1);
     } catch (err) {
       setMessage(errorNotice(err));
     }
@@ -260,20 +276,21 @@ function Team() {
     {loading && <Loading />}
     <ErrorBox error={error} />
     <Notice message={message} />
-    <div className="grid gap-4 xl:grid-cols-2">
-      <Panel title="Person einladen">
-        <form onSubmit={inviteUser} className="grid gap-3 sm:grid-cols-2">
+    {!canTeam && <p className="q-notice q-notice-info">Rollen, Zugang und Einladungen verwaltet {whoCan('team')}.</p>}
+    {(canTeam || canAssign) && <div className="grid gap-4 xl:grid-cols-2">
+      {canTeam && <Panel title="Person einladen">
+        {teamsInPlan ? <form onSubmit={inviteUser} className="grid gap-3 sm:grid-cols-2">
           <Field label="Name"><Input value={invite.name} onChange={(e) => setInvite({ ...invite, name: e.target.value })} /></Field>
           <Field label="E-Mail"><Input type="email" value={invite.email} onChange={(e) => setInvite({ ...invite, email: e.target.value })} required /></Field>
           <Field label="Rolle"><Select value={invite.role} onChange={(e) => setInvite({ ...invite, role: e.target.value })}>
             {Object.entries(roleLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </Select></Field>
           <div className="flex items-end"><Button type="submit" variant="primary" icon="send">Einladung senden</Button></div>
-          <p className="q-hint sm:col-span-2">Die Einladung geht per E-Mail raus, sobald der E-Mail-Versand eingerichtet ist. Sonst steht der Link hier und du schickst ihn selbst.</p>
-        </form>
-      </Panel>
-      <Panel title="Zuständigkeit je Event" note="Wer zuständig ist, sieht das Event und bekommt auf Wunsch die Rückruf-Meldungen.">
-        <Select value={selectedEvent} onChange={(e) => setSelectedEvent(e.target.value)}>
+          <p className="q-hint sm:col-span-2">Die Einladung geht per E-Mail raus, sobald die Installation Einladungsmails verschickt. Sonst steht der Link hier und du schickst ihn selbst.</p>
+        </form> : <p className="text-q-muted">Weitere Personen einladen gehört zum Tarif Business. Ein Plattform-Admin schaltet ihn unter Plattform → Tarife frei.</p>}
+      </Panel>}
+      {canAssign && <Panel title="Zuständigkeit je Event" note="Wer zuständig ist, sieht das Event und bekommt auf Wunsch die Rückruf-Meldungen.">
+        <Select value={selectedEvent} onChange={(e) => setSelectedEvent(e.target.value)} aria-label="Event">
           {events.map((event) => <option key={event.id} value={event.id}>{eventLabel(event)}</option>)}
         </Select>
         <div className="mt-3 grid gap-2">
@@ -284,39 +301,92 @@ function Team() {
           </div>)}
         </div>
         <Button variant="primary" className="mt-3" onClick={saveAssignments} disabled={loadedAssignments.eventId !== selectedEvent}>Zuständigkeiten speichern</Button>
-      </Panel>
-    </div>
-    <Panel title="Rollen und Zugang" note="„Eingeladen“ setzt nur eine Einladung. Die eigene Rolle ändert ein anderer Owner.">
+      </Panel>}
+    </div>}
+    <Panel title="Rollen und Zugang" note={canTeam ? 'Die eigene Rolle und den eigenen Zugang ändert ein anderer Owner.' : null}>
       <div className="grid gap-2">
-        {users?.map((user) => {
-          // The server keeps these rules as well; the page offers only what it would accept.
-          const own = user.id === me?.id;
-          const platformOnly = user.platform_admin && !me?.platformAdmin;
-          const locked = own || platformOnly;
-          const lockNote = own ? 'Dein eigenes Konto ändert ein anderer Owner deiner Organisation.' : platformOnly ? 'Plattform-Konto: Ändern kann es nur ein Plattform-Admin.' : null;
-          return <div key={user.id} className="grid items-center gap-2 border-b border-q-line pb-2 last:border-0 md:grid-cols-[1fr_180px_180px]">
-            <div className="min-w-0">
-              <strong>{user.name}</strong>
-              <p className="truncate text-q-muted">{user.email}, letzter Login: {user.last_login_at ? formatDate(user.last_login_at) : 'noch nie'}</p>
-              {lockNote && <p className="q-hint">{lockNote}</p>}
-            </div>
-            <Select value={user.role} disabled={locked} onChange={(e) => update(user, { role: e.target.value }, 'Rolle gespeichert.')} aria-label={`Rolle von ${user.name}`}>
-              {Object.entries(roleLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </Select>
-            {user.status === 'invited'
-              ? <Select value="invited" disabled={locked} onChange={(e) => update(user, { status: e.target.value }, 'Einladung zurückgezogen.')} aria-label={`Einladung von ${user.name}`}>
-                <option value="invited" disabled>Eingeladen</option>
-                <option value="disabled">Einladung zurückziehen</option>
-              </Select>
-              : <Select value={user.status || 'active'} disabled={locked} onChange={(e) => update(user, { status: e.target.value }, 'Zugang gespeichert.')} aria-label={`Zugang von ${user.name}`}>
-                <option value="active">Aktiv</option>
-                <option value="disabled">Deaktiviert</option>
-              </Select>}
-          </div>;
-        })}
+        {users?.map((user) => <TeamRow key={user.id} user={user} me={me} owners={owners} canTeam={canTeam} update={update} sendInvite={sendInvite} />)}
       </div>
     </Panel>
   </Page>;
+}
+
+// One person of the team. The role changes only with its own save button, and taking access away
+// asks first: an arrow key on a list must never sign a colleague out.
+function TeamRow({ user, me, owners, canTeam, update, sendInvite }) {
+  const [role, setRole] = useState(user.role);
+  const [asking, setAsking] = useState(null);
+  const cancelRef = useRef(null);
+  const triggerRef = useRef(null);
+  const returnFocus = useRef(false);
+  useEffect(() => setRole(user.role), [user.role]);
+  useEffect(() => {
+    if (asking) {
+      cancelRef.current?.focus();
+    } else if (returnFocus.current) {
+      returnFocus.current = false;
+      triggerRef.current?.focus();
+    }
+  }, [asking]);
+
+  // The server keeps these rules as well; the row offers only what it would accept.
+  const lockNote = teamLock(user, me, owners);
+  const editable = canTeam && !lockNote;
+  const renew = invitationToRenew(user);
+  const withdrawn = user.status === 'disabled' && renew;
+  const expired = user.status === 'invited' && renew;
+  const noteId = `team-note-${user.id}`;
+  const name = user.name || user.email;
+
+  const close = () => {
+    returnFocus.current = true;
+    setAsking(null);
+  };
+
+  async function saveRole() {
+    if (await update(user, { role }, `${name} ist jetzt ${roleLabels[role]}.`)) setAsking(null);
+  }
+
+  async function confirmAccess() {
+    const withdraw = asking === 'withdraw';
+    await update(user, { status: 'disabled' }, withdraw ? `Einladung an ${user.email} zurückgezogen.` : `${name} ist deaktiviert und abgemeldet.`);
+    setAsking(null);
+  }
+
+  return <div className="grid gap-2 border-b border-q-line pb-2 last:border-0">
+    <div className="grid items-start gap-2 md:grid-cols-[1fr_auto]">
+      <div className="min-w-0">
+        <strong>{name}</strong>
+        <p className="truncate text-q-muted">{user.email}, letzter Login: {user.last_login_at ? formatDate(user.last_login_at) : 'noch nie'}</p>
+        <p className="text-q-muted">{roleLabels[user.role] || user.role}, {accessLabel(user)}</p>
+        {canTeam && lockNote && <p id={noteId} className="q-hint">{lockNote}</p>}
+      </div>
+      {editable && !asking && <div className="flex flex-wrap items-end gap-2">
+        <Field label="Rolle">
+          <Select value={role} onChange={(e) => setRole(e.target.value)} aria-describedby={lockNote ? noteId : undefined}>
+            {Object.entries(roleLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </Select>
+        </Field>
+        {role !== user.role && <>
+          <Button size="sm" variant="primary" icon="check" onClick={saveRole}>Rolle speichern</Button>
+          <Button size="sm" variant="ghost" onClick={() => setRole(user.role)}>Verwerfen</Button>
+        </>}
+        {role === user.role && user.status === 'active' && <Button ref={triggerRef} size="sm" variant="danger-soft" onClick={() => setAsking('disable')}>Deaktivieren …</Button>}
+        {role === user.role && user.status === 'disabled' && !withdrawn && <Button size="sm" onClick={() => update(user, { status: 'active' }, `${name} ist wieder aktiv und meldet sich neu an.`)}>Aktivieren</Button>}
+        {role === user.role && user.status === 'invited' && !expired && <Button ref={triggerRef} size="sm" variant="danger-soft" onClick={() => setAsking('withdraw')}>Einladung zurückziehen …</Button>}
+        {role === user.role && renew && <Button size="sm" icon="send" onClick={() => sendInvite({ name: user.name, email: user.email, role: user.role })}>Neu einladen</Button>}
+      </div>}
+    </div>
+    {asking && <div role="group" aria-labelledby={`${noteId}-ask`} className="grid gap-2 rounded-lg bg-q-danger-soft p-3" onKeyDown={(e) => { if (e.key === 'Escape') close(); }}>
+      <p id={`${noteId}-ask`}>{asking === 'withdraw'
+        ? `Einladung an ${user.email} zurückziehen? Der Link in der Einladung gilt dann nicht mehr; eine neue Einladung ist jederzeit möglich.`
+        : `${name} deaktivieren? Die Person wird sofort abgemeldet. Aktiviert ein Owner das Konto später wieder, meldet sie sich neu an.`}</p>
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="danger" onClick={confirmAccess}>{asking === 'withdraw' ? 'Einladung zurückziehen' : 'Deaktivieren'}</Button>
+        <Button ref={cancelRef} size="sm" variant="ghost" onClick={close}>Abbrechen</Button>
+      </div>
+    </div>}
+  </div>;
 }
 
 // ------------------------------------------------------------------ Meldungen
@@ -349,11 +419,18 @@ function channelHelp(type) {
 }
 
 function Alerts() {
+  const { me } = useAdmin();
+  // The server keeps this rule as well: below event manager a channel belongs to its maker.
+  const forEveryone = can(me, 'channels');
   const [reload, setReload] = useState(0);
   const { data: users } = useAsync(() => api('/admin/users'), []);
   const { data: channels, loading, error } = useAsync(() => api('/admin/notification-channels'), [reload]);
   const [message, setMessage] = useState('');
   const [form, setForm] = useState({ userId: '', channelType: 'email', label: 'E-Mail', minRating: 2, secret: '', configText: '{}' });
+
+  useEffect(() => {
+    if (!forEveryone && me?.id) setForm((old) => ({ ...old, userId: me.id }));
+  }, [forEveryone, me?.id]);
 
   async function createChannel(e) {
     e.preventDefault();
@@ -394,9 +471,9 @@ function Alerts() {
     <div className="grid gap-4 xl:grid-cols-[1fr_1.1fr]">
       <Panel title="Kanal anlegen">
         <form onSubmit={createChannel} className="grid gap-3 sm:grid-cols-2">
-          <Field label="Kanal gehört"><Select value={form.userId} onChange={(e) => setForm({ ...form, userId: e.target.value })}>
-            <option value="">Ganze Organisation</option>
-            {users?.map((user) => <option key={user.id} value={user.id}>{user.name} ({user.email})</option>)}
+          <Field label="Kanal gehört" hint={forEveryone ? null : `Kanäle für die ganze Organisation legt ${whoCan('channels')} an.`}><Select value={form.userId} onChange={(e) => setForm({ ...form, userId: e.target.value })} disabled={!forEveryone}>
+            {forEveryone && <option value="">Ganze Organisation</option>}
+            {(forEveryone ? users : users?.filter((user) => user.id === me?.id))?.map((user) => <option key={user.id} value={user.id}>{user.name} ({user.email})</option>)}
           </Select></Field>
           <Field label="Art"><Select value={form.channelType} onChange={(e) => setForm({ ...form, channelType: e.target.value, label: e.target.value })}>
             {notificationTypes.map((type) => <option key={type}>{type}</option>)}
@@ -430,18 +507,27 @@ function Alerts() {
 
 // ------------------------------------------------------------------ Verbindungen
 
+// `needs` names the part of permissions.js each connection belongs to.
 const connectionTabs = [
-  { id: 'pretix', label: 'Pretix', icon: 'events' },
-  { id: 'newsletter', label: 'Newsletter', icon: 'send' },
-  { id: 'email', label: 'E-Mail-Versand', icon: 'mail' },
-  { id: 'webhooks', label: 'Webhooks', icon: 'plug' }
+  { id: 'pretix', label: 'Pretix', icon: 'events', needs: 'pretix' },
+  { id: 'newsletter', label: 'Newsletter', icon: 'send', needs: 'newsletter' },
+  { id: 'email', label: 'E-Mail-Versand', icon: 'mail', needs: 'mailServer' },
+  { id: 'webhooks', label: 'Webhooks', icon: 'plug', needs: 'webhooks' }
 ];
 
 function Connections({ part }) {
-  const { go } = useAdmin();
-  const active = settingsParts.verbindungen.includes(part) ? part : 'pretix';
+  const { go, me } = useAdmin();
+  // Each role sees the connections it may set up; the server keeps the same rule.
+  const tabs = connectionTabs.filter((item) => can(me, item.needs));
+  const active = tabs.some((item) => item.id === part) ? part : tabs[0]?.id;
+  if (!tabs.length) {
+    return <Page title="Verbindungen" subtitle="Woher die Events kommen und wohin Anmeldungen, E-Mails und Ereignisse gehen.">
+      <p className="q-notice q-notice-info">Verbindungen zu Pretix, Newsletter, Mailserver und Webhooks richtet {whoCan('pretix')} ein.</p>
+    </Page>;
+  }
   return <Page title="Verbindungen" subtitle="Woher die Events kommen und wohin Anmeldungen, E-Mails und Ereignisse gehen.">
-    <Tabs items={connectionTabs} active={active} onSelect={(id) => go({ page: 'settings', section: 'verbindungen', part: id }, { replace: true })} />
+    <Tabs items={tabs} active={active} onSelect={(id) => go({ page: 'settings', section: 'verbindungen', part: id }, { replace: true })} />
+    {tabs.length < connectionTabs.length && <p className="q-hint mt-2">Newsletter, Mailserver und Webhooks richtet {whoCan('mailServer')} ein.</p>}
     {active === 'pretix' && <Pretix />}
     {active === 'newsletter' && <Newsletter />}
     {active === 'email' && <Smtp />}
@@ -716,14 +802,16 @@ function Webhooks() {
 
 const securityTabs = [
   { id: 'sicherheit', label: 'Sicherheit', icon: 'shield' },
-  { id: 'betrieb', label: 'Betrieb', icon: 'activity' }
+  { id: 'betrieb', label: 'Betrieb', icon: 'activity', needs: 'operations' }
 ];
 
 function Security({ part }) {
-  const { go } = useAdmin();
-  const active = settingsParts.sicherheit.includes(part) ? part : 'sicherheit';
+  const { go, me } = useAdmin();
+  // The state of the background jobs belongs to event managers and above, as on the server.
+  const tabs = securityTabs.filter((item) => !item.needs || can(me, item.needs));
+  const active = tabs.some((item) => item.id === part) ? part : 'sicherheit';
   return <Page title="Sicherheit" subtitle="2FA, geschützte Kontaktdaten, das Protokoll der Zugriffe und der Stand der Hintergrundjobs.">
-    <Tabs items={securityTabs} active={active} onSelect={(id) => go({ page: 'settings', section: 'sicherheit', part: id }, { replace: true })} />
+    {tabs.length > 1 && <Tabs items={tabs} active={active} onSelect={(id) => go({ page: 'settings', section: 'sicherheit', part: id }, { replace: true })} />}
     {active === 'sicherheit' ? <SecurityCenter /> : <Operations />}
   </Page>;
 }
@@ -732,7 +820,14 @@ function Security({ part }) {
 
 function Plan() {
   const { me, go } = useAdmin();
-  const { data, loading, error } = useAsync(() => api('/admin/billing'), []);
+  // The plan belongs to admins, owners and the platform role, as on the server.
+  const mayRead = can(me, 'plan') || Boolean(me?.platformAdmin);
+  const { data, loading, error } = useAsync(() => (mayRead ? api('/admin/billing') : Promise.resolve(null)), [mayRead]);
+  if (!mayRead) {
+    return <Page title="Tarif" subtitle="Welcher Plan für deine Organisation gilt und was er enthält.">
+      <p className="q-notice q-notice-info">Den Tarif deiner Organisation sieht {whoCan('plan')}.</p>
+    </Page>;
+  }
   if (loading) return <Loading />;
   if (error) return <ErrorBox error={error} />;
   const billing = data.billing;

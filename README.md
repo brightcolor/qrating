@@ -1,6 +1,6 @@
 # qrating
 
-**Version:** 0.61.0
+**Version:** 0.62.0
 **Status:** self-hosting MVP with SaaS-ready administration
 **Stack:** Node.js, Express, React, Vite, TailwindCSS, PostgreSQL, Docker Compose
 
@@ -307,7 +307,9 @@ Every value that shapes what qrating does is a setting with a default and bounds
 | `QR_SOURCE_LABEL_MAX_LENGTH` | `60` | 10–200 | Longest name of a QR place, in characters. |
 | `QR_SOURCE_SLUG_MAX_LENGTH` | `40` | 3–80 | Longest short name of a QR place in the address, in characters. The guest page reports it back in a field of at most 80 characters. |
 | **Events and the wallboard** | | | |
-| `UPCOMING_EVENTS_MAX` | `5` | 1–20 | Upcoming events that can be picked by hand for the page after a rating. |
+| `UPCOMING_EVENTS_MAX` | `5` | 1–20 | Upcoming events that can be picked by hand for the page after a rating; the page then shows that many. |
+| `UPCOMING_EVENTS_AUTO_COUNT` | `3` | 1–20 | Upcoming events the page after a rating shows while none are picked by hand. |
+| `ORGANIZATION_PAGE_UPCOMING_COUNT` | `5` | 1–50 | Upcoming events the page of an organization lists while no round runs. |
 | `FEEDBACK_WINDOW_MAX_DAYS` | `365` | 1–3650 | Longest feedback round after the end of an event, days part. |
 | `FEEDBACK_WINDOW_MAX_HOURS` | `8760` | 1–87600 | Longest feedback round after the end of an event, hours part. |
 | `WALLBOARD_REFRESH_DEFAULT_SECONDS` | `15` | 1–86400 | How often the wallboard reloads while an organization enters nothing, in seconds. |
@@ -423,7 +425,7 @@ While a round runs nothing stands in the way: the guest goes straight into the r
 Each event decides for itself, in its tab **Einstellungen**:
 
 - `upcomingEnabled`: whether guests see the pointer at all
-- `upcomingEventIds`: up to five events chosen by hand; without a choice the next ones by date follow
+- `upcomingEventIds`: events chosen by hand, up to `UPCOMING_EVENTS_MAX`, and the page shows all of them; without a choice the next `UPCOMING_EVENTS_AUTO_COUNT` by date follow. The page of an organization lists `ORGANIZATION_PAGE_UPCOMING_COUNT` while no round runs.
 
 An event that the organizer has not published in Pretix (`live: false`) stays out of these lists altogether — also when an event picked it by hand. An event of our own carries no such flag and counts as published. The rating itself is untouched by this: an event that is running can be rated whether or not its shop is public.
 
@@ -710,7 +712,7 @@ qrating follows [Semantic Versioning](https://semver.org/):
 - `MINOR`: new backwards-compatible features
 - `PATCH`: backwards-compatible fixes
 
-Current version: `0.61.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+Current version: `0.62.0`. See [CHANGELOG.md](./CHANGELOG.md) for release notes.
 
 ## Production Notes
 

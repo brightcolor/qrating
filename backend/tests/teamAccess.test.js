@@ -178,6 +178,12 @@ describe('taking over an account of the own organization', () => {
     expect([withdrawn.status, switchedOn.status]).toEqual([200, 409]);
     expect(switchedOn.body.error).toContain('nie angenommen');
     expect(await userRow(invited.body.user.id)).toMatchObject({ status: 'disabled' });
+    // The team list tells the withdrawn invitation from a deactivated account, without the token.
+    const listed = (await request('GET', '/admin/users', { cookie: home.owner.cookie })).body.find((user) => user.id === invited.body.user.id);
+    expect(listed.open_invite).toBe(true);
+    expect(listed).not.toHaveProperty('invite_token_hash');
+    const inUse = (await request('GET', '/admin/users', { cookie: home.owner.cookie })).body.find((user) => user.email === 'manager@beispiel.test');
+    expect(inUse.open_invite).toBe(false);
   });
 
   it('keeps an invitation valid for the days of its setting', async () => {

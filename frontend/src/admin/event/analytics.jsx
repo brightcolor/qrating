@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api.js';
 import { formatDate } from '../eventLabel.js';
-import { Button, Icon, Notice, Panel, Select, Stars, errorNotice, useAsync } from '../ui.jsx';
+import { Button, ErrorBox, Icon, Notice, Panel, Select, Stars, errorNotice, useAsync } from '../ui.jsx';
 import {
   callbacksFirst,
   choiceQuestions,
@@ -10,6 +10,7 @@ import {
   funnelSteps,
   hourColumns,
   kpis,
+  placeName,
   voiceCounts,
   voiceFilters,
   voiceView
@@ -189,12 +190,14 @@ function HourColumns({ columns }) {
   </div>;
 }
 
-export function SourcesTable({ rows }) {
+// A row without a place of its own carries the way the guest came, named as the voices name it.
+export function SourcesTable({ rows, error }) {
+  if (error) return <ErrorBox error={error} />;
   if (!rows?.length) return <p className="text-q-muted">Noch keine Scans über QR-Plätze.</p>;
   return <table className="q-table">
     <thead><tr><th>Platz</th><th className="r">Scans</th><th className="r">Stimmen</th><th className="r">Schnitt</th></tr></thead>
-    <tbody>{rows.map((row) => <tr key={row.source_slug || row.label}>
-      <td>{row.label}</td>
+    <tbody>{rows.map((row) => <tr key={`${row.source_slug}:${row.label}`}>
+      <td>{placeName(row.label)}</td>
       <td className="r q-num">{row.scans_count || 0}</td>
       <td className="r q-num">{row.feedback_count || 0}</td>
       <td className="r q-num">{row.average_rating ? String(Number(row.average_rating).toFixed(1)).replace('.', ',') : '–'}</td>

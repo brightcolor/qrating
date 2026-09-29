@@ -4,6 +4,25 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.62.0] - 2026-09-29
+
+### Changed
+
+- The admin area offers each role what it may do. Roles below event manager see the questions and settings of an event, new events, the guest page, the wallboard settings, the connections and the plan without controls, or with one sentence who changes them; no page loads with a refusal any more. A person without an assigned event reads that and who assigns events.
+- The team page: invitations, roles and access belong to owners, the assignments to event managers and above. A role changes with its own save button. Deactivating and withdrawing an invitation ask first, the focus moves into the question and back. A withdrawn or expired invitation says so and offers a new one, and the last active owner is locked with a note. On a plan without teams the invitation panel says so before anyone fills it in.
+- Alert channels for the whole organization or for other people belong to event managers and above; a lower role creates channels for itself.
+- QR places: renaming and deleting keep the focus where the person works, a problem stands at the field it belongs to, a list or numbers that fail to load say so, and the question before deleting says what happens to printed codes and their short name.
+
+### Added
+
+- `UPCOMING_EVENTS_AUTO_COUNT` sets how many coming events the page after a rating shows while none are picked by hand (default 3), `ORGANIZATION_PAGE_UPCOMING_COUNT` how many the page of an organization lists (default 5).
+
+### Fixed
+
+- Hand-picked coming events show up to `UPCOMING_EVENTS_MAX`. Before, the guest page cut them at three, whatever the setting said.
+- Short names that the guest page uses for its own ways in (`event`, `dynamic`, `preview` and the like) are refused for QR places, with a message.
+- Rows of the QR numbers without a place carry the same names as the voices, and two rows with the same short name stay apart.
+
 ## [0.61.0] - 2026-09-29
 
 ### Security

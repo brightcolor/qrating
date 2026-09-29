@@ -4,6 +4,7 @@ import { db, query } from '../src/db/pool.js';
 import { runMigrations, seedDefaultData } from '../src/db/bootstrap.js';
 import { app } from '../src/server.js';
 import { freshSetupCode } from './support/setupCode.js';
+import { env } from '../src/config/env.js';
 
 vi.mock('../src/db/pool.js', async () => {
   const { createPglitePool } = await import('./support/pglitePool.js');
@@ -60,11 +61,6 @@ describe('events that are still to come', () => {
     soon = await createEvent('Weihnachtsedition', { days: 30, shop: 'https://shop.example.test/weihnacht' });
     later = await createEvent('Hafenklang', { days: 90 });
   }, 60_000);
-
-  afterAll(async () => {
-    server?.close();
-    await db.close();
-  });
 
   it('sends the guest into the open rating and names what comes after it', async () => {
     const guest = await request('GET', `/public/e/${running.event_feedback_token}`);
@@ -167,4 +163,62 @@ describe('events that are still to come', () => {
     expect(guest.body.event.name).toBe(running.name);
     expect(guest.body.upcoming.length).toBeGreaterThan(0);
   });
+});
+
+describe('how many coming events a page names', () => {
+  const extra = [];
+  // Runs a check with another value for a setting and puts the old one back.
+  async function withSetting(key, value, check) {
+    const before = env[key];
+    env[key] = value;
+    try {
+      await check();
+    } finally {
+      env[key] = before;
+    }
+  }
+
+  beforeAll(async () => {
+    await query("UPDATE events SET status = 'active' WHERE id = $1", [running.id]);
+    for (const [index, name] of ['Frühlingsfest', 'Sommernacht', 'Herbstball'].entries()) {
+      extra.push(await createEvent(name, { days: 120 + index * 30 }));
+    }
+  });
+
+  it('shows every hand-picked event up to UPCOMING_EVENTS_MAX', async () => {
+    const chosen = [soon, later, ...extra].map((event) => event.id);
+    await withSetting('upcomingEventsMax', 5, async () => {
+      const saved = await request('PATCH', `/admin/events/${running.id}`, { cookie: ownerCookie, body: { upcomingEventIds: chosen } });
+      expect(saved.body.upcoming_event_ids).toHaveLength(5);
+
+      const guest = await request('GET', `/public/e/${running.event_feedback_token}`);
+
+      expect(guest.body.upcoming).toHaveLength(5);
+    });
+    await request('PATCH', `/admin/events/${running.id}`, { cookie: ownerCookie, body: { upcomingEventIds: [] } });
+  });
+
+  it('names as many as UPCOMING_EVENTS_AUTO_COUNT while none are picked', async () => {
+    await withSetting('upcomingEventsAutoCount', 2, async () => {
+      const guest = await request('GET', `/public/e/${running.event_feedback_token}`);
+
+      expect(guest.body.upcoming.map((item) => item.name)).toEqual(['Weihnachtsedition', 'Hafenklang']);
+    });
+  });
+
+  it('lists as many as ORGANIZATION_PAGE_UPCOMING_COUNT on the page of the organization', async () => {
+    await query("UPDATE events SET status = 'closed' WHERE id = $1", [running.id]);
+    await withSetting('organizationPageUpcomingCount', 4, async () => {
+      const guest = await request('GET', `/public/f/${organization.slug}`);
+
+      expect(guest.body.status).toBe('waiting');
+      expect(guest.body.upcoming).toHaveLength(4);
+    });
+  });
+});
+
+// Both blocks share the server and the database, so they close once, after the last test.
+afterAll(async () => {
+  server?.close();
+  await db.close();
 });

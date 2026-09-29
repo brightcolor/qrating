@@ -12,11 +12,12 @@ export { adminBase };
 // An invite and a password reset arrive with a token and have to stay untouched.
 export const reservedPaths = ['accept-invite', 'reset-password'];
 
+// `needs` names the part of permissions.js a tab changes; roles below it do not see the tab.
 export const eventTabs = [
   { id: 'auswertung', label: 'Auswertung', icon: 'chart' },
-  { id: 'fragen', label: 'Fragen', icon: 'questions' },
+  { id: 'fragen', label: 'Fragen', icon: 'questions', needs: 'events' },
   { id: 'qr', label: 'QR & Aushang', icon: 'qr' },
-  { id: 'einstellungen', label: 'Einstellungen', icon: 'settings' }
+  { id: 'einstellungen', label: 'Einstellungen', icon: 'settings', needs: 'events' }
 ];
 
 export const guestSections = [

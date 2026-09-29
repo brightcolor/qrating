@@ -6,17 +6,21 @@ import { groupTextKeys, textLabels } from '../textCatalog.js';
 import { shellListsSections } from '../themes.js';
 import { Button, Check, ErrorBox, Field, Input, Loading, Notice, Page, Panel, Select, TextArea, errorNotice, useAsync } from '../ui.jsx';
 import { SectionTabs } from './settings.jsx';
+import { can, whoCan } from '../permissions.js';
 
 // What guests read and how their page looks.
 export function GuestPage({ section }) {
-  const { theme, go } = useAdmin();
+  const { theme, go, me } = useAdmin();
+  // The server keeps these rules as well; a role below event manager reads along.
+  const readOnly = !can(me, 'guestPage');
   return <div>
     {!shellListsSections(theme) && <SectionTabs items={guestSections} active={section} onSelect={(id) => go({ page: 'guest', section: id })} />}
-    {section === 'aussehen' ? <Appearance /> : <Texts />}
+    {readOnly && <p className="q-notice q-notice-info mb-3">Texte und Aussehen der Gästeseite ändert {whoCan('guestPage')}.</p>}
+    {section === 'aussehen' ? <Appearance readOnly={readOnly} /> : <Texts readOnly={readOnly} />}
   </div>;
 }
 
-function Texts() {
+function Texts({ readOnly }) {
   const [language, setLanguage] = useState('de');
   const { data, loading, error } = useAsync(() => api(`/admin/text-templates?language=${language}`), [language]);
   const [drafts, setDrafts] = useState({});
@@ -51,9 +55,9 @@ function Texts() {
           const [label, hint] = textLabels[key] || [key];
           return <div key={key} className="grid gap-1.5">
             <Field label={label} hint={hint}>
-              <TextArea value={drafts[key] || ''} onChange={(e) => setDrafts({ ...drafts, [key]: e.target.value })} style={{ minHeight: 64 }} />
+              <TextArea value={drafts[key] || ''} onChange={(e) => setDrafts({ ...drafts, [key]: e.target.value })} style={{ minHeight: 64 }} disabled={readOnly} />
             </Field>
-            <div><Button size="sm" onClick={() => save(key)}>Speichern</Button></div>
+            {!readOnly && <div><Button size="sm" onClick={() => save(key)}>Speichern</Button></div>}
           </div>;
         })}
       </div>
@@ -61,7 +65,7 @@ function Texts() {
   </Page>;
 }
 
-function Appearance() {
+function Appearance({ readOnly }) {
   const { data, loading, error } = useAsync(() => api('/admin/branding'), []);
   const [form, setForm] = useState(null);
   const [message, setMessage] = useState('');
@@ -94,7 +98,7 @@ function Appearance() {
     {loading && <Loading />}
     <ErrorBox error={error} />
     {form && <form onSubmit={save} className="grid gap-4">
-      <div className="grid gap-4 xl:grid-cols-2">
+      <fieldset disabled={readOnly} className="m-0 grid min-w-0 gap-4 border-0 p-0 xl:grid-cols-2">
         <Panel title="Marke">
           <div className="grid gap-3 sm:grid-cols-[140px_1fr]">
             <Field label="Farbe"><Input type="color" value={form.primaryColor} onChange={set('primaryColor')} style={{ height: 44, padding: 4 }} /></Field>
@@ -113,11 +117,11 @@ function Appearance() {
             </div>
           </div>
         </Panel>
-      </div>
-      <div className="flex flex-wrap items-center gap-3">
+      </fieldset>
+      {!readOnly && <div className="flex flex-wrap items-center gap-3">
         <Button type="submit" variant="primary" icon="check">Aussehen speichern</Button>
         <Notice message={message} />
-      </div>
+      </div>}
     </form>}
   </Page>;
 }

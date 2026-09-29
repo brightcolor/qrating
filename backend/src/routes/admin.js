@@ -1481,6 +1481,10 @@ function qrSourceLabel(value) {
   return label;
 }
 
+// Names the guest page gives its own ways in; a place with one of them could not be told apart
+// from them in the numbers.
+const reservedQrSourceSlugs = ['event', 'dynamic', 'dynamic_organization', 'event_specific', 'preview', 'unknown'];
+
 // The short name stands in the address of the printed code and comes back from the guest page.
 function qrSourceSlug(value) {
   const slug = String(value ?? '').trim();
@@ -1489,6 +1493,9 @@ function qrSourceSlug(value) {
   }
   if (slug.length > env.qrSourceSlugMaxLength) {
     throw httpError(400, `Der Kurzname darf höchstens ${env.qrSourceSlugMaxLength} Zeichen lang sein. Kürze ihn bitte.`);
+  }
+  if (reservedQrSourceSlugs.includes(slug)) {
+    throw httpError(400, `„${slug}“ benennt schon einen Weg zur Gästeseite. Wähle einen anderen Kurznamen, etwa „${slug}-platz“.`);
   }
   return slug;
 }
@@ -1585,7 +1592,8 @@ adminRouter.get('/webhooks', requireRole('admin'), async (req, res, next) => {
   }
 });
 
-const teamColumns = 'id, name, email, role, status, platform_admin, invited_at, invite_expires_at, last_login_at, created_at';
+// `open_invite` tells an invitation nobody took up from an account in use, without the token.
+const teamColumns = 'id, name, email, role, status, platform_admin, invited_at, invite_expires_at, last_login_at, created_at, (invite_token_hash IS NOT NULL AND last_login_at IS NULL) AS open_invite';
 const teamRoles = ['support', 'analyst', 'event_manager', 'admin', 'owner'];
 const unknownRoleMessage = 'Diese Rolle gibt es nicht. Wähle Support, Analyst, Event Manager, Admin oder Owner.';
 
