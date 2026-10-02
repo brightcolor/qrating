@@ -11,6 +11,6 @@
     "docker:up": "docker compose up --build"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "concurrently": "^9.2.4"
   }
 }
