@@ -6,6 +6,8 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.64.1] - 2026-10-05
+
 ### Security
 
 - Development tools: `vitest` 4.1.11 in backend and frontend, which brings `@vitest/mocker` 4.1.11 (GHSA-82fw-gwwq-j7x9). The backend keeps `vite` 7.3.6 and the frontend `vite` 6.4.3; the production dependencies stay as they were.
