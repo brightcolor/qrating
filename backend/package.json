@@ -27,7 +27,7 @@
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
     "jsqr": "^1.4.0",
-    "vitest": "^3.2.6"
+    "vitest": "^4.1.11"
   },
   "overrides": {
     "qs": "^6.16.0"
