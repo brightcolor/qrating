@@ -19,3 +19,5 @@ RUN sed -i -e '/^user /d' -e 's,^pid .*,pid /tmp/nginx.pid;,' /etc/nginx/nginx.c
   && chown -R nginx:nginx /var/cache/nginx
 USER nginx
 EXPOSE 80
+# Healthy means nginx serves the start page. Compose can set the timing per service with "healthcheck:".
+HEALTHCHECK CMD wget -q -O /dev/null http://127.0.0.1/ || exit 1
