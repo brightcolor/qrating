@@ -165,6 +165,25 @@ describe('newsletter connection to MailWizz', () => {
     expect(badTag.body.error).toContain('Feldkürzel');
   });
 
+  it('cuts every slash at the end of the address, and reads a long run of slashes in one pass', async () => {
+    const saved = await request('PUT', '/admin/newsletter', {
+      cookie: ownerCookie,
+      body: { apiUrl: 'https://news.example.test/api///', listUid: 'list123', eventFieldTag: 'VERANSTALTUNG', enabled: true }
+    });
+    expect(saved.status).toBe(200);
+    expect(saved.body.api_url).toBe('https://news.example.test/api');
+
+    // A run of slashes with something behind it made the old expression try every start position.
+    const started = performance.now();
+    const flood = await request('PUT', '/admin/newsletter', {
+      cookie: ownerCookie,
+      body: { apiUrl: `${'/'.repeat(300_000)}x`, listUid: 'list123' }
+    });
+    expect(flood.status).toBe(400);
+    expect(flood.body.error).toContain('API-Adresse');
+    expect(performance.now() - started).toBeLessThan(2000);
+  });
+
   it('hands a new entry over with the event of the entry', async () => {
     const feedback = await submitFeedback('gast@example.com');
     expect(feedback.status).toBe(201);

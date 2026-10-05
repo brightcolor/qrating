@@ -1,7 +1,40 @@
+import crypto from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { emailDomain, emailHash, publicEventStatus, publicOrganization } from '../src/utils/security.js';
-import { encryptSecret } from '../src/utils/crypto.js';
+import { decryptSecret, encryptSecret } from '../src/utils/crypto.js';
 import { WebhookService } from '../src/services/webhookService.js';
+import { env } from '../src/config/env.js';
+
+describe('stored secrets', () => {
+  const withTag = (payload, tag) => {
+    const [iv, , encrypted] = payload.split('.');
+    return `${iv}.${tag.toString('base64')}.${encrypted}`;
+  };
+
+  it('read back what was stored', () => {
+    expect(decryptSecret(encryptSecret('Zugang für Pretix'))).toBe('Zugang für Pretix');
+  });
+
+  it('refuse a shortened authentication tag', () => {
+    const payload = encryptSecret('Zugang für Pretix');
+    const tag = Buffer.from(payload.split('.')[1], 'base64');
+
+    expect(tag).toHaveLength(16);
+    for (const length of [4, 8, 12]) {
+      expect(() => decryptSecret(withTag(payload, tag.subarray(0, length))), `${length} Byte`).toThrow();
+    }
+  });
+
+  it('keep reading values stored before the tag length was named', () => {
+    const key = crypto.createHash('sha256').update(env.pretixTokenSecret).digest();
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+    const encrypted = Buffer.concat([cipher.update('alter Wert', 'utf8'), cipher.final()]);
+    const stored = `${iv.toString('base64')}.${cipher.getAuthTag().toString('base64')}.${encrypted.toString('base64')}`;
+
+    expect(decryptSecret(stored)).toBe('alter Wert');
+  });
+});
 
 describe('security helpers', () => {
   it('sanitizes public event status payloads', () => {

@@ -472,7 +472,10 @@ authRouter.post('/2fa/setup', requireAdmin, async (req, res, next) => {
   }
 });
 
-authRouter.post('/2fa/confirm', requireAdmin, async (req, res, next) => {
+// Confirming and switching off check a code from the app, which has only six digits. Both run
+// behind the limit for sign-in attempts, and the limit comes first, so it also covers the
+// session check in front of the code.
+authRouter.post('/2fa/confirm', authLimiter, requireAdmin, async (req, res, next) => {
   try {
     const user = (await query('SELECT * FROM users WHERE id = $1', [req.admin.sub])).rows[0];
     if (!user?.two_factor_secret_encrypted) throw httpError(400, 'Bitte starte zuerst die 2FA-Einrichtung.');
@@ -501,7 +504,7 @@ authRouter.post('/2fa/confirm', requireAdmin, async (req, res, next) => {
   }
 });
 
-authRouter.post('/2fa/disable', requireAdmin, authLimiter, async (req, res, next) => {
+authRouter.post('/2fa/disable', authLimiter, requireAdmin, async (req, res, next) => {
   try {
     const user = (await query('SELECT * FROM users WHERE id = $1', [req.admin.sub])).rows[0];
     if (!user) throw httpError(404, 'Dein Benutzerkonto wurde nicht gefunden. Bitte melde dich erneut an.');

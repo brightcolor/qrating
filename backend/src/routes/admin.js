@@ -2354,8 +2354,17 @@ function mailwizzFieldTag(value, fallback) {
   return tag;
 }
 
+// Cuts the slashes at the end of an address in one pass from the back, so a long run of slashes
+// costs as much as reading it. The expression /\/+$/ used here before tried every start position
+// in such a run, and a single request could block the server for all organizations.
+function withoutTrailingSlashes(value) {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === '/') end -= 1;
+  return value.slice(0, end);
+}
+
 function newsletterInput(body, existing) {
-  const apiUrl = String(body.apiUrl || '').trim().replace(/\/+$/, '');
+  const apiUrl = withoutTrailingSlashes(String(body.apiUrl || '').trim());
   if (!/^https?:\/\/.+/.test(apiUrl)) {
     throw httpError(400, 'Die API-Adresse fehlt oder ist unvollständig. Sie sieht zum Beispiel so aus: https://news.example.com/api');
   }
