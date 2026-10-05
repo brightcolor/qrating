@@ -686,6 +686,8 @@ GitHub Actions runs Docker CI on `main`:
 - backend and frontend image builds
 - Compose smoke test with health checks, frontend API proxy check, and `scripts/smoke-test.sh` against PostgreSQL 16
 
+The workflow names every action by the commit of its release, with the version in a comment behind it. A newer release of an action comes in by changing both.
+
 ## Backup And Restore
 
 Backup:
