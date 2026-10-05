@@ -4,6 +4,27 @@ All notable changes to qrating are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Security
+
+- The public pages (guest page, page of an organization, website, privacy page, event status) take `PAGE_RATE_LIMIT_MAX` calls per address within `RATE_LIMIT_WINDOW_MS`, by default 300. Only answered calls count as scans on the guest page.
+- Confirming a second factor runs behind the limit for sign-in attempts (`AUTH_RATE_LIMIT_MAX`), as switching it off does, and for both the limit comes before the session check.
+- Saving the newsletter connection cuts the slashes at the end of the API address in one pass.
+- Stored secrets are decrypted with the full 128-bit authentication tag of AES-GCM, and a shortened tag is refused. Values stored before keep working.
+- The log line of an unexpected server error carries the path of the request as a value.
+- The key of a guest visit comes from `crypto.randomUUID` or `crypto.getRandomValues`. A browser without either source stores its vote with the form at the end.
+- Backend and frontend run as unprivileged users of their images, `node` (UID 1000) and `nginx`. Installations that store Pretix images locally give the backend that folder once with `sudo chown -R 1000:1000 storage`; `scripts/quickstart.sh` does it for new installations.
+- Development tools with known advisories are updated: `vitest` 3.2.6 in the backend, which brings `vite` 7.3.6, and `concurrently` 9.2.4 in the root, which brings `shell-quote` 1.9.0. The production dependencies stay as they were.
+
+### Added
+
+- `PAGE_RATE_LIMIT_MAX` for the public pages, see above.
+
+### Tests
+
+- New tests cover the limit of the public pages, the limit of the 2FA confirmation, a long run of slashes in the newsletter address, the tag length of stored secrets, the log line of a path with format characters and the source of the visit key.
+
 ## [0.63.0] - 2026-09-29
 
 ### Added

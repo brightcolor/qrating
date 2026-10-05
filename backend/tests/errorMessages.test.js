@@ -1,3 +1,4 @@
+import { format } from 'node:util';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { describeWait, errorHandler, httpError } from '../src/middleware/errors.js';
 import { openSecret, serviceRejected, serviceUnreachable, smtpFailure } from '../src/utils/serviceErrors.js';
@@ -41,7 +42,17 @@ describe('error responses', () => {
     expect(res.body.error).toContain('Auf dem Server ist ein unerwarteter Fehler aufgetreten.');
     expect(res.body.error).toContain(`Fehlerkennung ${res.body.reference}`);
     expect(res.body.error).not.toContain('secret_table');
-    expect(log.mock.calls[0][0]).toContain(res.body.reference);
+    expect(format(...log.mock.calls[0])).toContain(`[Fehler ${res.body.reference}] POST /admin/test`);
+  });
+
+  it('keeps the error in the log when the path carries format characters', () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const request = { ...fakeRequest(), path: '/admin/%c%s%o' };
+    const res = handle(new Error('Datenbank antwortet nicht'), request);
+
+    const line = format(...log.mock.calls[0]);
+    expect(line).toContain(`[Fehler ${res.body.reference}] POST /admin/%c%s%o`);
+    expect(line).toContain('Datenbank antwortet nicht');
   });
 
   it('keeps messages that were written for people', () => {

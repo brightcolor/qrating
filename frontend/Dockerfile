@@ -8,4 +8,14 @@ RUN npm run build
 FROM nginx:1.27-alpine
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
+# nginx runs as the unprivileged user "nginx" of the image: the process id goes to /tmp, and the
+# buffers for the API proxy go to a cache folder that belongs to that user. Port 80 stays, since
+# Docker 20.10 every user inside a container may open it. The two checks stop the build when a
+# newer base image writes its configuration differently.
+RUN sed -i -e '/^user /d' -e 's,^pid .*,pid /tmp/nginx.pid;,' /etc/nginx/nginx.conf \
+  && grep -q '^pid /tmp/nginx.pid;' /etc/nginx/nginx.conf \
+  && ! grep -q '^user ' /etc/nginx/nginx.conf \
+  && mkdir -p /var/cache/nginx \
+  && chown -R nginx:nginx /var/cache/nginx
+USER nginx
 EXPOSE 80

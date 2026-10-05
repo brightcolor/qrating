@@ -198,9 +198,21 @@ const draftMaxAge = 2 * 60 * 60 * 1000;
 
 const sessionPrefix = 'qrating-session:';
 
+// The key opens the vote of its visit: whoever knows it can change the stars or complete the
+// form. So it comes from the random source the browser keeps for secrets. randomUUID needs a
+// secure context (HTTPS); getRandomValues serves plain HTTP and older browsers as well.
+export function randomSessionKey(source = globalThis.crypto) {
+  if (typeof source?.randomUUID === 'function') return source.randomUUID();
+  if (typeof source?.getRandomValues === 'function') {
+    return Array.from(source.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  }
+  return null;
+}
+
 // One key per visit and event. It stays in the tab, says nothing about the person,
-// and lets the admin area count how far this visit got.
-export function sessionKeyFor(token, make = () => globalThis.crypto?.randomUUID?.() || String(Math.random()).slice(2)) {
+// and lets the admin area count how far this visit got. A browser without a random source
+// for secrets gets no key: its vote is stored when the form is sent, and its steps stay uncounted.
+export function sessionKeyFor(token, make = randomSessionKey) {
   const name = sessionPrefix + token;
   try {
     const stored = globalThis.sessionStorage?.getItem(name);
@@ -208,7 +220,8 @@ export function sessionKeyFor(token, make = () => globalThis.crypto?.randomUUID?
   } catch {
     // Private windows may refuse storage; then every visit counts as its own.
   }
-  const key = String(make()).replace(/[^A-Za-z0-9-]/g, '').slice(0, 64) || 'ohne-schluessel';
+  const key = String(make() ?? '').replace(/[^A-Za-z0-9-]/g, '').slice(0, 64);
+  if (!key) return null;
   try {
     globalThis.sessionStorage?.setItem(name, key);
   } catch {

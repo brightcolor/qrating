@@ -265,6 +265,7 @@ Every value that shapes what qrating does is a setting with a default and bounds
 | `RATE_LIMIT_WINDOW_MS` | `60000` | 1000–86400000 | Window of the rate limit for ratings, in milliseconds. |
 | `RATE_LIMIT_MAX` | `30` | 1–100000 | Ratings accepted per address within that window. |
 | `PROGRESS_RATE_LIMIT_MAX` | `600` | 1–1000000 | Step reports of the guest page accepted per address within that window; every guest reports each step. |
+| `PAGE_RATE_LIMIT_MAX` | `300` | 1–1000000 | Calls of the public pages (guest page, website, privacy page) accepted per address within that window; a guest usually opens the guest page once to three times. A refused call counts no scan. |
 | `IMAGE_CACHE_MAX_BYTES` | `5242880` | 1024–104857600 | Largest event image qrating caches, in bytes. |
 | `WORKER_INTERVAL_MS` | `5000` | 500–600000 | How often the background worker looks for jobs, in milliseconds. |
 | `PRETIX_SCHEDULER_INTERVAL_MS` | `60000` | 5000–86400000 | How often the planner schedules Pretix syncs and deletion runs, in milliseconds. |
@@ -348,6 +349,14 @@ The stack contains:
 - `frontend`: Vite build served through nginx with `/api` proxy
 
 All three services restart automatically (`restart: unless-stopped`). The backend runs migrations on startup.
+
+Backend and frontend run as unprivileged users of their images: the API as `node` (UID 1000), nginx as `nginx`. The backend writes to one place only, `storage/event-images`, where it keeps Pretix images when a connection stores them locally. On the host that folder belongs to UID 1000; `scripts/quickstart.sh` sets this up, and an installation set up by hand runs once in its directory:
+
+```bash
+sudo chown -R 1000:1000 storage
+```
+
+While the folder belongs to another user, the guest page shows event images straight from Pretix.
 
 ## Plans And Access
 
@@ -721,6 +730,8 @@ docker compose up -d --build
 ```
 
 Review `.env.example` after every release for new configuration keys.
+
+Installations from before the backend ran as `node` give it the folder of the cached event images once, in the directory of qrating: `sudo chown -R 1000:1000 storage` (see [Docker](#docker)).
 
 ## SemVer
 

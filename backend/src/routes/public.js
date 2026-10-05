@@ -66,8 +66,18 @@ function feedbackValidationMessage(error) {
     || 'Einige Angaben sind ungültig. Bitte prüfe deine Eingaben und sende das Feedback erneut.';
 }
 
+// The public pages answer without a sign-in and read the database on every call; the guest page
+// also counts each call as a scan. So every address gets PAGE_RATE_LIMIT_MAX calls per window.
+const pageLimiter = rateLimit({
+  windowMs: env.rateLimitWindowMs,
+  max: env.pageRateLimitMax,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: `Von diesem Anschluss kamen gerade sehr viele Seitenaufrufe. Bitte warte ${describeWait(env.rateLimitWindowMs)} und lade die Seite dann neu.` }
+});
+
 // What happens with the data of a guest, written from the settings of this organization.
-publicRouter.get('/privacy/:slug', async (req, res, next) => {
+publicRouter.get('/privacy/:slug', pageLimiter, async (req, res, next) => {
   try {
     const organization = (await query('SELECT * FROM organizations WHERE slug = $1', [req.params.slug])).rows[0];
     if (!organization) {
@@ -94,7 +104,7 @@ publicRouter.get('/privacy/:slug', async (req, res, next) => {
   }
 });
 
-publicRouter.get('/site', async (req, res, next) => {
+publicRouter.get('/site', pageLimiter, async (req, res, next) => {
   try {
     const site = await getSiteContent({ query });
     res.json({
@@ -281,7 +291,7 @@ async function publicPayload(resolveResult, questions = [], language = null) {
   return { event: eventToPublic(event, organization, questions), texts, upcoming };
 }
 
-publicRouter.get('/f/:organizationSlug/:sourceSlug?', async (req, res, next) => {
+publicRouter.get('/f/:organizationSlug/:sourceSlug?', pageLimiter, async (req, res, next) => {
   try {
     const resolver = new EventResolver({ query });
     const resolved = await resolver.resolveCurrentEvent(req.params.organizationSlug);
@@ -316,7 +326,7 @@ publicRouter.get('/f/:organizationSlug/:sourceSlug?', async (req, res, next) => 
   }
 });
 
-publicRouter.get('/e/:eventToken', async (req, res, next) => {
+publicRouter.get('/e/:eventToken', pageLimiter, async (req, res, next) => {
   try {
     const resolver = new EventResolver({ query });
     const resolved = await resolver.resolveEventByToken(req.params.eventToken);
@@ -356,7 +366,7 @@ publicRouter.get('/e/:eventToken', async (req, res, next) => {
   }
 });
 
-publicRouter.get('/events/:eventToken/status', async (req, res, next) => {
+publicRouter.get('/events/:eventToken/status', pageLimiter, async (req, res, next) => {
   try {
     const resolver = new EventResolver({ query });
     const resolved = await resolver.resolveEventByToken(req.params.eventToken);

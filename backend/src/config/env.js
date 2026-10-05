@@ -36,6 +36,7 @@ export const numberSettings = [
   { key: 'rateLimitWindowMs', name: 'RATE_LIMIT_WINDOW_MS', fallback: 60000, min: 1000, max: 86400000, hint: 'Zeitfenster der Ratenbegrenzung für Bewertungen, in Millisekunden.' },
   { key: 'rateLimitMax', name: 'RATE_LIMIT_MAX', fallback: 30, min: 1, max: 100000, hint: 'So viele Bewertungen nimmt qrating je Anschluss im Zeitfenster an.' },
   { key: 'progressRateLimitMax', name: 'PROGRESS_RATE_LIMIT_MAX', fallback: 600, min: 1, max: 1000000, hint: 'So viele Schrittmeldungen der Gästeseite nimmt qrating je Anschluss im Zeitfenster von RATE_LIMIT_WINDOW_MS an; jeder Gast meldet jeden Schritt.' },
+  { key: 'pageRateLimitMax', name: 'PAGE_RATE_LIMIT_MAX', fallback: 300, min: 1, max: 1000000, hint: 'So viele Aufrufe der öffentlichen Seiten (Gästeseite, Website, Datenschutzseite) nimmt qrating je Anschluss im Zeitfenster von RATE_LIMIT_WINDOW_MS an; jeder Gast ruft die Gästeseite meist ein- bis dreimal auf.' },
   { key: 'imageCacheMaxBytes', name: 'IMAGE_CACHE_MAX_BYTES', fallback: 5242880, min: 1024, max: 104857600, hint: 'Größtes Eventbild, das qrating zwischenspeichert, in Byte.' },
   { key: 'workerIntervalMs', name: 'WORKER_INTERVAL_MS', fallback: 5000, min: 500, max: 600000, hint: 'Takt, in dem der Hintergrunddienst nach Aufgaben sieht, in Millisekunden.' },
   { key: 'pretixSchedulerIntervalMs', name: 'PRETIX_SCHEDULER_INTERVAL_MS', fallback: 60000, min: 5000, max: 86400000, hint: 'Takt, in dem der Planer Pretix-Abgleiche und Löschläufe ansetzt, in Millisekunden.' },

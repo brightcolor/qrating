@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   answerText,
   buildPayload,
@@ -11,7 +11,9 @@ import {
   loadDraft,
   nextStepId,
   questionType,
+  randomSessionKey,
   saveDraft,
+  sessionKeyFor,
   stepProblem
 } from './flow.js';
 
@@ -210,5 +212,50 @@ describe('draft storage', () => {
 
     clearDraft('token-3');
     expect(loadDraft('token-3', start)).toBeNull();
+  });
+});
+
+describe('the key of a visit', () => {
+  beforeEach(() => {
+    globalThis.sessionStorage = {
+      store: new Map(),
+      getItem(key) { return this.store.has(key) ? this.store.get(key) : null; },
+      setItem(key, value) { this.store.set(key, String(value)); },
+      removeItem(key) { this.store.delete(key); }
+    };
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('comes from randomUUID where the page runs in a secure context', () => {
+    expect(randomSessionKey({ randomUUID: () => '1b4e28ba-2fa1-11d2-883f-0016d3cca427' })).toBe('1b4e28ba-2fa1-11d2-883f-0016d3cca427');
+  });
+
+  it('comes from getRandomValues on plain HTTP, and never from Math.random', () => {
+    const weak = vi.spyOn(Math, 'random');
+    const source = { getRandomValues: (bytes) => globalThis.crypto.getRandomValues(bytes) };
+
+    const first = randomSessionKey(source);
+    const second = randomSessionKey(source);
+
+    expect(first).toMatch(/^[0-9a-f]{32}$/);
+    expect(second).not.toBe(first);
+    expect(weak).not.toHaveBeenCalled();
+  });
+
+  it('stays away in a browser without a random source for secrets, so no visit shares a key', () => {
+    expect(randomSessionKey({})).toBeNull();
+    expect(randomSessionKey(null)).toBeNull();
+
+    expect(sessionKeyFor('token-4', () => null)).toBeNull();
+    expect(globalThis.sessionStorage.getItem('qrating-session:token-4')).toBeNull();
+  });
+
+  it('keeps one key per visit and event in the tab', () => {
+    const key = sessionKeyFor('token-5');
+
+    expect(key).toMatch(/^[0-9a-f-]{32,36}$/);
+    expect(sessionKeyFor('token-5')).toBe(key);
+    expect(sessionKeyFor('token-6')).not.toBe(key);
   });
 });

@@ -166,6 +166,8 @@ set_env PRETIX_SCHEDULER_INTERVAL_MS "$(env_or_default PRETIX_SCHEDULER_INTERVAL
 set_env BILLING_ADMIN_EMAILS "$(env_or_default BILLING_ADMIN_EMAILS '')"
 
 mkdir -p storage/event-images
+# The backend runs as the user "node" of its image (UID 1000) and keeps cached event images here.
+chown -R 1000:1000 storage
 chmod 600 .env
 
 cat > .qrating-quickstart-info <<EOF

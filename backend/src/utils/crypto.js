@@ -5,9 +5,13 @@ function key() {
   return crypto.createHash('sha256').update(env.pretixTokenSecret).digest();
 }
 
+// AES-GCM with the full 128-bit tag, the length every stored value carries. Naming it for
+// decryption makes a shortened tag fail: a tag of 4 bytes would be far easier to forge.
+const authTagLength = 16;
+
 export function encryptSecret(value) {
   const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', key(), iv);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key(), iv, { authTagLength });
   const encrypted = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]);
   const tag = cipher.getAuthTag();
   return `${iv.toString('base64')}.${tag.toString('base64')}.${encrypted.toString('base64')}`;
@@ -15,7 +19,7 @@ export function encryptSecret(value) {
 
 export function decryptSecret(payload) {
   const [ivRaw, tagRaw, encryptedRaw] = String(payload).split('.');
-  const decipher = crypto.createDecipheriv('aes-256-gcm', key(), Buffer.from(ivRaw, 'base64'));
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key(), Buffer.from(ivRaw, 'base64'), { authTagLength });
   decipher.setAuthTag(Buffer.from(tagRaw, 'base64'));
   return Buffer.concat([
     decipher.update(Buffer.from(encryptedRaw, 'base64')),
