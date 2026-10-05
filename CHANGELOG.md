@@ -6,6 +6,25 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+
+- Development tools: `vitest` 4.1.11 in backend and frontend, which brings `@vitest/mocker` 4.1.11 (GHSA-82fw-gwwq-j7x9). The backend keeps `vite` 7.3.6 and the frontend `vite` 6.4.3; the production dependencies stay as they were.
+- The CI workflow names every GitHub Action by the full commit SHA of its release, with the version in a comment behind it.
+- A cell of the XLSX export carries the characters XML 1.0 allows, and its five XML special characters become entities in one pass.
+- The admin area and the guest page log an unreachable API with a fixed format string; the address of the API travels as a value.
+
+### Added
+
+- Backend and frontend images carry a Docker health check. The backend counts as healthy while `/health/ready` answers on the port of `PORT`, the frontend while nginx serves the start page. `docker compose ps` shows the state; a Compose override file sets another timing under `healthcheck:`.
+
+### Changed
+
+- The backend image installs its packages in `WORKDIR /app/backend`.
+
+### Tests
+
+- New tests cover the cells of the XLSX export, the quoting of the CSV export, the content type of every download and the log line of an unreachable API. The smoke test waits until both images report healthy.
+
 ## [0.64.0] - 2026-10-05
 
 ### Security
