@@ -100,17 +100,22 @@ export function describeError(error) {
   return null;
 }
 
+// Server-side failures get a reference that also appears in the log, next to the details. The path
+// comes from the request, so it travels as a value behind a fixed format string: a "%c" or "%s" in
+// it would otherwise take the error as its argument and drop it from the log.
+export function logServerError(req, error) {
+  const reference = crypto.randomBytes(4).toString('hex').toUpperCase();
+  console.error('[Fehler %s] %s %s', reference, req.method, req.path, error);
+  return reference;
+}
+
 export function errorHandler(error, req, res, next) {
   if (res.headersSent) return next(error);
   const known = describeError(error);
   if (known && known.status < 500) {
     return sendError(req, res, known.status, known.message);
   }
-  // Server-side failures get a reference that also appears in the log. The path comes from the
-  // request, so it travels as a value behind a fixed format string: a "%c" or "%s" in it would
-  // otherwise take the error as its argument and drop it from the log.
-  const reference = crypto.randomBytes(4).toString('hex').toUpperCase();
-  console.error('[Fehler %s] %s %s', reference, req.method, req.path, error);
+  const reference = logServerError(req, error);
   const message = known?.message || 'Auf dem Server ist ein unerwarteter Fehler aufgetreten. Bitte versuche es erneut.';
   return sendError(
     req,

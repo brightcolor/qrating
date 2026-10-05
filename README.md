@@ -352,7 +352,7 @@ The stack contains:
 
 All three services restart automatically (`restart: unless-stopped`). The backend runs migrations on startup.
 
-The backend and frontend images carry a health check, and `docker compose ps` shows its state. The backend counts as healthy while `/health/ready` answers, which also reaches the database; it asks the port of the setting `PORT`. The frontend counts as healthy while nginx serves the start page. The checks follow the timing defaults of Docker; a Compose override file sets another timing per service under `healthcheck:`.
+The backend and frontend images carry a health check, and `docker compose ps` shows its state. The backend counts as healthy while `/health/ready` answers, which also reaches the database; it asks the port of the setting `PORT`. When the database fails, `/health/ready` answers HTTP 503 with a general message and a reference (`Fehlerkennung`); the details stand in the backend log under that reference: `docker compose logs backend | grep <Kennung>`. The frontend counts as healthy while nginx serves the start page. The checks follow the timing defaults of Docker; a Compose override file sets another timing per service under `healthcheck:`.
 
 Backend and frontend run as unprivileged users of their images: the API as `node` (UID 1000), nginx as `nginx`. The backend writes to one place only, `storage/event-images`, where it keeps Pretix images when a connection stores them locally. On the host that folder belongs to UID 1000; `scripts/quickstart.sh` sets this up, and an installation set up by hand runs once in its directory:
 
