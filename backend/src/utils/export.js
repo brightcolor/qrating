@@ -1,10 +1,12 @@
+// A cell of the workbook is XML text: it keeps the characters XML 1.0 allows, and the five
+// special characters become entities in one pass.
+const outsideXml = /[^\t\n\r\u{20}-\u{D7FF}\u{E000}-\u{FFFD}\u{10000}-\u{10FFFF}]/gu;
+const xmlEntities = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' };
+
 function escapeXml(value) {
   return String(value ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&apos;');
+    .replace(outsideXml, '')
+    .replace(/[&<>"']/g, (char) => xmlEntities[char]);
 }
 
 export function toCsv(rows) {
