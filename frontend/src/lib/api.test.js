@@ -83,7 +83,7 @@ describe('the log line of an unreachable API', () => {
     expect(logged).toHaveBeenCalledWith('qrating API nicht erreichbar (%s)', 'https://api.example.test/caf%c3%a9', failure);
   });
 
-  it('names the same domain when no address is configured', async () => {
+  it('names the same domain for an empty address', async () => {
     vi.stubEnv('VITE_API_BASE_URL', '');
     vi.resetModules();
     const { api: apiWithBase } = await import('./api.js');

@@ -11,7 +11,7 @@ The project follows [Semantic Versioning](https://semver.org/).
 - Development tools: `vitest` 4.1.11 in backend and frontend, which brings `@vitest/mocker` 4.1.11 (GHSA-82fw-gwwq-j7x9). The backend keeps `vite` 7.3.6 and the frontend `vite` 6.4.3; the production dependencies stay as they were.
 - The CI workflow names every GitHub Action by the full commit SHA of its release, with the version in a comment behind it.
 - A cell of the XLSX export carries the characters XML 1.0 allows, and its five XML special characters become entities in one pass.
-- The admin area and the guest page log an unreachable API with a fixed format string; the address of the API travels as a value.
+- The frontend logs an unreachable API with a fixed format string; the address of the API travels as a value.
 
 ### Added
 
