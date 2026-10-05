@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toCsv, toXlsx } from '../src/utils/export.js';
+import { columnName, toCsv, toXlsx } from '../src/utils/export.js';
 
 // The workbook is a zip whose files are stored without compression, so each one can be read
 // straight from its local header.
@@ -20,6 +20,11 @@ function zipEntries(buffer) {
 function cellTexts(workbook) {
   const sheet = zipEntries(workbook).get('xl/worksheets/sheet1.xml');
   return [...sheet.matchAll(/<t>([^<]*)<\/t>/g)].map((match) => match[1]);
+}
+
+function cellReferences(workbook) {
+  const sheet = zipEntries(workbook).get('xl/worksheets/sheet1.xml');
+  return [...sheet.matchAll(/<c r="([A-Z]+[0-9]+)"/g)].map((match) => match[1]);
 }
 
 const outsideXml = /[^\t\n\r\u{20}-\u{D7FF}\u{E000}-\u{FFFD}\u{10000}-\u{10FFFF}]/u;
@@ -48,6 +53,24 @@ describe('the xlsx export', () => {
     const workbook = toXlsx([{ submitted_at: new Date('2026-09-19T20:15:00.000Z'), rating: 4, general_comment: null }]);
 
     expect(cellTexts(workbook)).toEqual(['submitted_at', 'rating', 'general_comment', '2026-09-19T20:15:00.000Z', '4', '']);
+  });
+});
+
+describe('the columns of the xlsx export', () => {
+  it('counts the columns A to Z, then AA to ZZ, then AAA onwards', () => {
+    expect([0, 1, 25, 26, 27, 51, 52, 701, 702, 16383].map(columnName))
+      .toEqual(['A', 'B', 'Z', 'AA', 'AB', 'AZ', 'BA', 'ZZ', 'AAA', 'XFD']);
+  });
+
+  it('names each cell of a sheet with 30 columns once', () => {
+    const row = Object.fromEntries(Array.from({ length: 30 }, (_, index) => [`frage_${index + 1}`, index + 1]));
+
+    const references = cellReferences(toXlsx([row]));
+
+    expect(references).toHaveLength(60);
+    expect(new Set(references).size).toBe(60);
+    expect(references.slice(24, 31)).toEqual(['Y1', 'Z1', 'AA1', 'AB1', 'AC1', 'AD1', 'A2']);
+    expect(references.at(-1)).toBe('AD2');
   });
 });
 

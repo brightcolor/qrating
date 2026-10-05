@@ -22,6 +22,15 @@ export function toCsv(rows) {
   return `\ufeff${lines.join('\n')}`;
 }
 
+// Columns of a sheet count A to Z, then AA to ZZ, then AAA onwards.
+export function columnName(index) {
+  let name = '';
+  for (let number = index + 1; number > 0; number = Math.floor((number - 1) / 26)) {
+    name = String.fromCharCode(65 + ((number - 1) % 26)) + name;
+  }
+  return name;
+}
+
 function crc32(buffer) {
   let table = crc32.table;
   if (!table) {
@@ -97,7 +106,7 @@ export function toXlsx(rows) {
   const sheetData = sheetRows.map((row, index) => {
     const rowNumber = index + 1;
     const cells = row.map((value, colIndex) => {
-      const col = String.fromCharCode(65 + colIndex);
+      const col = columnName(colIndex);
       return `<c r="${col}${rowNumber}" t="inlineStr"><is><t>${escapeXml(value instanceof Date ? value.toISOString() : value)}</t></is></c>`;
     }).join('');
     return `<row r="${rowNumber}">${cells}</row>`;
