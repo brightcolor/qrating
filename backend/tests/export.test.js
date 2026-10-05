@@ -62,10 +62,10 @@ describe('the xlsx export', () => {
   });
 
   it('writes a cell that starts like a formula as a text cell with its content', () => {
-    const workbook = toXlsx([{ general_comment: '=HYPERLINK("https://example.test")' }]);
+    const workbook = toXlsx([{ general_comment: '=VERKETTEN("Bar";" 2")' }]);
     const sheet = zipEntries(workbook).get('xl/worksheets/sheet1.xml');
 
-    expect(cellTexts(workbook)[1]).toBe('=HYPERLINK(&quot;https://example.test&quot;)');
+    expect(cellTexts(workbook)[1]).toBe('=VERKETTEN(&quot;Bar&quot;;&quot; 2&quot;)');
     expect(sheet).toContain('<c r="A2" t="inlineStr">');
     expect(sheet).not.toContain('<f>');
   });
@@ -96,7 +96,7 @@ describe('the csv export', () => {
   });
 
   it('puts an apostrophe in front of a cell that starts with =, +, -, @, a tab or a carriage return', () => {
-    const comments = ['=1+1', '+49 30 1234', '-2+3', '@SUMME(A1)', '\t=1+1', '\r=1+1', '=HYPERLINK("https://example.test";"Mehr")'];
+    const comments = ['=1+1', '+49 30 1234', '-2+3', '@SUMME(A1)', '\t=1+1', '\r=1+1', '=VERKETTEN("Bar";" 2")'];
 
     const csv = toCsv(comments.map((comment) => ({ general_comment: comment })));
 
@@ -107,7 +107,7 @@ describe('the csv export', () => {
       `"'@SUMME(A1)"`,
       `"'\t=1+1"`,
       `"'\r=1+1"`,
-      `"'=HYPERLINK(""https://example.test"";""Mehr"")"`
+      `"'=VERKETTEN(""Bar"";"" 2"")"`
     ]);
   });
 
@@ -134,10 +134,10 @@ describe('the csv export', () => {
   });
 
   it('works with other start characters than the default', () => {
-    const rows = [{ general_comment: '|cmd' }, { general_comment: '%1' }, { general_comment: '=1+1' }, { general_comment: '-2' }];
+    const rows = [{ general_comment: '|Teil 2' }, { general_comment: '%1' }, { general_comment: '=1+1' }, { general_comment: '-2' }];
 
     const csv = toCsv(rows, { formulaStartCharacters: ['|', '%'] });
 
-    expect(csvRows(csv)).toEqual([`"'|cmd"`, `"'%1"`, '"=1+1"', '"-2"']);
+    expect(csvRows(csv)).toEqual([`"'|Teil 2"`, `"'%1"`, '"=1+1"', '"-2"']);
   });
 });
