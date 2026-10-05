@@ -139,4 +139,23 @@ describe('file names of downloads', () => {
       expect(result.disposition).not.toContain('qrating-');
     }
   });
+
+  it('sends every download as an attachment of its own type', async () => {
+    const exports = [
+      ['/export.csv', 'text/csv; charset=utf-8'],
+      ['/export.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+      ['/newsletter.csv', 'text/csv; charset=utf-8'],
+      ['/report.pdf', 'application/pdf']
+    ];
+
+    for (const [path, type] of exports) {
+      const response = await fetch(`${baseUrl}/admin/events/${eventId}${path}`, { headers: { cookie: ownerCookie } });
+      await response.arrayBuffer();
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toBe(type);
+      expect(response.headers.get('content-disposition')).toMatch(/^attachment; filename="/);
+      expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+    }
+  });
 });
