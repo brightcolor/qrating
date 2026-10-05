@@ -6,6 +6,8 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.64.0] - 2026-10-05
+
 ### Security
 
 - The public pages (guest page, page of an organization, website, privacy page, event status) take `PAGE_RATE_LIMIT_MAX` calls per address within `RATE_LIMIT_WINDOW_MS`, by default 300. Only answered calls count as scans on the guest page.
