@@ -1,3 +1,5 @@
+import { env } from '../config/env.js';
+
 // A cell of the workbook is XML text: it keeps the characters XML 1.0 allows, and the five
 // special characters become entities in one pass.
 const outsideXml = /[^\t\n\r\u{20}-\u{D7FF}\u{E000}-\u{FFFD}\u{10000}-\u{10FFFF}]/gu;
@@ -9,16 +11,19 @@ function escapeXml(value) {
     .replace(/[&<>"']/g, (char) => xmlEntities[char]);
 }
 
-export function toCsv(rows) {
+// A spreadsheet reads a cell that starts with one of CSV_FORMULA_START_CHARACTERS as a formula;
+// an apostrophe in front keeps it as text. Every cell stands in quotes with the inner quotes
+// doubled, the header row included.
+function csvCell(value, formulaStartCharacters) {
+  const text = value instanceof Date ? value.toISOString() : String(value ?? '');
+  const cell = formulaStartCharacters.some((character) => text.startsWith(character)) ? `'${text}` : text;
+  return `"${cell.replaceAll('"', '""')}"`;
+}
+
+export function toCsv(rows, { formulaStartCharacters = env.csvFormulaStartCharacters } = {}) {
   const headers = [...new Set(rows.flatMap((row) => Object.keys(row)))];
-  const lines = [headers.join(',')];
-  for (const row of rows) {
-    lines.push(headers.map((header) => {
-      const value = row[header] ?? '';
-      const text = value instanceof Date ? value.toISOString() : String(value);
-      return `"${text.replaceAll('"', '""')}"`;
-    }).join(','));
-  }
+  const lines = [headers, ...rows.map((row) => headers.map((header) => row[header]))]
+    .map((cells) => cells.map((value) => csvCell(value, formulaStartCharacters)).join(','));
   return `\ufeff${lines.join('\n')}`;
 }
 

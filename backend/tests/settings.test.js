@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { numberSettings, readSettings, settingsFailure, textSettings } from '../src/config/env.js';
+import { characterSettings, numberSettings, readCharacterList, readSettings, settingsFailure, textSettings } from '../src/config/env.js';
 
 const exampleEnv = readFileSync(new URL('../../.env.example', import.meta.url), 'utf8');
 const readme = readFileSync(new URL('../../README.md', import.meta.url), 'utf8');
@@ -77,10 +77,47 @@ describe('the settings of an installation', () => {
       if (setting.optional && setting.fallback === '') continue;
       expect(setting.test(setting.fallback), setting.name).toBe(true);
     }
+    for (const setting of characterSettings) {
+      expect(readCharacterList(setting.fallback, setting).problem, setting.name).toBeUndefined();
+      expect(setting.hint.length, setting.name).toBeGreaterThan(10);
+    }
+  });
+
+  it('reads the start characters of a formula in a CSV export as single characters', () => {
+    const defaults = ['=', '+', '-', '@', '\t', '\r'];
+
+    expect(readSettings({}).values.csvFormulaStartCharacters).toEqual(defaults);
+    expect(readSettings({ CSV_FORMULA_START_CHARACTERS: '   ' }).values.csvFormulaStartCharacters).toEqual(defaults);
+    expect(readSettings({ CSV_FORMULA_START_CHARACTERS: '| % \\t \\n' }).values.csvFormulaStartCharacters).toEqual(['|', '%', '\t', '\n']);
+    // Double quotes in an environment file can turn \t and \r into the characters themselves.
+    const handedOver = readSettings({ CSV_FORMULA_START_CHARACTERS: ' = \t \r = ' });
+    expect(handedOver.errors).toEqual([]);
+    expect(handedOver.values.csvFormulaStartCharacters).toEqual(['=', '\t', '\r']);
+  });
+
+  it('names an entry of CSV_FORMULA_START_CHARACTERS that breaks its rules', () => {
+    const joined = readSettings({ CSV_FORMULA_START_CHARACTERS: '= +-' });
+    expect(joined.errors).toEqual([
+      'CSV_FORMULA_START_CHARACTERS muss einzelne Zeichen mit einem Leerzeichen dazwischen nennen, eingetragen ist „+-“. '
+      + '\\t steht für den Tabulator, \\r für den Wagenrücklauf, \\n für den Zeilenumbruch. '
+      + 'Zeichen, mit denen eine Tabellenkalkulation eine Zelle als Formel liest. Eine Zelle im CSV-Export, die mit einem davon beginnt, bekommt ein Apostroph vorangestellt.'
+    ]);
+    // A wrong list leaves the default in place.
+    expect(joined.values.csvFormulaStartCharacters).toEqual(['=', '+', '-', '@', '\t', '\r']);
+
+    expect(readSettings({ CSV_FORMULA_START_CHARACTERS: '=\t' }).errors[0]).toContain('eingetragen ist „=\\t“.');
+    expect(readSettings({ CSV_FORMULA_START_CHARACTERS: '= a' }).errors[0])
+      .toContain('CSV_FORMULA_START_CHARACTERS muss aus Satz-, Sonder- oder Steuerzeichen bestehen, eingetragen ist „a“.');
+    expect(readSettings({ CSV_FORMULA_START_CHARACTERS: '= 7' }).errors[0]).toContain('eingetragen ist „7“.');
+
+    const arrows = (count) => Array.from({ length: count }, (_, index) => String.fromCodePoint(0x2190 + index)).join(' ');
+    expect(readSettings({ CSV_FORMULA_START_CHARACTERS: arrows(32) }).errors).toEqual([]);
+    expect(readSettings({ CSV_FORMULA_START_CHARACTERS: arrows(33) }).errors[0])
+      .toContain('CSV_FORMULA_START_CHARACTERS darf höchstens 32 Zeichen nennen, eingetragen sind 33.');
   });
 
   it('documents every setting in the example environment and in the README', () => {
-    for (const setting of [...numberSettings, ...textSettings]) {
+    for (const setting of [...numberSettings, ...textSettings, ...characterSettings]) {
       expect(exampleEnv, setting.name).toMatch(new RegExp(`^#?\\s?${setting.name}=`, 'm'));
       expect(readme, setting.name).toContain(`\`${setting.name}\``);
     }
@@ -89,7 +126,7 @@ describe('the settings of an installation', () => {
   it('hands every setting to the backend container', () => {
     const compose = readFileSync(new URL('../../docker-compose.yml', import.meta.url), 'utf8');
     // PORT stays out: the container always listens on 4000, where nginx expects it.
-    for (const setting of [...numberSettings, ...textSettings].filter((item) => item.name !== 'PORT')) {
+    for (const setting of [...numberSettings, ...textSettings, ...characterSettings].filter((item) => item.name !== 'PORT')) {
       expect(compose, setting.name).toContain(`${setting.name}: \${${setting.name}:-}`);
     }
     expect(compose).toContain('SYSTEM_SMTP_PASSWORD: ${SYSTEM_SMTP_PASSWORD:-}');

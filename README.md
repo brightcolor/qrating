@@ -317,6 +317,8 @@ Every value that shapes what qrating does is a setting with a default and bounds
 | `ANALYTICS_ABANDONED_LIMIT` | `200` | 1–5000 | Abandoned visits the evaluation of an event lists. |
 | `CALLBACKS_LIST_LIMIT` | `200` | 1–5000 | Cases the list of callbacks shows. |
 | `REPORT_COMMENTS_LIMIT` | `50` | 1–1000 | Comments in the PDF report. |
+| **Exports** | | | |
+| `CSV_FORMULA_START_CHARACTERS` | `= + - @ \t \r` | up to 32 punctuation, symbol or control characters, with a space between them; `\t`, `\r` and `\n` stand for the tab, the carriage return and the line feed | Characters that make a spreadsheet read a cell as a formula. A cell of a CSV export (feedback and newsletter) that starts with one of them gets an apostrophe in front, the header row included. The cells of the XLSX export are text cells and keep their content exactly. |
 | **QR places** | | | |
 | `QR_SOURCE_LABEL_MAX_LENGTH` | `60` | 10–200 | Longest name of a QR place, in characters. |
 | `QR_SOURCE_SLUG_MAX_LENGTH` | `40` | 3–80 | Longest short name of a QR place in the address, in characters. The guest page reports it back in a field of at most 80 characters. |

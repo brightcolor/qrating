@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { env } from '../src/config/env.js';
 import { columnName, toCsv, toXlsx } from '../src/utils/export.js';
 
 // The workbook is a zip whose files are stored without compression, so each one can be read
@@ -25,6 +26,11 @@ function cellTexts(workbook) {
 function cellReferences(workbook) {
   const sheet = zipEntries(workbook).get('xl/worksheets/sheet1.xml');
   return [...sheet.matchAll(/<c r="([A-Z]+[0-9]+)"/g)].map((match) => match[1]);
+}
+
+// The data rows of a csv export, one string per row.
+function csvRows(csv) {
+  return csv.split('\n').slice(1);
 }
 
 const outsideXml = /[^\t\n\r\u{20}-\u{D7FF}\u{E000}-\u{FFFD}\u{10000}-\u{10FFFF}]/u;
@@ -54,6 +60,15 @@ describe('the xlsx export', () => {
 
     expect(cellTexts(workbook)).toEqual(['submitted_at', 'rating', 'general_comment', '2026-09-19T20:15:00.000Z', '4', '']);
   });
+
+  it('writes a cell that starts like a formula as a text cell with its content', () => {
+    const workbook = toXlsx([{ general_comment: '=HYPERLINK("https://example.test")' }]);
+    const sheet = zipEntries(workbook).get('xl/worksheets/sheet1.xml');
+
+    expect(cellTexts(workbook)[1]).toBe('=HYPERLINK(&quot;https://example.test&quot;)');
+    expect(sheet).toContain('<c r="A2" t="inlineStr">');
+    expect(sheet).not.toContain('<f>');
+  });
 });
 
 describe('the columns of the xlsx export', () => {
@@ -75,8 +90,54 @@ describe('the columns of the xlsx export', () => {
 });
 
 describe('the csv export', () => {
-  it('quotes every value and doubles the quotes inside', () => {
+  it('quotes every cell and doubles the quotes inside, the header row included', () => {
     expect(toCsv([{ general_comment: 'Sie sagte "toll", dann ging sie', rating: 5 }]))
-      .toBe('\u{feff}general_comment,rating\n"Sie sagte ""toll"", dann ging sie","5"');
+      .toBe('\u{feff}"general_comment","rating"\n"Sie sagte ""toll"", dann ging sie","5"');
+  });
+
+  it('puts an apostrophe in front of a cell that starts with =, +, -, @, a tab or a carriage return', () => {
+    const comments = ['=1+1', '+49 30 1234', '-2+3', '@SUMME(A1)', '\t=1+1', '\r=1+1', '=HYPERLINK("https://example.test";"Mehr")'];
+
+    const csv = toCsv(comments.map((comment) => ({ general_comment: comment })));
+
+    expect(csvRows(csv)).toEqual([
+      `"'=1+1"`,
+      `"'+49 30 1234"`,
+      `"'-2+3"`,
+      `"'@SUMME(A1)"`,
+      `"'\t=1+1"`,
+      `"'\r=1+1"`,
+      `"'=HYPERLINK(""https://example.test"";""Mehr"")"`
+    ]);
+  });
+
+  it('writes every other cell as it came', () => {
+    const csv = toCsv([{
+      submitted_at: new Date('2026-09-19T20:15:00.000Z'),
+      rating: 5,
+      general_comment: 'Gute Musik, mehr davon',
+      comment_positive: "'zitiert",
+      comment_improvement: 'Bar 2 = zu voll',
+      newsletter_optin: false,
+      nps_score: null
+    }]);
+
+    expect(csvRows(csv)).toEqual([`"2026-09-19T20:15:00.000Z","5","Gute Musik, mehr davon","'zitiert","Bar 2 = zu voll","false",""`]);
+  });
+
+  it('puts the apostrophe in front of a header cell as well', () => {
+    expect(toCsv([{ '=frage': 'Antwort', rating: 4 }])).toBe(`\u{feff}"'=frage","rating"\n"Antwort","4"`);
+  });
+
+  it('reads the start characters from CSV_FORMULA_START_CHARACTERS', () => {
+    expect(env.csvFormulaStartCharacters).toEqual(['=', '+', '-', '@', '\t', '\r']);
+  });
+
+  it('works with other start characters than the default', () => {
+    const rows = [{ general_comment: '|cmd' }, { general_comment: '%1' }, { general_comment: '=1+1' }, { general_comment: '-2' }];
+
+    const csv = toCsv(rows, { formulaStartCharacters: ['|', '%'] });
+
+    expect(csvRows(csv)).toEqual([`"'|cmd"`, `"'%1"`, '"=1+1"', '"-2"']);
   });
 });
