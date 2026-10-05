@@ -350,6 +350,8 @@ The stack contains:
 
 All three services restart automatically (`restart: unless-stopped`). The backend runs migrations on startup.
 
+The backend and frontend images carry a health check, and `docker compose ps` shows its state. The backend counts as healthy while `/health/ready` answers, which also reaches the database; it asks the port of the setting `PORT`. The frontend counts as healthy while nginx serves the start page. The checks follow the timing defaults of Docker; a Compose override file sets another timing per service under `healthcheck:`.
+
 Backend and frontend run as unprivileged users of their images: the API as `node` (UID 1000), nginx as `nginx`. The backend writes to one place only, `storage/event-images`, where it keeps Pretix images when a connection stores them locally. On the host that folder belongs to UID 1000; `scripts/quickstart.sh` sets this up, and an installation set up by hand runs once in its directory:
 
 ```bash
@@ -673,7 +675,7 @@ bash -n scripts/quickstart.sh
 
 `npm test` includes database tests that run the migrations, the demo seed, and the main admin and guest flows in an in-process PostgreSQL (PGlite) inside the test run.
 
-`scripts/smoke-test.sh` checks a freshly started Compose stack end to end: guest page, first-admin setup, event creation, and a backend restart. It asks the backend for the organization slug and the cookie name it reads, so other values in `.env` work as well.
+`scripts/smoke-test.sh` checks a freshly started Compose stack end to end: guest page, first-admin setup, event creation, a backend restart, and the health checks of both images. It asks the backend for the organization slug and the cookie name it reads, so other values in `.env` work as well.
 
 `backend/tests/roleGuards.test.js` sends a support account to every admin route that writes. Each one answers HTTP 403, except the routes that serve every account (sign-in, the own account and second factor, the own alert channels, the callbacks and reports of assigned events), which the test lists with their reason. A new route that writes either refuses support or joins that list.
 
@@ -685,6 +687,8 @@ GitHub Actions runs Docker CI on `main`:
 - Docker Compose validation
 - backend and frontend image builds
 - Compose smoke test with health checks, frontend API proxy check, and `scripts/smoke-test.sh` against PostgreSQL 16
+
+The workflow names every action by the commit of its release, with the version in a comment behind it. A newer release of an action comes in by changing both.
 
 ## Backup And Restore
 

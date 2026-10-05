@@ -76,7 +76,8 @@ export async function api(path, options = {}) {
       }
     });
   } catch (error) {
-    console.error(`qrating API nicht erreichbar (${API_BASE || 'gleiche Domain'})`, error);
+    // The address travels as a value behind a fixed format string, so the log shows it as it is.
+    console.error('qrating API nicht erreichbar (%s)', API_BASE || 'gleiche Domain', error);
     throw new ApiError(typeof navigator !== 'undefined' && navigator.onLine === false
       ? 'Keine Internetverbindung. Bitte prüfe deine Verbindung und versuche es erneut.'
       : 'Der Server ist gerade nicht erreichbar. Bitte prüfe deine Internetverbindung und versuche es erneut.');

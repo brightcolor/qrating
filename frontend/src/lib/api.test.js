@@ -62,6 +62,41 @@ describe('api', () => {
   });
 });
 
+describe('the log line of an unreachable API', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  it('carries the configured address as a value behind a fixed format string', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', 'https://api.example.test/caf%c3%a9/');
+    vi.resetModules();
+    const { api: apiWithBase } = await import('./api.js');
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const failure = new TypeError('Failed to fetch');
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(failure));
+
+    await expect(apiWithBase('/admin/me')).rejects.toMatchObject({ name: 'ApiError', status: 0 });
+
+    expect(logged).toHaveBeenCalledWith('qrating API nicht erreichbar (%s)', 'https://api.example.test/caf%c3%a9', failure);
+  });
+
+  it('names the same domain for an empty address', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', '');
+    vi.resetModules();
+    const { api: apiWithBase } = await import('./api.js');
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const failure = new TypeError('Failed to fetch');
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(failure));
+
+    await expect(apiWithBase('/admin/me')).rejects.toMatchObject({ status: 0 });
+
+    expect(logged).toHaveBeenCalledWith('qrating API nicht erreichbar (%s)', 'gleiche Domain', failure);
+  });
+});
+
 // An answer with headers beyond the content type.
 function answer(status, body, headers = {}) {
   return {

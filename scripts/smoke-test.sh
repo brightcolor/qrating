@@ -91,4 +91,24 @@ web_status() {
 [ "$(web_status qrating.de /)" = "200" ] || fail "the website domain was redirected"
 [ "$(web_status qrat.ing "/f/$organization_slug")" = "200" ] || fail "the guest page on qrat.ing was redirected"
 
+echo "Health checks of the backend and frontend images"
+# Docker runs the first check one interval after the start, the restart above included.
+health_of() {
+  docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$(compose ps -q "$1")"
+}
+for service in backend frontend; do
+  status=""
+  for _ in $(seq 1 40); do
+    status="$(health_of "$service")"
+    if [ "$status" = "healthy" ] || [ "$status" = "none" ]; then
+      break
+    fi
+    sleep 3
+  done
+  if [ "$status" != "healthy" ]; then
+    docker inspect --format '{{json .State.Health}}' "$(compose ps -q "$service")" >&2 || true
+    fail "the health check of $service reports '$status'"
+  fi
+done
+
 echo "Smoke test passed"
