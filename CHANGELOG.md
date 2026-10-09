@@ -6,6 +6,15 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.65.1] - 2026-10-09
+
+### Security
+
+- Backend: `proxy-addr` 2.0.8 (GHSA-jqcg-44mw-7w3h, critical). Express decides with it which proxy hop to trust; an IPv4-mapped IPv6 address could pass as part of a trusted subnet and set the client address that the rate limits count.
+- Frontend: `source-map-js` 1.2.2 (GHSA-68fv-2mgg-jv7q, high, a slow parse of crafted source maps in the build tools).
+
+Both advisories appeared on 09.10.2026; the dependency audit of the CI stopped release 0.65.0, which was not deployed.
+
 ## [0.65.0] - 2026-10-09
 
 ### Security
