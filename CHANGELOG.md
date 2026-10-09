@@ -6,6 +6,8 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.65.0] - 2026-10-09
+
 ### Security
 
 - A cell of a CSV export that starts with `=`, `+`, `-`, `@`, a tab or a carriage return gets an apostrophe in front, so a spreadsheet shows it as text. This holds for the feedback export and the newsletter export, the header row included, whose cells stand in quotes like all others. The characters come from `CSV_FORMULA_START_CHARACTERS`. The XLSX export writes every cell as a text cell and keeps its content exactly.
@@ -18,6 +20,10 @@ The project follows [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 - The XLSX export names the columns after `Z` as `AA`, `AB` and onwards, so every cell of a sheet with more than 26 columns has a valid reference.
+
+### Changed
+
+- The CI workflow uses `actions/checkout` 7.0.1, `actions/setup-node` 7.0.0, `docker/setup-buildx-action` 4.4.1 and `docker/build-push-action` 7.4.0, each pinned to the commit of its release (#7).
 
 ### Tests
 
