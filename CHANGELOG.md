@@ -6,6 +6,23 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+
+- A cell of a CSV export that starts with `=`, `+`, `-`, `@`, a tab or a carriage return gets an apostrophe in front, so a spreadsheet shows it as text. This holds for the feedback export and the newsletter export, the header row included, whose cells stand in quotes like all others. The characters come from `CSV_FORMULA_START_CHARACTERS`. The XLSX export writes every cell as a text cell and keeps its content exactly.
+- `/health/ready` answers a failing database with HTTP 503, a general message and a reference (`Fehlerkennung`). The details of the error stand in the backend log under that reference.
+
+### Added
+
+- `CSV_FORMULA_START_CHARACTERS` with the characters that make a spreadsheet read a cell as a formula: single characters with a space between them, `\t`, `\r` and `\n` for the tab, the carriage return and the line feed. Default `= + - @ \t \r`, allowed are up to 32 punctuation, symbol or control characters.
+
+### Fixed
+
+- The XLSX export names the columns after `Z` as `AA`, `AB` and onwards, so every cell of a sheet with more than 26 columns has a valid reference.
+
+### Tests
+
+- New tests cover the apostrophe in both CSV exports and in the header row, other start characters than the default, the setting and its messages, the readiness check with a failing database, and the column names of a sheet with 30 columns.
+
 ## [0.64.1] - 2026-10-05
 
 ### Security

@@ -317,6 +317,8 @@ Every value that shapes what qrating does is a setting with a default and bounds
 | `ANALYTICS_ABANDONED_LIMIT` | `200` | 1–5000 | Abandoned visits the evaluation of an event lists. |
 | `CALLBACKS_LIST_LIMIT` | `200` | 1–5000 | Cases the list of callbacks shows. |
 | `REPORT_COMMENTS_LIMIT` | `50` | 1–1000 | Comments in the PDF report. |
+| **Exports** | | | |
+| `CSV_FORMULA_START_CHARACTERS` | `= + - @ \t \r` | up to 32 punctuation, symbol or control characters, with a space between them; `\t`, `\r` and `\n` stand for the tab, the carriage return and the line feed | Characters that make a spreadsheet read a cell as a formula. A cell of a CSV export (feedback and newsletter) that starts with one of them gets an apostrophe in front, the header row included. The cells of the XLSX export are text cells and keep their content exactly. |
 | **QR places** | | | |
 | `QR_SOURCE_LABEL_MAX_LENGTH` | `60` | 10–200 | Longest name of a QR place, in characters. |
 | `QR_SOURCE_SLUG_MAX_LENGTH` | `40` | 3–80 | Longest short name of a QR place in the address, in characters. The guest page reports it back in a field of at most 80 characters. |
@@ -350,7 +352,7 @@ The stack contains:
 
 All three services restart automatically (`restart: unless-stopped`). The backend runs migrations on startup.
 
-The backend and frontend images carry a health check, and `docker compose ps` shows its state. The backend counts as healthy while `/health/ready` answers, which also reaches the database; it asks the port of the setting `PORT`. The frontend counts as healthy while nginx serves the start page. The checks follow the timing defaults of Docker; a Compose override file sets another timing per service under `healthcheck:`.
+The backend and frontend images carry a health check, and `docker compose ps` shows its state. The backend counts as healthy while `/health/ready` answers, which also reaches the database; it asks the port of the setting `PORT`. When the database fails, `/health/ready` answers HTTP 503 with a general message and a reference (`Fehlerkennung`); the details stand in the backend log under that reference: `docker compose logs backend | grep <Kennung>`. The frontend counts as healthy while nginx serves the start page. The checks follow the timing defaults of Docker; a Compose override file sets another timing per service under `healthcheck:`.
 
 Backend and frontend run as unprivileged users of their images: the API as `node` (UID 1000), nginx as `nginx`. The backend writes to one place only, `storage/event-images`, where it keeps Pretix images when a connection stores them locally. On the host that folder belongs to UID 1000; `scripts/quickstart.sh` sets this up, and an installation set up by hand runs once in its directory:
 

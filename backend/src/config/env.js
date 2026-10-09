@@ -120,6 +120,36 @@ export const textSettings = [
   { key: 'newOrganizationPrivacyText', name: 'NEW_ORGANIZATION_PRIVACY_TEXT', fallback: 'Feedback ist anonym möglich. E-Mail-Adressen werden nur für den gewählten Zweck gespeichert.', rule: 'höchstens 2000 Zeichen lang sein', test: (value) => value.length <= 2000, hint: 'Datenschutzhinweis einer neu angelegten Organisation.' }
 ];
 
+// Lists of single characters, written side by side with a space between them. \t, \r and \n
+// stand for the tab, the carriage return and the line feed, which an environment file can hardly
+// hold as they are; an environment that already turned them into the characters works as well.
+export const characterSettings = [
+  // Exports
+  { key: 'csvFormulaStartCharacters', name: 'CSV_FORMULA_START_CHARACTERS', fallback: '= + - @ \\t \\r', maxCharacters: 32, hint: 'Zeichen, mit denen eine Tabellenkalkulation eine Zelle als Formel liest. Eine Zelle im CSV-Export, die mit einem davon beginnt, bekommt ein Apostroph vorangestellt.' }
+];
+
+const characterEscapes = { '\\t': '\t', '\\r': '\r', '\\n': '\n' };
+const shownCharacters = (text) => text.replace(/[\t\r\n]/g, (character) => ({ '\t': '\\t', '\r': '\\r', '\n': '\\n' })[character]);
+
+// The characters of such a list, each once, or a sentence on the first entry that breaks its rules.
+export function readCharacterList(raw, setting) {
+  const characters = [];
+  for (const entry of raw.split(' ').filter(Boolean)) {
+    const character = characterEscapes[entry] ?? entry;
+    if ([...character].length !== 1) {
+      return { problem: `${setting.name} muss einzelne Zeichen mit einem Leerzeichen dazwischen nennen, eingetragen ist „${shownCharacters(entry).slice(0, 40)}“. \\t steht für den Tabulator, \\r für den Wagenrücklauf, \\n für den Zeilenumbruch.` };
+    }
+    if (/[\p{L}\p{N}]/u.test(character)) {
+      return { problem: `${setting.name} muss aus Satz-, Sonder- oder Steuerzeichen bestehen, eingetragen ist „${character}“.` };
+    }
+    if (!characters.includes(character)) characters.push(character);
+  }
+  if (characters.length > setting.maxCharacters) {
+    return { problem: `${setting.name} darf höchstens ${setting.maxCharacters} Zeichen nennen, eingetragen sind ${characters.length}.` };
+  }
+  return { characters };
+}
+
 // Settings that only make sense together: a lower bound below the upper one, and a default inside
 // both where there is one.
 const settingPairs = [
@@ -155,6 +185,18 @@ export function readSettings(source = process.env) {
       continue;
     }
     values[setting.key] = raw;
+  }
+  for (const setting of characterSettings) {
+    const raw = String(source[setting.name] ?? '');
+    values[setting.key] = readCharacterList(setting.fallback, setting).characters;
+    // Only spaces leave such a list empty: a tab or a line break is an entry of its own.
+    if (raw.replaceAll(' ', '') === '') continue;
+    const { characters, problem } = readCharacterList(raw, setting);
+    if (problem) {
+      errors.push(`${problem} ${setting.hint}`);
+      continue;
+    }
+    values[setting.key] = characters;
   }
   for (const [low, high, fallback] of settingPairs) {
     if (values[low] > values[high]) {

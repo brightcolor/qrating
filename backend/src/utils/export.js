@@ -1,3 +1,5 @@
+import { env } from '../config/env.js';
+
 // A cell of the workbook is XML text: it keeps the characters XML 1.0 allows, and the five
 // special characters become entities in one pass.
 const outsideXml = /[^\t\n\r\u{20}-\u{D7FF}\u{E000}-\u{FFFD}\u{10000}-\u{10FFFF}]/gu;
@@ -9,17 +11,29 @@ function escapeXml(value) {
     .replace(/[&<>"']/g, (char) => xmlEntities[char]);
 }
 
-export function toCsv(rows) {
+// A spreadsheet reads a cell that starts with one of CSV_FORMULA_START_CHARACTERS as a formula;
+// an apostrophe in front keeps it as text. Every cell stands in quotes with the inner quotes
+// doubled, the header row included.
+function csvCell(value, formulaStartCharacters) {
+  const text = value instanceof Date ? value.toISOString() : String(value ?? '');
+  const cell = formulaStartCharacters.some((character) => text.startsWith(character)) ? `'${text}` : text;
+  return `"${cell.replaceAll('"', '""')}"`;
+}
+
+export function toCsv(rows, { formulaStartCharacters = env.csvFormulaStartCharacters } = {}) {
   const headers = [...new Set(rows.flatMap((row) => Object.keys(row)))];
-  const lines = [headers.join(',')];
-  for (const row of rows) {
-    lines.push(headers.map((header) => {
-      const value = row[header] ?? '';
-      const text = value instanceof Date ? value.toISOString() : String(value);
-      return `"${text.replaceAll('"', '""')}"`;
-    }).join(','));
-  }
+  const lines = [headers, ...rows.map((row) => headers.map((header) => row[header]))]
+    .map((cells) => cells.map((value) => csvCell(value, formulaStartCharacters)).join(','));
   return `\ufeff${lines.join('\n')}`;
+}
+
+// Columns of a sheet count A to Z, then AA to ZZ, then AAA onwards.
+export function columnName(index) {
+  let name = '';
+  for (let number = index + 1; number > 0; number = Math.floor((number - 1) / 26)) {
+    name = String.fromCharCode(65 + ((number - 1) % 26)) + name;
+  }
+  return name;
 }
 
 function crc32(buffer) {
@@ -97,7 +111,7 @@ export function toXlsx(rows) {
   const sheetData = sheetRows.map((row, index) => {
     const rowNumber = index + 1;
     const cells = row.map((value, colIndex) => {
-      const col = String.fromCharCode(65 + colIndex);
+      const col = columnName(colIndex);
       return `<c r="${col}${rowNumber}" t="inlineStr"><is><t>${escapeXml(value instanceof Date ? value.toISOString() : value)}</t></is></c>`;
     }).join('');
     return `<row r="${rowNumber}">${cells}</row>`;
